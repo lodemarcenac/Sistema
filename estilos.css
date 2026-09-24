@@ -19,7 +19,22 @@
   --fs-xs:.72rem; --fs-sm:.82rem; --fs-base:.9rem; --fs-lg:1rem; --fs-xl:1.15rem; --fs-2xl:1.35rem;
 }
 *,*::before,*::after{ box-sizing:border-box; margin:0; padding:0; }
-body{ background:var(--bg); color:var(--ink); font-family:var(--font); font-size:var(--fs-base); line-height:1.5; -webkit-font-smoothing:antialiased; }
+body{ background:var(--bg); color:var(--ink); font-family:var(--font); font-size:var(--fs-base); line-height:1.5; -webkit-font-smoothing:antialiased; padding-left:52px; }
+
+/* ---- Menú lateral (finito, se expande con el mouse) ---- */
+#sidenav{ position:fixed; top:0; left:0; height:100vh; width:52px; background:#0e2a5c; color:#fff; overflow-x:hidden; overflow-y:auto; transition:width .16s ease; z-index:90; padding-top:6px; }
+#sidenav:hover{ width:212px; box-shadow:6px 0 22px rgba(0,0,0,.25); }
+#sidenav .sn-logo{ font-size:1.4rem; text-align:center; padding:8px 0 10px; }
+#sidenav .sn-item{ display:flex; align-items:center; gap:13px; padding:10px 15px; color:#cdd8ee; text-decoration:none; white-space:nowrap; font-size:var(--fs-sm); font-weight:600; }
+#sidenav .sn-item:hover{ background:rgba(255,255,255,.08); color:#fff; }
+#sidenav .sn-item.on{ background:var(--brand); color:#fff; }
+#sidenav .sn-ico{ font-size:1.15rem; min-width:22px; text-align:center; }
+#sidenav .sn-lbl{ opacity:0; transition:opacity .16s; }
+#sidenav:hover .sn-lbl{ opacity:1; }
+/* el sidebar reemplaza al menú de arriba */
+header nav{ display:none!important; }
+#login{ padding-left:0; }
+@media(max-width:600px){ body{ padding-left:44px; } #sidenav{ width:44px; } }
 h1,h2,h3,h4{ line-height:1.2; font-weight:700; }
 a{ color:var(--brand); }
 [hidden]{ display:none!important; }
