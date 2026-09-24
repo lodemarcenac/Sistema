@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Caja — Carnicería</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css">
+<style>
+  header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  header .ttl{font-size:var(--fs-xl);font-weight:700;}
+  header nav a{color:#dbe8ff;text-decoration:none;font-size:var(--fs-sm);font-weight:600;margin-right:14px;}
+  header nav a.on,header nav a:hover{color:#fff;}
+  header .suc select{padding:5px 8px;border-radius:var(--radius-sm);border:none;font-family:inherit;font-size:var(--fs-sm);}
+  header button{background:#fff;color:var(--brand);border:none;padding:7px 13px;border-radius:var(--radius-sm);font-weight:600;cursor:pointer;font-size:var(--fs-sm);}
+  main{max-width:920px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
+  @media(max-width:760px){ .grid2{grid-template-columns:1fr;} }
+  .abm-nueva{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;align-items:end;}
+  .abm-nueva label{display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;text-transform:uppercase;letter-spacing:.03em;}
+  .abm-nueva input{width:100%;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;}
+  .tot-row{display:flex;justify-content:space-between;font-size:var(--fs-sm);color:var(--ink-soft);margin:3px 0;}
+  .tot-row.big{font-size:var(--fs-xl);font-weight:700;color:var(--brand);border-top:1px solid var(--line);padding-top:6px;margin-top:6px;}
+  .saldo{font-size:var(--fs-2xl);font-weight:700;color:var(--good);}
+  .dif.ok{color:var(--good);font-weight:700;} .dif.bad{color:var(--bad);font-weight:700;}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>🥩 Carnicería</h1><p>Ingresá con tu usuario.</p>
+    <form id="login-form">
+      <label>Email</label><input type="email" id="li-email" autocomplete="username" required>
+      <label>Contraseña</label><input type="password" id="li-pass" autocomplete="current-password" required>
+      <button type="submit" id="li-btn">Entrar</button><div class="err" id="li-err"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div class="ttl">💵 Caja</div>
+      <nav><a href="index.html">📊 Tablero</a><a href="ventas.html">🛒 Ventas</a><a href="compras.html">🧾 Compras</a><a href="cuentas.html">📒 Cuentas</a><a href="caja.html" class="on">💵 Caja</a></nav>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div class="suc">📍 <select id="selSuc" onchange="cambiarSuc()"></select></div>
+      <button id="btn-salir">Salir</button>
+    </div>
+  </header>
+  <main>
+    <div class="grid2">
+      <!-- CAJA DEL DÍA -->
+      <div class="card">
+        <h3>Caja del día</h3>
+        <div id="caja-cerrada" hidden>
+          <p class="muted" style="margin-bottom:10px;">No hay caja abierta en este local. Abrí una para empezar el turno.</p>
+          <div class="abm-nueva">
+            <div><label>Cajero</label><input id="ab-cajero" placeholder="Nombre"></div>
+            <div><label>Monto de apertura</label><input id="ab-monto" type="number" step="0.01" value="0"></div>
+            <button class="btn" onclick="abrirCajaUI()">Abrir caja</button>
+          </div>
+        </div>
+        <div id="caja-abierta" hidden>
+          <div class="muted" id="ca-info" style="margin-bottom:8px;"></div>
+          <div class="tot-row"><span>Apertura</span><span id="ca-apertura">$0</span></div>
+          <div class="tot-row"><span>+ Ventas en efectivo</span><span id="ca-ventas">$0</span></div>
+          <div class="tot-row"><span>+ Cobros cta cte efectivo</span><span id="ca-cobros">$0</span></div>
+          <div class="tot-row"><span>− Gastos en efectivo (caja)</span><span id="ca-gastos">$0</span></div>
+          <div class="tot-row"><span>− Pagos a proveedor efectivo (caja)</span><span id="ca-pagos">$0</span></div>
+          <div class="tot-row big"><span>Efectivo esperado</span><span id="ca-esperado">$0</span></div>
+          <hr style="border:none;border-top:1px solid var(--line);margin:12px 0;">
+          <div class="abm-nueva">
+            <div><label>Efectivo contado</label><input id="ci-contado" type="number" step="0.01" oninput="calcCierre()"></div>
+            <div><label>Queda en caja</label><input id="ci-queda" type="number" step="0.01" oninput="calcCierre()"></div>
+            <div><label>Va a la reserva</label><input id="ci-reserva" type="number" step="0.01" oninput="calcCierre()"></div>
+          </div>
+          <div class="tot-row" style="margin-top:8px;"><span>Diferencia (contado − esperado)</span><span id="ci-dif" class="dif">$0</span></div>
+          <div id="ci-aviso" class="muted" style="font-size:.8rem;"></div>
+          <div style="margin-top:10px;"><button class="btn" onclick="cerrarCajaUI()">Cerrar caja</button></div>
+        </div>
+      </div>
+
+      <!-- RESERVA -->
+      <div class="card">
+        <h3>Efectivo guardado (reserva)</h3>
+        <p class="muted" style="font-size:.82rem;margin-bottom:8px;">Fondo persistente del local. Acá se depositan los cierres y de acá salen los pagos que marcás como "reserva".</p>
+        <div class="tot-row"><span>Saldo actual</span><span class="saldo" id="rv-saldo">$0</span></div>
+        <div class="abm-nueva" style="margin-top:10px;">
+          <div><label>Monto</label><input id="rv-monto" type="number" step="0.01"></div>
+          <div><label>Concepto</label><input id="rv-concepto" placeholder="Detalle"></div>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px;"><button class="btn-sec" onclick="movReservaUI('ingreso')">+ Ingreso</button><button class="btn-sec" onclick="movReservaUI('egreso')">− Retiro</button></div>
+        <div class="tblwrap" style="margin-top:12px;max-height:220px;overflow:auto;"><table class="data"><thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Ingreso</th><th class="num">Egreso</th></tr></thead><tbody id="rv-tbody"></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h3>Historial de cajas</h3>
+      <div class="tblwrap"><table class="data"><thead><tr><th>Local</th><th>Cajero</th><th>Apertura</th><th>Cierre</th><th class="num">Apertura $</th><th class="num">Esperado</th><th class="num">Contado</th><th class="num">Diferencia</th><th class="num">A reserva</th></tr></thead><tbody id="hist-tbody"></tbody></table></div>
+    </div>
+  </main>
+</div>
+
+<div class="toast-c" id="toast-c"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="sb-api.js"></script>
+<script src="auth-guard.js"></script>
+<script>
+var sb=window.sbClient;
+var SUCS=[], sucActual='', cajaActual=null;
+function fmt$(n){ return '$'+Math.round(Number(n)||0).toLocaleString('es-AR'); }
+function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
+
+document.getElementById('login-form').addEventListener('submit', async function(e){
+  e.preventDefault(); var btn=document.getElementById('li-btn'), err=document.getElementById('li-err'); err.textContent=''; btn.disabled=true; btn.textContent='Entrando…';
+  var r=await sb.auth.signInWithPassword({ email:document.getElementById('li-email').value.trim(), password:document.getElementById('li-pass').value });
+  btn.disabled=false; btn.textContent='Entrar'; if(r.error){ err.textContent='No se pudo entrar: '+r.error.message; return; } iniciar();
+});
+document.getElementById('btn-salir').addEventListener('click', async function(){ await sb.auth.signOut(); location.reload(); });
+(async function(){ var s=await sb.auth.getSession(); if(s.data && s.data.session) iniciar(); })();
+
+async function iniciar(){
+  document.getElementById('login').hidden=true; document.getElementById('app').hidden=false;
+  var rs=await window.sf('getSucursales'); SUCS=(rs.ok?(rs.sucursales||[]).map(function(s){return s.nombre;}):[]);
+  var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join('');
+  sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual;
+  await cargarTodo();
+}
+function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarTodo(); }
+async function cargarTodo(){ await cargarCaja(); await cargarReserva(); await cargarHist(); }
+
+async function cargarCaja(){
+  var r=await window.sf('getCajaAbierta&sucursal='+encodeURIComponent(sucActual)); cajaActual=(r.ok?r.caja:null);
+  document.getElementById('caja-cerrada').hidden=!!cajaActual;
+  document.getElementById('caja-abierta').hidden=!cajaActual;
+  if(!cajaActual) return;
+  var rr=await window.sf('getCajaResumen&id='+cajaActual.id); var d=(rr.ok?rr.resumen:{})||{};
+  document.getElementById('ca-info').textContent='Cajero: '+(cajaActual.cajero||'—')+' · abierta '+new Date(cajaActual.abiertaAt).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'});
+  document.getElementById('ca-apertura').textContent=fmt$(d.apertura);
+  document.getElementById('ca-ventas').textContent=fmt$(d.ventas_ef);
+  document.getElementById('ca-cobros').textContent=fmt$(d.cobros_ef);
+  document.getElementById('ca-gastos').textContent='−'+fmt$(d.gastos_ef);
+  document.getElementById('ca-pagos').textContent='−'+fmt$(d.pagos_prov_ef);
+  document.getElementById('ca-esperado').textContent=fmt$(d.esperado);
+  cajaActual.esperado=Number(d.esperado)||0;
+  document.getElementById('ci-contado').value=''; document.getElementById('ci-queda').value=''; document.getElementById('ci-reserva').value=''; calcCierre();
+}
+function calcCierre(){
+  var esp=cajaActual?cajaActual.esperado:0;
+  var contado=Number(document.getElementById('ci-contado').value)||0;
+  var queda=Number(document.getElementById('ci-queda').value)||0;
+  var reserva=Number(document.getElementById('ci-reserva').value)||0;
+  var dif=+(contado-esp).toFixed(2);
+  var el=document.getElementById('ci-dif'); el.textContent=(dif>=0?'+':'')+fmt$(dif); el.className='dif '+(Math.abs(dif)<0.5?'ok':'bad');
+  var reparto=+(queda+reserva).toFixed(2);
+  var av=document.getElementById('ci-aviso');
+  if(contado>0 && Math.abs(reparto-contado)>0.5){ av.textContent='⚠️ Queda ('+fmt$(queda)+') + Reserva ('+fmt$(reserva)+') = '+fmt$(reparto)+', no coincide con lo contado ('+fmt$(contado)+').'; }
+  else { av.textContent=''; }
+}
+async function abrirCajaUI(){
+  var r=await window.sp('abrirCaja',{ sucursal:sucActual, cajero:document.getElementById('ab-cajero').value.trim(), apertura:document.getElementById('ab-monto').value });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Caja abierta'); document.getElementById('ab-cajero').value=''; document.getElementById('ab-monto').value='0'; cargarCaja();
+}
+async function cerrarCajaUI(){
+  var contado=document.getElementById('ci-contado').value;
+  if(contado===''){ toast('Poné el efectivo contado','error'); return; }
+  var queda=Number(document.getElementById('ci-queda').value)||0, reserva=Number(document.getElementById('ci-reserva').value)||0;
+  if(!confirm('¿Cerrar la caja? Contado '+fmt$(contado)+' → queda '+fmt$(queda)+' en caja y '+fmt$(reserva)+' a la reserva.')) return;
+  var r=await window.sp('cerrarCaja',{ id:cajaActual.id, contado:contado, queda:queda, reserva:reserva });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Caja cerrada — diferencia '+fmt$(r.diferencia)); cargarTodo();
+}
+
+async function cargarReserva(){
+  var r=await window.sf('getReserva&sucursal='+encodeURIComponent(sucActual));
+  document.getElementById('rv-saldo').textContent=fmt$(r.ok?r.saldo:0);
+  document.getElementById('rv-tbody').innerHTML=(r.ok?r.movimientos:[]).map(function(m){
+    var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
+    var ing=m.tipo==='ingreso'; return '<tr><td>'+f+'</td><td>'+(m.concepto||'')+'</td><td class="num">'+(ing?fmt$(m.monto):'')+'</td><td class="num">'+(ing?'':fmt$(m.monto))+'</td></tr>';
+  }).join('') || '<tr><td colspan="4" class="muted">Sin movimientos.</td></tr>';
+}
+async function movReservaUI(tipo){
+  var monto=document.getElementById('rv-monto').value; if(!(Number(monto)>0)){ toast('Poné un monto','error'); return; }
+  var r=await window.sp('movReserva',{ sucursal:sucActual, tipo:tipo, monto:monto, concepto:document.getElementById('rv-concepto').value.trim() });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  document.getElementById('rv-monto').value=''; document.getElementById('rv-concepto').value=''; toast(tipo==='ingreso'?'Ingreso registrado':'Retiro registrado'); cargarReserva();
+}
+
+async function cargarHist(){
+  var r=await window.sf('getCajas&sucursal='+encodeURIComponent(sucActual));
+  document.getElementById('hist-tbody').innerHTML=(r.ok?r.cajas:[]).map(function(c){
+    var fa=c.abiertaAt?new Date(c.abiertaAt).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+    var fc=c.cerradaAt?new Date(c.cerradaAt).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):(c.cerrada?'':'ABIERTA');
+    var difcls=Math.abs(c.diferencia)<0.5?'':'style="color:var(--bad);font-weight:700;"';
+    return '<tr><td>'+c.local+'</td><td>'+(c.cajero||'')+'</td><td>'+fa+'</td><td>'+fc+'</td><td class="num">'+fmt$(c.apertura)+'</td><td class="num">'+(c.cerrada?fmt$(c.esperado):'—')+'</td><td class="num">'+(c.cerrada?fmt$(c.contado):'—')+'</td><td class="num" '+difcls+'>'+(c.cerrada?((c.diferencia>=0?'+':'')+fmt$(c.diferencia)):'—')+'</td><td class="num">'+(c.cerrada?fmt$(c.aReserva):'—')+'</td></tr>';
+  }).join('') || '<tr><td colspan="9" class="muted">Sin cajas.</td></tr>';
+}
+</script>
+</body>
+</html>

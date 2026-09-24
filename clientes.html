@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clientes y Listas — Carnicería</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css">
+<style>
+  header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  header .ttl{font-size:var(--fs-xl);font-weight:700;}
+  header nav a{color:#dbe8ff;text-decoration:none;font-size:var(--fs-sm);font-weight:600;margin-right:14px;}
+  header nav a.on,header nav a:hover{color:#fff;}
+  header button{background:#fff;color:var(--brand);border:none;padding:7px 13px;border-radius:var(--radius-sm);font-weight:600;cursor:pointer;font-size:var(--fs-sm);}
+  main{max-width:1000px;}
+  .barra{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+  .barra > input{flex:1;min-width:200px;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;}
+  .abm-nueva{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end;margin-top:14px;padding-top:14px;border-top:1px solid var(--line-2);}
+  .abm-nueva label{display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;text-transform:uppercase;letter-spacing:.03em;}
+  .abm-nueva input,.abm-nueva select{width:100%;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;background:#fff;}
+  .btn-alta{background:var(--brand);color:#fff;border:none;padding:9px 16px;border-radius:var(--radius-sm);font-weight:700;cursor:pointer;font-size:var(--fs-sm);font-family:inherit;align-self:end;}
+  table.data td select.cell, table.data td input.cell{width:auto;min-width:120px;text-align:left;}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>🥩 Carnicería</h1>
+    <p>Ingresá con tu usuario.</p>
+    <form id="login-form">
+      <label>Email</label><input type="email" id="li-email" autocomplete="username" required>
+      <label>Contraseña</label><input type="password" id="li-pass" autocomplete="current-password" required>
+      <button type="submit" id="li-btn">Entrar</button>
+      <div class="err" id="li-err"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div class="ttl">👥 Clientes y Listas</div>
+      <nav><a href="index.html">📊 Tablero</a><a href="productos.html">🏷️ Productos</a><a href="clientes.html" class="on">👥 Clientes y Listas</a><a href="stock.html">📦 Stock</a><a href="compras.html">🧾 Compras</a><a href="remitos.html">🔄 Remitos</a><a href="cuentas.html">📒 Cuentas</a><a href="caja.html">💵 Caja</a><a href="ventas.html">🛒 Ventas</a><a href="configuracion.html">⚙️ Config</a></nav>
+    </div>
+    <button id="btn-salir">Salir</button>
+  </header>
+  <main>
+    <div class="tabs">
+      <button class="tab on" data-t="clientes" onclick="switchTab('clientes')">Clientes</button>
+      <button class="tab" data-t="listas" onclick="switchTab('listas')">Listas de precio</button>
+    </div>
+
+    <div id="t-clientes">
+      <div class="barra"><input id="q" placeholder="Buscar cliente por nombre o lista…" oninput="renderClientes()"></div>
+      <div class="resumen muted" id="resumen"></div>
+      <div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Nombre</th><th>Lista</th><th>Administrador (local)</th><th></th></tr></thead><tbody id="cli-tbody"></tbody></table></div></div>
+      <div class="card" style="margin-top:14px;">
+        <h3>Nuevo cliente</h3>
+        <div class="abm-nueva" style="border-top:none;padding-top:6px;">
+          <div><label>Nombre</label><input id="nc-nom" placeholder="Nombre del cliente"></div>
+          <div><label>Lista</label><select id="nc-lista"></select></div>
+          <div><label>Administrador (local)</label><select id="nc-adm"></select></div>
+          <button class="btn-alta" onclick="crearClienteUI()">Agregar cliente</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="t-listas" hidden>
+      <div class="card">
+        <h3>Listas de precio</h3>
+        <p class="resumen" style="margin-bottom:14px;"><b>Base</b> = se pone a mano / margen (Minorista). <b>Derivada</b> = % de Minorista (se recalcula sola). <b>Especial</b> = manual por producto. Se guardan al salir del campo.</p>
+        <div class="tblwrap"><table class="data"><thead><tr><th>Lista</th><th>Tipo</th><th>% de Minorista</th><th></th></tr></thead><tbody id="lis-tbody"></tbody></table></div>
+        <div class="abm-nueva">
+          <div><label>Nueva lista</label><input id="nl-nom" placeholder="Ej: Distribuidor"></div>
+          <div><label>Tipo</label><select id="nl-tipo"><option value="derivada">Derivada</option><option value="especial">Especial</option><option value="base">Base</option></select></div>
+          <div><label>% (si derivada)</label><input id="nl-rel" type="number" step="1"></div>
+          <button class="btn-alta" onclick="crearListaUI()">Agregar</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="toast-c" id="toast-c"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="sb-api.js"></script>
+<script src="auth-guard.js"></script>
+<script>
+var sb=window.sbClient;
+var CLIENTES=[], LISTAS=[], SUCS=[], LISTAS_FULL=[];
+function toast(msg,tipo){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(tipo?' '+tipo:''); e.textContent=msg; c.appendChild(e); setTimeout(function(){ e.remove(); },2600); }
+
+document.getElementById('login-form').addEventListener('submit', async function(e){
+  e.preventDefault();
+  var btn=document.getElementById('li-btn'), err=document.getElementById('li-err');
+  err.textContent=''; btn.disabled=true; btn.textContent='Entrando…';
+  var r=await sb.auth.signInWithPassword({ email:document.getElementById('li-email').value.trim(), password:document.getElementById('li-pass').value });
+  btn.disabled=false; btn.textContent='Entrar';
+  if(r.error){ err.textContent='No se pudo entrar: '+r.error.message; return; }
+  iniciar();
+});
+document.getElementById('btn-salir').addEventListener('click', async function(){ await sb.auth.signOut(); location.reload(); });
+(async function(){ var s=await sb.auth.getSession(); if(s.data && s.data.session) iniciar(); })();
+
+async function iniciar(){
+  document.getElementById('login').hidden=true;
+  document.getElementById('app').hidden=false;
+  var dl=await window.sf('getListas'); if(dl.ok) LISTAS=dl.listas.map(function(l){return l.nombre;});
+  var rs=await window.sf('getSucursales'); if(rs.ok) SUCS=(rs.sucursales||[]).map(function(s){return s.nombre;});
+  var rc=await window.sf('getClientes'); if(rc.ok) CLIENTES=rc.clientes||[];
+  poblarSelects(); renderClientes();
+}
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); });
+  document.getElementById('t-clientes').hidden=(name!=='clientes');
+  document.getElementById('t-listas').hidden=(name!=='listas');
+  if(name==='listas') renderListas();
+}
+function poblarSelects(){
+  var optsL='<option value="">(sin lista)</option>'+LISTAS.map(function(l){return '<option>'+l+'</option>';}).join('');
+  var optsS='<option value="">(sin administrador)</option>'+SUCS.map(function(s){return '<option>'+s+'</option>';}).join('');
+  document.getElementById('nc-lista').innerHTML=optsL;
+  document.getElementById('nc-adm').innerHTML=optsS;
+}
+
+// ---- CLIENTES ----
+function renderClientes(){
+  var q=(document.getElementById('q').value||'').trim().toLowerCase();
+  var arr=CLIENTES.filter(function(c){ return !q || (c.nombre+' '+(c.lista||'')).toLowerCase().indexOf(q)>=0; }).sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+  document.getElementById('resumen').textContent=arr.length+' cliente'+(arr.length!==1?'s':'');
+  var optsL='<option value="">(sin lista)</option>'+LISTAS.map(function(l){return '<option>'+l+'</option>';}).join('');
+  var optsS='<option value="">(sin administrador)</option>'+SUCS.map(function(s){return '<option>'+s+'</option>';}).join('');
+  document.getElementById('cli-tbody').innerHTML=arr.map(function(c){
+    var lsel='<select class="cell" onchange="editarCli(\''+c.realId+'\',\'lista\',this.value)">'+optsL.replace('<option>'+c.lista+'</option>','<option selected>'+c.lista+'</option>')+'</select>';
+    var ssel='<select class="cell" onchange="editarCli(\''+c.realId+'\',\'administrador\',this.value)">'+optsS.replace('<option>'+c.administrador+'</option>','<option selected>'+c.administrador+'</option>')+'</select>';
+    return '<tr><td>'+c.nombre+'</td><td>'+lsel+'</td><td>'+ssel+'</td>'+
+      '<td><button class="x-btn" title="Eliminar cliente" onclick="borrarCli(\''+c.realId+'\',\''+String(c.nombre).replace(/'/g,"\\'")+'\')">✕</button></td></tr>';
+  }).join('') || '<tr><td colspan="4" class="muted">Sin clientes.</td></tr>';
+}
+async function editarCli(realId,campo,val){
+  var c=CLIENTES.find(function(x){return String(x.realId)===String(realId);}); if(!c) return;
+  var payload={ realId:c.realId, nombre:c.nombre, lista:c.lista, administrador:c.administrador };
+  payload[campo]=val;
+  var r=await window.sp('guardarCliente',payload);
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  c[campo]=val; toast('Cliente actualizado');
+}
+async function crearClienteUI(){
+  var nom=(document.getElementById('nc-nom').value||'').trim(); if(!nom){ toast('Poné el nombre','error'); return; }
+  var r=await window.sp('guardarCliente',{ nombre:nom, lista:document.getElementById('nc-lista').value, administrador:document.getElementById('nc-adm').value });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Cliente agregado'); document.getElementById('nc-nom').value='';
+  var rc=await window.sf('getClientes'); if(rc.ok) CLIENTES=rc.clientes||[]; renderClientes();
+}
+async function borrarCli(realId,nombre){
+  if(!confirm('¿Eliminar el cliente "'+nombre+'"?')) return;
+  var r=await window.sp('eliminarCliente',{realId:realId});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Cliente eliminado'); CLIENTES=CLIENTES.filter(function(x){return String(x.realId)!==String(realId);}); renderClientes();
+}
+
+// ---- LISTAS ----
+async function renderListas(){
+  var r=await window.sf('getListas'); LISTAS_FULL=(r.ok?r.listas:[])||[];
+  var tb=document.getElementById('lis-tbody');
+  if(!r.ok){ tb.innerHTML='<tr><td colspan="3">Error: '+r.error+'</td></tr>'; return; }
+  tb.innerHTML=LISTAS_FULL.map(function(l,i){
+    var opts=['base','derivada','especial'].map(function(t){ return '<option value="'+t+'"'+(l.tipo===t?' selected':'')+'>'+t+'</option>'; }).join('');
+    var fija=(l.nombre==='Minorista'||l.nombre==='Mayorista');
+    return '<tr><td>'+l.nombre+'</td>'+
+      '<td><select class="cell" id="lt-'+i+'" onchange="guardarListCell('+i+')">'+opts+'</select></td>'+
+      '<td><input class="cell" type="number" step="1" value="'+(l.tipo==='derivada'?l.relacion:'')+'" id="lr-'+i+'" onchange="guardarListCell('+i+')"'+(l.tipo==='derivada'?'':' disabled')+'></td>'+
+      '<td>'+(fija?'<span class="muted" title="No se puede borrar">—</span>':'<button class="x-btn" title="Eliminar lista" onclick="eliminarListaUI(\''+String(l.nombre).replace(/'/g,"\\'")+'\')">✕</button>')+'</td></tr>';
+  }).join('');
+}
+async function eliminarListaUI(nombre){
+  if(!confirm('¿Eliminar la lista "'+nombre+'"? Se quitan sus precios en los productos.')) return;
+  var r=await window.sp('eliminarLista',{nombre:nombre});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  LISTAS=LISTAS.filter(function(x){return x!==nombre;}); poblarSelects();
+  toast('Lista eliminada'); renderListas();
+}
+async function guardarListCell(i){
+  var l=LISTAS_FULL[i]; if(!l) return;
+  var tipo=document.getElementById('lt-'+i).value, rel=document.getElementById('lr-'+i).value;
+  var r=await window.sp('guardarLista',{nombre:l.nombre, tipo:tipo, relacion:rel});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  l.tipo=tipo; l.relacion=Number(rel)||0; toast('Lista guardada'); renderListas();
+}
+async function crearListaUI(){
+  var nom=(document.getElementById('nl-nom').value||'').trim(); if(!nom){ toast('Poné el nombre','error'); return; }
+  var r=await window.sp('guardarLista',{nombre:nom, tipo:document.getElementById('nl-tipo').value, relacion:document.getElementById('nl-rel').value});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  if(LISTAS.indexOf(nom)<0) LISTAS.push(nom);
+  toast('Lista agregada'); ['nl-nom','nl-rel'].forEach(function(id){document.getElementById(id).value='';});
+  poblarSelects(); renderListas();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configuración — Carnicería</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css">
+<style>
+  header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  header .ttl{font-size:var(--fs-xl);font-weight:700;}
+  header nav a{color:#dbe8ff;text-decoration:none;font-size:var(--fs-sm);font-weight:600;margin-right:14px;}
+  header nav a.on,header nav a:hover{color:#fff;}
+  header button{background:#fff;color:var(--brand);border:none;padding:7px 13px;border-radius:var(--radius-sm);font-weight:600;cursor:pointer;font-size:var(--fs-sm);}
+  main{max-width:820px;}
+  .sec-tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;}
+  .card{margin-bottom:18px;}
+  .card > h3{font-size:var(--fs-lg);margin-bottom:2px;}
+  .hint{font-size:var(--fs-sm);color:var(--muted);margin:4px 0 14px;}
+  .fp-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--line-2);flex-wrap:wrap;}
+  .fp-row input[type=text]{flex:1;min-width:120px;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;font-size:var(--fs-base);}
+  .fp-row label{display:flex;align-items:center;gap:6px;font-size:var(--fs-sm);color:var(--ink-soft);white-space:nowrap;}
+  .fp-row .x{color:var(--bad);background:none;border:none;cursor:pointer;font-size:1.1rem;}
+  table.cfg{width:100%;border-collapse:collapse;font-size:var(--fs-sm);}
+  table.cfg th{background:var(--surface-2);color:#6b7688;font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.04em;text-align:left;padding:8px 10px;}
+  table.cfg td{padding:6px 8px;border-bottom:1px solid var(--line-2);}
+  table.cfg input, table.cfg select{width:100%;padding:6px 8px;border:1px solid var(--border-inp);border-radius:var(--radius-xs);font-family:inherit;font-size:var(--fs-sm);}
+  table.cfg input.w-cod{max-width:70px;}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>🥩 Carnicería</h1>
+    <p>Ingresá con tu usuario.</p>
+    <form id="login-form">
+      <label>Email</label><input type="email" id="li-email" autocomplete="username" required>
+      <label>Contraseña</label><input type="password" id="li-pass" autocomplete="current-password" required>
+      <button type="submit" id="li-btn">Entrar</button>
+      <div class="err" id="li-err"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div class="ttl">⚙️ Configuración</div>
+      <nav><a href="index.html">📊 Tablero</a><a href="productos.html">🏷️ Productos</a><a href="clientes.html">👥 Clientes</a><a href="stock.html">📦 Stock</a><a href="compras.html">🧾 Compras</a><a href="remitos.html">🔄 Remitos</a><a href="cuentas.html">📒 Cuentas</a><a href="caja.html">💵 Caja</a><a href="ventas.html">🛒 Ventas</a><a href="configuracion.html" class="on">⚙️ Configuración</a><a href="usuarios.html">👤 Usuarios</a></nav>
+    </div>
+    <button id="btn-salir">Salir</button>
+  </header>
+  <main>
+    <div class="tabs sec-tabs">
+      <button class="tab on" data-s="pagos" onclick="switchSec('pagos')">💳 Formas de pago</button>
+      <button class="tab" data-s="locales" onclick="switchSec('locales')">🏬 Locales</button>
+      <button class="tab" data-s="balanzas" onclick="switchSec('balanzas')">⚖️ Balanzas</button>
+      <button class="tab" data-s="gastos" onclick="switchSec('gastos')">🧾 Compras y Gastos</button>
+    </div>
+
+    <!-- FORMAS DE PAGO -->
+    <div id="s-pagos">
+      <div class="card">
+        <h3>Formas de pago</h3>
+        <p class="hint">Las que ves en la pantalla de Ventas. <b>Cuenta corriente</b> = genera deuda (solo aparece con un cliente elegido). <b>Facturar (ARCA)</b> = a futuro se facturarán automáticamente por AFIP (por ahora solo se guarda la preferencia).</p>
+        <div id="fp-list"></div>
+        <button class="btn-sec" onclick="addFP()" style="margin-top:10px;">+ Agregar forma de pago</button>
+        <div style="margin-top:16px;"><button class="btn" onclick="guardarFP()">Guardar formas de pago</button></div>
+      </div>
+    </div>
+
+    <!-- LOCALES -->
+    <div id="s-locales" hidden>
+      <div class="card">
+        <h3>Locales</h3>
+        <p class="hint">Nombre, sigla (prefijo de comprobantes), dirección y teléfono. La <b>dirección y el teléfono salen en el ticket</b>. La sigla arma el comprobante (ej. <code>FAB-20260916-0001</code>).</p>
+        <div class="tblwrap"><table class="cfg"><thead><tr><th>Nombre</th><th>Sigla</th><th>Dirección</th><th>Teléfono</th><th></th></tr></thead><tbody id="loc-tbody"></tbody></table></div>
+        <button class="btn-sec" onclick="addLoc()" style="margin-top:10px;">+ Agregar local</button>
+      </div>
+    </div>
+
+    <!-- BALANZAS -->
+    <div id="s-balanzas" hidden>
+      <div class="card">
+        <h3>Balanzas</h3>
+        <p class="hint">Cómo leer la etiqueta de balanza por local. <b>Prefijo</b> = 2 dígitos que marcan etiqueta de balanza. <b>Dato</b> = si trae peso (kg) o precio ($). <b>CodLen/DatoLen</b> = dígitos del código y del dato.</p>
+        <div class="tblwrap"><table class="cfg"><thead><tr><th>Local</th><th>Prefijo</th><th>Dato</th><th>CodLen</th><th>DatoLen</th><th></th></tr></thead><tbody id="bal-tbody"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- COMPRAS Y GASTOS -->
+    <div id="s-gastos" hidden>
+      <div class="card">
+        <h3>Categorías de gasto</h3>
+        <p class="hint">Cada gasto se imputa a una <b>categoría</b> (detalle), y cada categoría pertenece a un <b>grupo</b> (nivel mayor, ej. Estructura, Carnicería, Almacén). Se guarda al salir del campo.</p>
+        <div class="tblwrap"><table class="cfg"><thead><tr><th>Categoría</th><th>Grupo</th><th></th></tr></thead><tbody id="cg-tbody"></tbody></table></div>
+        <div class="fp-row" style="border:none;margin-top:8px;">
+          <input type="text" id="cg-nom" placeholder="Nueva categoría (ej. Luz)">
+          <input type="text" id="cg-grupo" placeholder="Grupo (ej. Estructura)">
+          <button class="btn" onclick="addCG()">Agregar</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Reparto de gastos entre locales</h3>
+        <p class="hint">Para las categorías que se reparten, poné el <b>% que asume cada local</b> (idealmente suma 100% por categoría). Vacío = no se reparte. Se guarda al salir de la celda.</p>
+        <div class="tblwrap"><table class="cfg" id="rep-tabla"><thead id="rep-head"></thead><tbody id="rep-tbody"></tbody></table></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="toast-c" id="toast-c"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="sb-api.js"></script>
+<script src="auth-guard.js"></script>
+<script>
+var sb=window.sbClient;
+var FORMAS=[{nombre:'Efectivo',cta:false,facturar:false},{nombre:'Tarjeta',cta:false,facturar:false},{nombre:'Virtual',cta:false,facturar:false},{nombre:'Cuenta Corriente',cta:true,facturar:false}];
+var SUCS=[];      // {id,nombre,sigla,direccion,telefono}
+var BALS={};      // nombre -> {prefijo,dato,codlen,datolen}
+var CG=[];        // categorías de gasto {id,nombre,grupo}
+var REP={};       // reparto: catId -> { sucId: porcentaje }
+function toast(msg,tipo){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(tipo?' '+tipo:''); e.textContent=msg; c.appendChild(e); setTimeout(function(){ e.remove(); },2600); }
+
+document.getElementById('login-form').addEventListener('submit', async function(e){
+  e.preventDefault();
+  var btn=document.getElementById('li-btn'), err=document.getElementById('li-err');
+  err.textContent=''; btn.disabled=true; btn.textContent='Entrando…';
+  var r=await sb.auth.signInWithPassword({ email:document.getElementById('li-email').value.trim(), password:document.getElementById('li-pass').value });
+  btn.disabled=false; btn.textContent='Entrar';
+  if(r.error){ err.textContent='No se pudo entrar: '+r.error.message; return; }
+  iniciar();
+});
+document.getElementById('btn-salir').addEventListener('click', async function(){ await sb.auth.signOut(); location.reload(); });
+(async function(){ var s=await sb.auth.getSession(); if(s.data && s.data.session) iniciar(); })();
+
+async function iniciar(){
+  document.getElementById('login').hidden=true;
+  document.getElementById('app').hidden=false;
+  var r=await window.sf('getConfigGeneral');
+  if(r.ok && r.config && r.config.formas_pago){ try{ var arr=JSON.parse(r.config.formas_pago); if(Array.isArray(arr)&&arr.length) FORMAS=arr.map(function(f){ return {nombre:String(f.nombre||f), cta:!!f.cta, facturar:!!f.facturar}; }); }catch(e){} }
+  var rs=await window.sf('getSucursales'); if(rs.ok) SUCS=rs.sucursales||[];
+  var rb=await window.sf('getBalanzas'); if(rb.ok) BALS=rb.balanzas||{};
+  var rcg=await window.sf('getCategoriasGasto'); if(rcg.ok) CG=rcg.categorias||[];
+  var rrep=await window.sf('getReparto'); REP={}; if(rrep.ok){ (rrep.reparto||[]).forEach(function(x){ REP[x.categoriaId]=REP[x.categoriaId]||{}; REP[x.categoriaId][x.sucursalId]=x.porcentaje; }); }
+  renderFP(); renderLoc(); renderBal();
+}
+function switchSec(name){
+  document.querySelectorAll('.sec-tabs .tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-s')===name); });
+  ['pagos','locales','balanzas','gastos'].forEach(function(s){ document.getElementById('s-'+s).hidden=(s!==name); });
+  if(name==='gastos') renderGastos();
+}
+
+// ---- FORMAS DE PAGO ----
+function renderFP(){
+  document.getElementById('fp-list').innerHTML=FORMAS.map(function(f,i){
+    return '<div class="fp-row">'+
+      '<input type="text" value="'+String(f.nombre).replace(/"/g,'&quot;')+'" onchange="setFPnom('+i+',this.value)">'+
+      '<label><input type="checkbox" '+(f.cta?'checked':'')+' onchange="setFPcta('+i+',this.checked)"> Cuenta corriente</label>'+
+      '<label title="A futuro ARCA/AFIP factura estas automáticamente"><input type="checkbox" '+(f.facturar?'checked':'')+' onchange="setFPfac('+i+',this.checked)"> Facturar (ARCA)</label>'+
+      '<button class="x" onclick="delFP('+i+')" title="Quitar">✕</button></div>';
+  }).join('');
+}
+function setFPnom(i,v){ FORMAS[i].nombre=v; }
+function setFPcta(i,v){ FORMAS[i].cta=v; }
+function setFPfac(i,v){ FORMAS[i].facturar=v; }
+function delFP(i){ FORMAS.splice(i,1); renderFP(); }
+function addFP(){ FORMAS.push({nombre:'',cta:false,facturar:false}); renderFP(); }
+async function guardarFP(){
+  var limpio=FORMAS.map(function(f){ return {nombre:String(f.nombre||'').trim(), cta:!!f.cta, facturar:!!f.facturar}; }).filter(function(f){ return f.nombre; });
+  if(!limpio.length){ toast('Poné al menos una forma de pago','error'); return; }
+  var r=await window.sp('guardarConfig',{ clave:'formas_pago', valor:JSON.stringify(limpio) });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  FORMAS=limpio; renderFP(); toast('Formas de pago guardadas');
+}
+
+// ---- LOCALES ---- (guardado automático al salir del campo)
+function renderLoc(){
+  document.getElementById('loc-tbody').innerHTML=SUCS.map(function(s,i){
+    return '<tr>'+
+      '<td><input type="text" value="'+(s.nombre||'').replace(/"/g,'&quot;')+'" id="loc-nom-'+i+'" onchange="guardarLoc('+i+')"></td>'+
+      '<td><input type="text" class="w-cod" value="'+(s.sigla||'').replace(/"/g,'&quot;')+'" id="loc-sig-'+i+'" onchange="guardarLoc('+i+')"></td>'+
+      '<td><input type="text" value="'+(s.direccion||'').replace(/"/g,'&quot;')+'" id="loc-dir-'+i+'" onchange="guardarLoc('+i+')"></td>'+
+      '<td><input type="text" value="'+(s.telefono||'').replace(/"/g,'&quot;')+'" id="loc-tel-'+i+'" onchange="guardarLoc('+i+')"></td>'+
+      '<td><button class="x-btn" title="Eliminar local" onclick="delLoc('+i+')">✕</button></td></tr>';
+  }).join('') || '<tr><td colspan="5" style="color:var(--muted)">Sin locales.</td></tr>';
+}
+function addLoc(){ SUCS.push({id:null,nombre:'',sigla:'',direccion:'',telefono:''}); renderLoc(); }
+async function guardarLoc(i){
+  var s=SUCS[i];
+  var payload={ id:s.id, nombre:document.getElementById('loc-nom-'+i).value, sigla:document.getElementById('loc-sig-'+i).value, direccion:document.getElementById('loc-dir-'+i).value, telefono:document.getElementById('loc-tel-'+i).value };
+  if(!payload.nombre.trim()){ return; }   // no guardar sin nombre
+  var eraNuevo=!s.id;
+  var r=await window.sp('guardarSucursal',payload);
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  SUCS[i]={ id:s.id, nombre:payload.nombre.trim(), sigla:payload.sigla.trim(), direccion:payload.direccion.trim(), telefono:payload.telefono.trim() };
+  toast('Local guardado');
+  if(eraNuevo){ var rs=await window.sf('getSucursales'); if(rs.ok){ SUCS=rs.sucursales||[]; renderLoc(); renderBal(); } }
+}
+async function delLoc(i){
+  var s=SUCS[i]; if(!s){ return; }
+  if(!s.id){ SUCS.splice(i,1); renderLoc(); renderBal(); return; }
+  if(!confirm('¿Eliminar el local "'+s.nombre+'"? Se borra también su balanza.')) return;
+  var r=await window.sp('eliminarSucursal',{id:s.id, nombre:s.nombre});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast(r.soft?'Local desactivado (tenía datos asociados)':'Local eliminado');
+  var rs=await window.sf('getSucursales'); if(rs.ok) SUCS=rs.sucursales||[];
+  var rb=await window.sf('getBalanzas'); if(rb.ok) BALS=rb.balanzas||{};
+  renderLoc(); renderBal();
+}
+
+// ---- BALANZAS ---- (guardado automático; sin botón Guardar)
+function renderBal(){
+  document.getElementById('bal-tbody').innerHTML=SUCS.filter(function(s){return s.nombre;}).map(function(s,i){
+    var b=BALS[s.nombre]||{prefijo:'',dato:'peso',codlen:'',datolen:''};
+    var n=String(s.nombre).replace(/'/g,"\\'");
+    return '<tr>'+
+      '<td>'+s.nombre+'</td>'+
+      '<td><input type="text" class="w-cod" value="'+(b.prefijo||'20')+'" id="bal-pre-'+i+'" onchange="guardarBal('+i+',\''+n+'\')"></td>'+
+      '<td><select id="bal-dat-'+i+'" onchange="guardarBal('+i+',\''+n+'\')"><option value="peso"'+(b.dato==='peso'?' selected':'')+'>peso</option><option value="precio"'+(b.dato==='precio'?' selected':'')+'>precio</option></select></td>'+
+      '<td><input type="number" class="w-cod" value="'+(b.codlen||'5')+'" id="bal-cl-'+i+'" onchange="guardarBal('+i+',\''+n+'\')"></td>'+
+      '<td><input type="number" class="w-cod" value="'+(b.datolen||'5')+'" id="bal-dl-'+i+'" onchange="guardarBal('+i+',\''+n+'\')"></td>'+
+      '<td><button class="x-btn" title="Borrar balanza" onclick="delBal('+i+',\''+n+'\')">✕</button></td></tr>';
+  }).join('') || '<tr><td colspan="6" style="color:var(--muted)">Cargá primero los locales.</td></tr>';
+}
+async function guardarBal(i,nombre){
+  var payload={ sucursal:nombre, prefijo:document.getElementById('bal-pre-'+i).value, dato:document.getElementById('bal-dat-'+i).value, codlen:document.getElementById('bal-cl-'+i).value, datolen:document.getElementById('bal-dl-'+i).value };
+  var r=await window.sp('guardarBalanza',payload);
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  BALS[nombre]={ prefijo:payload.prefijo, dato:payload.dato, codlen:payload.codlen, datolen:payload.datolen };
+  toast('Balanza de '+nombre+' guardada');
+}
+async function delBal(i,nombre){
+  if(!confirm('¿Borrar la config de balanza de '+nombre+'?')) return;
+  var r=await window.sp('eliminarBalanza',{sucursal:nombre});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  delete BALS[nombre]; renderBal(); toast('Balanza borrada');
+}
+
+// ---- COMPRAS Y GASTOS ----
+function renderGastos(){ renderCG(); renderReparto(); }
+function renderCG(){
+  document.getElementById('cg-tbody').innerHTML=CG.map(function(c,i){
+    return '<tr>'+
+      '<td><input type="text" value="'+(c.nombre||'').replace(/"/g,'&quot;')+'" id="cg-n-'+i+'" onchange="guardarCG('+i+')"></td>'+
+      '<td><input type="text" value="'+(c.grupo||'').replace(/"/g,'&quot;')+'" id="cg-g-'+i+'" onchange="guardarCG('+i+')"></td>'+
+      '<td><button class="x-btn" title="Eliminar categoría" onclick="delCG('+i+')">✕</button></td></tr>';
+  }).join('') || '<tr><td colspan="3" style="color:var(--muted)">Sin categorías.</td></tr>';
+}
+async function guardarCG(i){
+  var c=CG[i]; var nombre=document.getElementById('cg-n-'+i).value, grupo=document.getElementById('cg-g-'+i).value;
+  if(!nombre.trim()) return;
+  var r=await window.sp('guardarCategoriaGasto',{id:c.id, nombre:nombre, grupo:grupo});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  c.id=r.id||c.id; c.nombre=nombre.trim(); c.grupo=grupo.trim(); toast('Categoría guardada'); renderReparto();
+}
+async function addCG(){
+  var nombre=document.getElementById('cg-nom').value.trim(); if(!nombre){ toast('Poné el nombre','error'); return; }
+  var r=await window.sp('guardarCategoriaGasto',{nombre:nombre, grupo:document.getElementById('cg-grupo').value});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  document.getElementById('cg-nom').value=''; document.getElementById('cg-grupo').value='';
+  var rcg=await window.sf('getCategoriasGasto'); if(rcg.ok) CG=rcg.categorias||[]; toast('Categoría agregada'); renderCG(); renderReparto();
+}
+async function delCG(i){
+  var c=CG[i]; if(!c) return; if(!c.id){ CG.splice(i,1); renderCG(); renderReparto(); return; }
+  if(!confirm('¿Eliminar la categoría "'+c.nombre+'"?')) return;
+  var r=await window.sp('eliminarCategoriaGasto',{id:c.id}); if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  CG.splice(i,1); delete REP[c.id]; toast('Categoría eliminada'); renderCG(); renderReparto();
+}
+function renderReparto(){
+  var locs=SUCS.filter(function(s){return s.nombre;});
+  document.getElementById('rep-head').innerHTML='<tr><th>Categoría</th>'+locs.map(function(s){return '<th>'+s.nombre+'</th>';}).join('')+'</tr>';
+  document.getElementById('rep-tbody').innerHTML = CG.filter(function(c){return c.id;}).map(function(c){
+    return '<tr><td>'+c.nombre+'</td>'+locs.map(function(s){
+      var v=(REP[c.id]&&REP[c.id][s.id]!=null&&REP[c.id][s.id]!==0)?REP[c.id][s.id]:'';
+      return '<td><input type="number" class="w-cod" value="'+v+'" onchange="guardarRep('+c.id+','+s.id+',this.value)"></td>';
+    }).join('')+'</tr>';
+  }).join('') || '<tr><td style="color:var(--muted)">Cargá categorías primero.</td></tr>';
+}
+async function guardarRep(catId, sucId, val){
+  var r=await window.sp('guardarReparto',{categoriaId:catId, sucursalId:sucId, porcentaje:val});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  REP[catId]=REP[catId]||{}; REP[catId][sucId]=(val===''?0:Number(val)); toast('Reparto guardado');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Remitos — Carnicería</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css">
+<style>
+  header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  header .ttl{font-size:var(--fs-xl);font-weight:700;}
+  header nav a{color:#dbe8ff;text-decoration:none;font-size:var(--fs-sm);font-weight:600;margin-right:14px;}
+  header nav a.on,header nav a:hover{color:#fff;}
+  header .suc select{padding:5px 8px;border-radius:var(--radius-sm);border:none;font-family:inherit;font-size:var(--fs-sm);}
+  header button{background:#fff;color:var(--brand);border:none;padding:7px 13px;border-radius:var(--radius-sm);font-weight:600;cursor:pointer;font-size:var(--fs-sm);}
+  main{max-width:1000px;}
+  .abm-nueva{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end;}
+  .abm-nueva label,.linea label{display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;text-transform:uppercase;letter-spacing:.03em;}
+  .abm-nueva input,.abm-nueva select,.linea input{width:100%;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;background:#fff;}
+  .linea{display:grid;grid-template-columns:2fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;}
+  .ac-pop{position:absolute;background:#fff;border:1px solid var(--border-inp);border-radius:var(--radius-sm);max-height:260px;overflow:auto;z-index:200;box-shadow:var(--shadow-pop);}
+  .ac-pop div{padding:8px 12px;cursor:pointer;font-size:var(--fs-sm);border-bottom:1px solid var(--line-2);}
+  .ac-pop div:hover{background:var(--brand-soft);}
+  .pill-est{font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:20px;}
+  .pill-est.pend{background:#fdf0d5;color:var(--warn);} .pill-est.rec{background:#e8f6ee;color:var(--good);}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>🥩 Carnicería</h1><p>Ingresá con tu usuario.</p>
+    <form id="login-form">
+      <label>Email</label><input type="email" id="li-email" autocomplete="username" required>
+      <label>Contraseña</label><input type="password" id="li-pass" autocomplete="current-password" required>
+      <button type="submit" id="li-btn">Entrar</button><div class="err" id="li-err"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div class="ttl">🔄 Remitos</div>
+      <nav><a href="index.html">📊 Tablero</a><a href="stock.html">📦 Stock</a><a href="remitos.html" class="on">🔄 Remitos</a><a href="cuentas.html">📒 Cuentas</a><a href="caja.html">💵 Caja</a><a href="ventas.html">🛒 Ventas</a></nav>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div class="suc">📍 <select id="selSuc" onchange="cambiarSuc()"></select></div>
+      <button id="btn-salir">Salir</button>
+    </div>
+  </header>
+  <main>
+    <div class="tabs">
+      <button class="tab on" data-t="emitir" onclick="switchTab('emitir')">Emitir</button>
+      <button class="tab" data-t="pend" onclick="switchTab('pend')">Pendientes / En tránsito</button>
+      <button class="tab" data-t="hist" onclick="switchTab('hist')">Historial</button>
+    </div>
+
+    <div id="t-emitir">
+      <div class="card">
+        <h3>Emitir remito</h3>
+        <p class="resumen" style="margin-bottom:12px;">Envío de <b id="e-origen-txt"></b> a otro local. Se valúa a <b>costo + plus por categoría</b> (lo que gana el que elabora). Sale del stock del origen; entra al destino cuando lo reciben.</p>
+        <div class="abm-nueva" style="margin-bottom:12px;">
+          <div><label>Destino</label><select id="e-destino"></select></div>
+          <div><label>Concepto (opc)</label><input id="e-concepto" placeholder="Ej: reposición diaria"></div>
+        </div>
+        <div class="scan" style="display:flex;gap:8px;position:relative;margin-bottom:10px;">
+          <input id="r-scan" placeholder="Escaneá la etiqueta de balanza o buscá por código / nombre…" autocomplete="off" style="flex:1;padding:11px 13px;border:2px solid var(--brand-soft);border-radius:var(--radius-sm);font-size:var(--fs-lg);font-family:inherit;">
+          <button class="btn" onclick="onScanRem()">Agregar</button>
+          <div id="r-sug" class="ac-pop" hidden></div>
+        </div>
+        <div class="tblwrap"><table class="data"><thead><tr><th>Producto</th><th class="num">Cantidad</th><th></th></tr></thead><tbody id="r-tbody"><tr><td colspan="3" class="muted" style="padding:18px;text-align:center;">Escaneá o buscá productos para armar el remito.</td></tr></tbody></table></div>
+        <div style="margin-top:14px;"><button class="btn" onclick="emitirUI()">Emitir remito</button></div>
+      </div>
+    </div>
+
+    <div id="t-pend" hidden>
+      <p class="resumen" style="margin-bottom:10px;">Estos remitos ya <b>salieron del origen</b> y están <b>en tránsito</b> hasta que el destino los reciba. Se puede recibir <b>total o parcial</b> (el faltante vuelve al origen) o <b>redirigir</b> a otro local.</p>
+      <div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Número</th><th>Origen</th><th>Destino</th><th>Fecha</th><th class="num">Total (c/plus)</th><th></th></tr></thead><tbody id="pend-tbody"></tbody></table></div></div>
+    </div>
+
+    <div id="t-hist" hidden>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px;">
+        <input id="h-q" placeholder="Buscar número / concepto…" oninput="renderHist()" style="flex:1;min-width:160px;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;">
+        <select id="h-estado" onchange="renderHist()" style="padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"><option value="">Todos los estados</option><option value="pendiente">🚚 En tránsito</option><option value="recibido parcial">Parcial</option><option value="recibido">Recibido</option></select>
+        <select id="h-origen" onchange="renderHist()" style="padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></select>
+        <select id="h-destino" onchange="renderHist()" style="padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></select>
+      </div>
+      <div class="resumen muted" id="h-resumen" style="margin-bottom:8px;"></div>
+      <div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Número</th><th>Origen</th><th>Destino</th><th>Estado</th><th>Emisión</th><th>Recepción</th><th class="num">Total</th><th></th></tr></thead><tbody id="hist-tbody"></tbody></table></div></div>
+    </div>
+  </main>
+</div>
+
+<div id="ac-pop" class="ac-pop" hidden></div>
+<div class="toast-c" id="toast-c"></div>
+
+<div class="ov" id="ov-det" hidden style="position:fixed;inset:0;background:rgba(15,25,45,.45);display:flex;align-items:center;justify-content:center;z-index:250;padding:16px;">
+  <div style="background:#fff;border-radius:14px;padding:22px;max-width:560px;width:100%;box-shadow:var(--shadow-pop);">
+    <h3 id="det-tit" style="font-size:var(--fs-xl);margin-bottom:10px;">Remito</h3>
+    <div class="tblwrap"><table class="data"><thead><tr><th>Producto</th><th class="num">Cant.</th><th class="num">Costo</th><th class="num">Plus%</th><th class="num">Precio</th></tr></thead><tbody id="det-tbody"></tbody></table></div>
+    <div style="text-align:right;margin-top:12px;"><button class="btn-sec" onclick="document.getElementById('ov-det').hidden=true">Cerrar</button></div>
+  </div>
+</div>
+
+<div class="ov" id="ov-rec" hidden style="position:fixed;inset:0;background:rgba(15,25,45,.45);display:flex;align-items:center;justify-content:center;z-index:250;padding:16px;">
+  <div style="background:#fff;border-radius:14px;padding:22px;max-width:560px;width:100%;box-shadow:var(--shadow-pop);">
+    <h3 id="rec-tit" style="font-size:var(--fs-xl);margin-bottom:6px;">Recibir remito</h3>
+    <p class="resumen" style="margin-bottom:10px;">Poné lo que <b>llegó realmente</b> de cada producto. Lo que falte <b>vuelve al stock del origen</b>.</p>
+    <div class="tblwrap"><table class="data"><thead><tr><th>Producto</th><th class="num">Enviado</th><th class="num">Recibido</th></tr></thead><tbody id="rec-tbody"></tbody></table></div>
+    <div style="text-align:right;margin-top:12px;"><button class="btn-sec" onclick="document.getElementById('ov-rec').hidden=true">Cancelar</button> <button class="btn" onclick="confirmarRecepcion()">Confirmar recepción</button></div>
+  </div>
+</div>
+
+<div class="ov" id="ov-redir" hidden style="position:fixed;inset:0;background:rgba(15,25,45,.45);display:flex;align-items:center;justify-content:center;z-index:250;padding:16px;">
+  <div style="background:#fff;border-radius:14px;padding:22px;max-width:400px;width:100%;box-shadow:var(--shadow-pop);">
+    <h3 style="font-size:var(--fs-xl);margin-bottom:10px;">Redirigir remito</h3>
+    <p class="resumen" style="margin-bottom:10px;">La mercadería sigue en tránsito y viaja al nuevo destino (no vuelve al origen).</p>
+    <label style="font-size:var(--fs-xs);color:var(--muted);font-weight:600;">Nuevo destino</label>
+    <select id="redir-dest" style="width:100%;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;margin:4px 0 14px;"></select>
+    <div style="text-align:right;"><button class="btn-sec" onclick="document.getElementById('ov-redir').hidden=true">Cancelar</button> <button class="btn" onclick="confirmarRedirigir()">Redirigir</button></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="sb-api.js"></script>
+<script src="auth-guard.js"></script>
+<script>
+var sb=window.sbClient;
+var PRODS={}, SUCS=[], SUCID={}, sucActual='', REMITOS=[], BALANZAS={}, carritoRem=[];
+var balCfg={ prefijo:'20', dato:'peso', codlen:5, datolen:5 };
+function fmt$(n){ return '$'+Math.round(Number(n)||0).toLocaleString('es-AR'); }
+function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
+
+document.getElementById('login-form').addEventListener('submit', async function(e){
+  e.preventDefault(); var btn=document.getElementById('li-btn'), err=document.getElementById('li-err'); err.textContent=''; btn.disabled=true; btn.textContent='Entrando…';
+  var r=await sb.auth.signInWithPassword({ email:document.getElementById('li-email').value.trim(), password:document.getElementById('li-pass').value });
+  btn.disabled=false; btn.textContent='Entrar'; if(r.error){ err.textContent='No se pudo entrar: '+r.error.message; return; } iniciar();
+});
+document.getElementById('btn-salir').addEventListener('click', async function(){ await sb.auth.signOut(); location.reload(); });
+(async function(){ var s=await sb.auth.getSession(); if(s.data && s.data.session) iniciar(); })();
+
+async function iniciar(){
+  document.getElementById('login').hidden=true; document.getElementById('app').hidden=false;
+  var rp=await window.sf('getProductos'); PRODS=(rp.ok?rp.productos:{})||{};
+  var rs=await window.sf('getSucursales'); var suc=(rs.ok?(rs.sucursales||[]):[]); SUCS=suc.map(function(s){return s.nombre;}); SUCID={}; suc.forEach(function(s){ SUCID[s.id]=s.nombre; });
+  var rb=await window.sf('getBalanzas'); if(rb.ok) BALANZAS=rb.balanzas||{};
+  poblarSuc(); aplicarBalanza(); poblarDestino(); renderRem();
+  document.getElementById('r-scan').focus();
+}
+function aplicarBalanza(){ var b=BALANZAS[sucActual]; if(b){ balCfg={ prefijo:String(b.prefijo||'20'), dato:String(b.dato||'peso'), codlen:parseInt(b.codlen)||5, datolen:parseInt(b.datolen)||5 }; } }
+function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; document.getElementById('e-origen-txt').textContent=sucActual; }
+function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); document.getElementById('e-origen-txt').textContent=sucActual; aplicarBalanza(); poblarDestino(); }
+function poblarDestino(){ document.getElementById('e-destino').innerHTML=SUCS.filter(function(s){return s!==sucActual;}).map(function(s){return '<option>'+s+'</option>';}).join(''); }
+function switchTab(name){ document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); }); ['emitir','pend','hist'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); }); if(name==='pend'||name==='hist') cargarRemitos(); }
+
+// autocomplete
+var acInput=null, acM=[];
+function acFilter(v){ v=String(v||'').trim().toLowerCase(); if(!v) return []; return Object.keys(PRODS).filter(function(c){ return (c+' '+(PRODS[c].nombre||'')).toLowerCase().indexOf(v)>=0; }).slice(0,30); }
+function acShow(input){ acInput=input; acM=acFilter(input.value); var p=document.getElementById('ac-pop'); if(!acM.length){ p.hidden=true; return; } p.innerHTML=acM.map(function(c,i){ var pr=PRODS[c]; return '<div onmousedown="acPick(event,'+i+')">'+(pr.nombre||c)+' <span style="color:#8891a3">('+c+')</span></div>'; }).join(''); var r=input.getBoundingClientRect(); p.style.left=(r.left+scrollX)+'px'; p.style.top=(r.bottom+scrollY)+'px'; p.style.width=Math.max(r.width,240)+'px'; p.hidden=false; }
+function acPick(ev,i){ if(ev) ev.preventDefault(); var c=acM[i]; if(acInput&&c) acInput.value=c; document.getElementById('ac-pop').hidden=true; }
+document.addEventListener('input', function(e){ if(e.target.classList&&e.target.classList.contains('prod-ac')) acShow(e.target); });
+document.addEventListener('click', function(e){ var p=document.getElementById('ac-pop'); if(p&&!p.hidden&&e.target!==acInput&&!p.contains(e.target)&&!(e.target.classList&&e.target.classList.contains('prod-ac'))) p.hidden=true; });
+
+// emitir (modelo con consolidación + escaneo de balanza)
+function decodificar(raw){
+  var c=String(raw||'').replace(/\D/g,''); if(c.length!==13) return null;
+  if(c.slice(0,2)!==balCfg.prefijo) return null;
+  var cl=balCfg.codlen, dl=balCfg.datolen; if(2+cl+dl>12) return null;
+  var cod=c.slice(2,2+cl); var datoRaw=parseInt(c.slice(2+cl,2+cl+dl),10);
+  var codInt=String(parseInt(cod,10)); var codReal=PRODS[cod]?cod:(PRODS[codInt]?codInt:null);
+  if(!codReal) return { error:'Código '+cod+' no está en productos' };
+  var out={cod:codReal}; if(balCfg.dato==='peso') out.peso=datoRaw/1000; else out.precioTicket=datoRaw/100;
+  return out;
+}
+function agregarRem(cod, cant){
+  var p=PRODS[cod]; if(!p){ toast('Producto no encontrado','error'); return; }
+  cant=Number(cant)||0;
+  var it=carritoRem.find(function(x){return x.cod===cod;});
+  if(it){ it.cantidad=+(Number(it.cantidad)+cant).toFixed(3); }   // consolida: suma el mismo artículo
+  else { carritoRem.push({cod:cod, nombre:p.nombre||cod, cantidad:+cant.toFixed(3)}); }
+  renderRem();
+}
+function renderRem(){
+  var tb=document.getElementById('r-tbody');
+  if(!carritoRem.length){ tb.innerHTML='<tr><td colspan="3" class="muted" style="padding:18px;text-align:center;">Escaneá o buscá productos para armar el remito.</td></tr>'; return; }
+  tb.innerHTML=carritoRem.map(function(it,i){
+    return '<tr><td>'+it.nombre+' <span style="color:#8891a3">('+it.cod+')</span></td>'+
+      '<td class="num"><input type="number" step="0.001" value="'+it.cantidad+'" onchange="editarCantRem('+i+',this.value)" style="width:90px;padding:4px 6px;text-align:right;border:1px solid var(--border-inp);border-radius:5px;font-family:inherit;"></td>'+
+      '<td><button class="x-btn" title="Quitar" onclick="quitarRem('+i+')">✕</button></td></tr>';
+  }).join('');
+}
+function editarCantRem(i,val){ if(carritoRem[i]) carritoRem[i].cantidad=(val===''?0:Number(val)); }
+function quitarRem(i){ carritoRem.splice(i,1); renderRem(); }
+function ocultarSugRem(){ var b=document.getElementById('r-sug'); b.hidden=true; b.innerHTML=''; }
+function limpiarScanRem(){ var s=document.getElementById('r-scan'); s.value=''; ocultarSugRem(); s.focus(); }
+document.getElementById('r-scan').addEventListener('input', function(){
+  var raw=this.value.trim();
+  if(/^\d{13}$/.test(raw.replace(/\D/g,'')) || !raw){ ocultarSugRem(); return; }
+  var q=raw.toLowerCase(); var m=Object.keys(PRODS).filter(function(c){return (c+' '+(PRODS[c].nombre||'')).toLowerCase().indexOf(q)>=0;}).slice(0,25);
+  var box=document.getElementById('r-sug'); if(!m.length){ ocultarSugRem(); return; }
+  box.innerHTML=m.map(function(c){ var p=PRODS[c]; return '<div onmousedown="pickSugRem(event,\''+c+'\')">'+(p.nombre||c)+' <span style="color:#8891a3">('+c+')</span></div>'; }).join(''); box.hidden=false;
+});
+document.getElementById('r-scan').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); onScanRem(); } if(e.key==='Escape') ocultarSugRem(); });
+document.addEventListener('click', function(e){ if(!e.target.closest('.scan')) ocultarSugRem(); });
+function pickSugRem(ev,cod){ if(ev) ev.preventDefault(); ocultarSugRem(); agregarRem(cod, 0); document.getElementById('r-scan').value=''; document.getElementById('r-scan').focus(); }
+function onScanRem(){
+  var raw=document.getElementById('r-scan').value.trim(); if(!raw) return;
+  var dec=decodificar(raw);
+  if(dec && dec.cod){ if(dec.peso!=null){ agregarRem(dec.cod, dec.peso); limpiarScanRem(); return; } if(dec.precioTicket!=null){ agregarRem(dec.cod, 0); limpiarScanRem(); return; } }
+  else if(dec && dec.error){ toast(dec.error,'error'); return; }
+  if(PRODS[raw]){ agregarRem(raw, 0); limpiarScanRem(); return; }
+  var q=raw.toLowerCase(); var m=Object.keys(PRODS).filter(function(c){return (c+' '+(PRODS[c].nombre||'')).toLowerCase().indexOf(q)>=0;});
+  if(m.length===1){ agregarRem(m[0], 0); limpiarScanRem(); return; }
+  if(!m.length){ toast('Sin resultados para "'+raw+'"','error'); return; }
+}
+async function emitirUI(){
+  var destino=document.getElementById('e-destino').value; if(!destino){ toast('Elegí el destino','error'); return; }
+  var items=carritoRem.filter(function(it){ return Number(it.cantidad)>0; }).map(function(it){ return {codigo:it.cod, cantidad:it.cantidad}; });
+  if(!items.length){ toast('Cargá al menos un producto con cantidad','error'); return; }
+  var r=await window.sp('emitirRemito',{remito:{ origen:sucActual, destino:destino, concepto:document.getElementById('e-concepto').value.trim(), items:items }});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Remito '+ (r.numero||'') +' emitido — total '+fmt$(r.total));
+  carritoRem=[]; document.getElementById('e-concepto').value=''; renderRem(); document.getElementById('r-scan').focus();
+}
+
+// listar
+async function cargarRemitos(){ var r=await window.sf('getRemitos'); REMITOS=(r.ok?r.remitos:[])||[]; poblarFiltrosHist(); renderPend(); renderHist(); }
+function poblarFiltrosHist(){
+  var opts=function(id){ var sel=document.getElementById(id); if(!sel) return; var cur=sel.value; sel.innerHTML='<option value="">'+(id==='h-origen'?'Todos los orígenes':'Todos los destinos')+'</option>'+SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sel.value=cur; };
+  opts('h-origen'); opts('h-destino');
+}
+function renderPend(){
+  var arr=REMITOS.filter(function(r){ return r.estado!=='recibido'; });
+  document.getElementById('pend-tbody').innerHTML=arr.map(function(r){
+    var f=r.emision?new Date(r.emision).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
+    var puedeRecibir=(SUCID[r.destinoId]===sucActual);
+    var esOrigen=(SUCID[r.origenId]===sucActual);
+    return '<tr><td>'+r.numero+'</td><td>'+(SUCID[r.origenId]||'')+'</td><td>'+(SUCID[r.destinoId]||'')+'</td><td>'+f+'</td><td class="num">'+fmt$(r.total)+'</td>'+
+      '<td style="white-space:nowrap;"><button class="mini-btn" onclick="verDet('+r.id+',\''+r.numero+'\')">Ver</button>'+
+      (puedeRecibir?'<button class="btn" style="padding:4px 10px;font-size:.75rem;" onclick="recibirUI('+r.id+')">Recibir</button>':'')+
+      (esOrigen?'<button class="mini-btn" onclick="redirigirUI('+r.id+')">Redirigir</button>':'')+
+      (!puedeRecibir&&!esOrigen?'<span class="muted" style="font-size:.72rem;"> (recibe '+(SUCID[r.destinoId]||'')+')</span>':'')+'</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="muted">No hay remitos pendientes.</td></tr>';
+}
+function renderHist(){
+  var q=(document.getElementById('h-q').value||'').trim().toLowerCase();
+  var fe=document.getElementById('h-estado').value, fo=document.getElementById('h-origen').value, fd=document.getElementById('h-destino').value;
+  var arr=REMITOS.filter(function(r){
+    if(q && (r.numero+' '+(r.concepto||'')).toLowerCase().indexOf(q)<0) return false;
+    if(fe && r.estado!==fe) return false;
+    if(fo && (SUCID[r.origenId]||'')!==fo) return false;
+    if(fd && (SUCID[r.destinoId]||'')!==fd) return false;
+    return true;
+  });
+  var enTransito=arr.filter(function(r){return r.estado==='pendiente';});
+  var valTransito=enTransito.reduce(function(s,r){return s+r.total;},0);
+  document.getElementById('h-resumen').textContent=arr.length+' remito'+(arr.length!==1?'s':'')+' · 🚚 '+enTransito.length+' en tránsito ('+fmt$(valTransito)+')';
+  document.getElementById('hist-tbody').innerHTML=arr.map(function(r){
+    var fe=r.emision?new Date(r.emision).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
+    var fr=r.recepcion?new Date(r.recepcion).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'—';
+    var est=r.estado==='recibido'?'<span class="pill-est rec">recibido</span>':'<span class="pill-est pend">pendiente</span>';
+    return '<tr><td>'+r.numero+'</td><td>'+(SUCID[r.origenId]||'')+'</td><td>'+(SUCID[r.destinoId]||'')+'</td><td>'+est+'</td><td>'+fe+'</td><td>'+fr+'</td><td class="num">'+fmt$(r.total)+'</td>'+
+      '<td><button class="mini-btn" onclick="verDet('+r.id+',\''+r.numero+'\')">Ver</button></td></tr>';
+  }).join('') || '<tr><td colspan="8" class="muted">Sin remitos.</td></tr>';
+}
+async function verDet(id,num){
+  var r=await window.sf('getRemitoDetalle&id='+id); if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  document.getElementById('det-tit').textContent='Remito '+num;
+  document.getElementById('det-tbody').innerHTML=(r.detalle||[]).map(function(d){ return '<tr><td>'+d.nombre+'</td><td class="num">'+d.cantidad+'</td><td class="num">'+fmt$(d.costo)+'</td><td class="num">'+d.plus+'%</td><td class="num">'+fmt$(d.precio)+'</td></tr>'; }).join('') || '<tr><td colspan="5" class="muted">Sin líneas.</td></tr>';
+  document.getElementById('ov-det').hidden=false;
+}
+var recRemitoId=null, recDetalle=[];
+async function recibirUI(id){
+  recRemitoId=id; var r=await window.sf('getRemitoDetalle&id='+id); if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  recDetalle=r.detalle||[];
+  document.getElementById('rec-tbody').innerHTML=recDetalle.map(function(d,i){ return '<tr><td>'+d.nombre+'</td><td class="num">'+d.cantidad+'</td><td class="num"><input class="rec-in" data-i="'+i+'" type="number" step="0.001" value="'+d.cantidad+'" style="width:90px;padding:4px 6px;text-align:right;border:1px solid var(--border-inp);border-radius:5px;font-family:inherit;"></td></tr>'; }).join('');
+  document.getElementById('ov-rec').hidden=false;
+}
+async function confirmarRecepcion(){
+  var recep=[]; document.querySelectorAll('#rec-tbody .rec-in').forEach(function(inp){ var i=Number(inp.getAttribute('data-i')); var d=recDetalle[i]; if(d && d.id!=null) recep.push({detalle_id:d.id, cantidad_recibida:(inp.value===''?0:Number(inp.value))}); });
+  var r=await window.sp('recibirRemito',{id:recRemitoId, recepciones:recep});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  document.getElementById('ov-rec').hidden=true;
+  toast(r.parcial?'Recibido parcial — el faltante volvió al origen':'Remito recibido'); cargarRemitos();
+}
+var redirRemitoId=null;
+function redirigirUI(id){
+  redirRemitoId=id; var r=REMITOS.find(function(x){return x.id===id;});
+  var origen=r?SUCID[r.origenId]:'', destinoActual=r?SUCID[r.destinoId]:'';
+  document.getElementById('redir-dest').innerHTML=SUCS.filter(function(s){return s!==origen && s!==destinoActual;}).map(function(s){return '<option>'+s+'</option>';}).join('');
+  document.getElementById('ov-redir').hidden=false;
+}
+async function confirmarRedirigir(){
+  var dest=document.getElementById('redir-dest').value; if(!dest){ toast('Elegí un destino','error'); return; }
+  var r=await window.sp('redirigirRemito',{id:redirRemitoId, nuevoDestino:dest});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  document.getElementById('ov-redir').hidden=true; toast('Remito redirigido a '+dest); cargarRemitos();
+}
+</script>
+</body>
+</html>

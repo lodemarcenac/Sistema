@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Usuarios y roles — Carnicería</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css">
+<style>
+  header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  header .ttl{font-size:var(--fs-xl);font-weight:700;}
+  header nav a{color:#dbe8ff;text-decoration:none;font-size:var(--fs-sm);font-weight:600;margin-right:14px;}
+  header nav a.on,header nav a:hover{color:#fff;}
+  header button{background:#fff;color:var(--brand);border:none;padding:7px 13px;border-radius:var(--radius-sm);font-weight:600;cursor:pointer;font-size:var(--fs-sm);}
+  main{max-width:920px;}
+  .abm-nueva{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end;}
+  .abm-nueva label{display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;text-transform:uppercase;letter-spacing:.03em;}
+  .abm-nueva input,.abm-nueva select{width:100%;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;background:#fff;}
+  .perm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:6px 16px;margin:10px 0;}
+  .perm-grid label{display:flex;align-items:center;gap:7px;font-size:var(--fs-sm);}
+  .perm-h{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;margin:10px 0 2px;grid-column:1/-1;}
+  .rol-card{border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;background:var(--surface);}
+  .locs label{display:inline-flex;align-items:center;gap:5px;margin-right:14px;font-size:var(--fs-sm);}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>🥩 Carnicería</h1><p>Ingresá con tu usuario.</p>
+    <form id="login-form">
+      <label>Email</label><input type="email" id="li-email" autocomplete="username" required>
+      <label>Contraseña</label><input type="password" id="li-pass" autocomplete="current-password" required>
+      <button type="submit" id="li-btn">Entrar</button><div class="err" id="li-err"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div class="ttl">👤 Usuarios y roles</div>
+      <nav><a href="index.html">📊 Tablero</a><a href="configuracion.html">⚙️ Config</a><a href="usuarios.html" class="on">👤 Usuarios</a><a href="ventas.html">🛒 Ventas</a></nav>
+    </div>
+    <button id="btn-salir">Salir</button>
+  </header>
+  <main>
+    <div id="no-perm" hidden class="vacio">No tenés permiso para gestionar usuarios.</div>
+    <div id="cont" hidden>
+    <div class="tabs">
+      <button class="tab on" data-t="usuarios" onclick="switchTab('usuarios')">Usuarios</button>
+      <button class="tab" data-t="roles" onclick="switchTab('roles')">Roles y permisos</button>
+    </div>
+
+    <div id="t-usuarios">
+      <div class="card" style="margin-bottom:14px;">
+        <h3 id="u-titulo">Nuevo usuario</h3>
+        <p class="hint muted" style="margin-bottom:10px;">El usuario de login (email + contraseña) se crea en <b>Supabase → Authentication → Add user</b>. Acá le asignás <b>rol</b> y <b>locales</b>, vinculado por el <b>mismo email</b>.</p>
+        <div class="abm-nueva">
+          <div><label>Email</label><input id="u-email" type="email" placeholder="usuario@correo.com"></div>
+          <div><label>Nombre</label><input id="u-nombre" placeholder="Nombre y apellido"></div>
+          <div><label>Rol</label><select id="u-rol"></select></div>
+        </div>
+        <div style="margin-top:10px;"><label class="perm-h" style="margin:0 0 4px;">Locales asignados</label><div class="locs" id="u-locs"></div></div>
+        <div style="margin-top:12px;"><button class="btn" onclick="guardarUsuarioUI()">Guardar usuario</button> <button class="btn-sec" id="u-cancel" hidden onclick="cancelarEdicionU()">Cancelar</button></div>
+      </div>
+      <div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Locales</th><th></th></tr></thead><tbody id="u-tbody"></tbody></table></div></div>
+    </div>
+
+    <div id="t-roles" hidden>
+      <div class="card" style="margin-bottom:14px;">
+        <div class="abm-nueva"><div><label>Nuevo rol</label><input id="r-nom" placeholder="Ej: Repositor"></div><button class="btn" onclick="crearRolUI()">Agregar rol</button></div>
+      </div>
+      <div id="roles-cont"></div>
+    </div>
+    </div>
+  </main>
+</div>
+
+<div class="toast-c" id="toast-c"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="sb-api.js"></script>
+<script src="auth-guard.js"></script>
+<script>
+var sb=window.sbClient;
+var ROLES=[], PERFILES=[], SUCS=[], uEditId=null;
+var CAT_MODULOS=[['tableros','Tableros'],['productos','Productos'],['clientes','Clientes y Listas'],['stock','Stock'],['compras','Compras'],['remitos','Remitos'],['cuentas','Cuentas'],['caja','Caja'],['ventas','Ventas'],['configuracion','Configuración'],['usuarios','Usuarios y roles']];
+var CAT_ACCIONES=[['ventas.descuento','Hacer descuentos'],['ventas.anular','Anular venta'],['ventas.anular_dia_anterior','Anular venta de día anterior'],['productos.editar_precio','Editar precios'],['productos.editar_costo','Editar costos'],['stock.ajustar','Ajustar stock'],['stock.importar','Importar stock'],['cuentas.pago','Registrar pagos de cuenta']];
+function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
+
+document.getElementById('login-form').addEventListener('submit', async function(e){
+  e.preventDefault(); var btn=document.getElementById('li-btn'), err=document.getElementById('li-err'); err.textContent=''; btn.disabled=true; btn.textContent='Entrando…';
+  var r=await sb.auth.signInWithPassword({ email:document.getElementById('li-email').value.trim(), password:document.getElementById('li-pass').value });
+  btn.disabled=false; btn.textContent='Entrar'; if(r.error){ err.textContent='No se pudo entrar: '+r.error.message; return; } iniciar();
+});
+document.getElementById('btn-salir').addEventListener('click', async function(){ await sb.auth.signOut(); location.reload(); });
+(async function(){ var s=await sb.auth.getSession(); if(s.data && s.data.session) iniciar(); })();
+
+async function iniciar(){
+  document.getElementById('login').hidden=true; document.getElementById('app').hidden=false;
+  await window.aplicarPermisos();
+  if(!(window.PERM && window.PERM.puede('usuarios'))){ document.getElementById('no-perm').hidden=false; return; }
+  document.getElementById('cont').hidden=false;
+  var rr=await window.sf('getRoles'); ROLES=(rr.ok?rr.roles:[])||[];
+  var rp=await window.sf('getPerfiles'); PERFILES=(rp.ok?rp.perfiles:[])||[];
+  var rs=await window.sf('getSucursales'); SUCS=(rs.ok?(rs.sucursales||[]).map(function(s){return s.nombre;}):[]);
+  poblarRolSelect(); poblarLocs(); renderUsuarios(); renderRoles();
+}
+function switchTab(name){ document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); }); document.getElementById('t-usuarios').hidden=(name!=='usuarios'); document.getElementById('t-roles').hidden=(name!=='roles'); }
+function poblarRolSelect(){ document.getElementById('u-rol').innerHTML='<option value="">(elegir rol)</option>'+ROLES.map(function(r){return '<option value="'+r.id+'">'+r.nombre+'</option>';}).join(''); }
+function poblarLocs(){ document.getElementById('u-locs').innerHTML=SUCS.map(function(s){return '<label><input type="checkbox" class="u-loc" value="'+String(s).replace(/"/g,'&quot;')+'"> '+s+'</label>';}).join(''); }
+
+// ---- USUARIOS ----
+function renderUsuarios(){
+  document.getElementById('u-tbody').innerHTML=PERFILES.map(function(p){
+    return '<tr><td>'+p.email+'</td><td>'+(p.nombre||'')+'</td><td>'+(p.rol||'<span class="muted">sin rol</span>')+'</td><td>'+((p.locales||[]).join(', ')||'<span class="muted">todos/ninguno</span>')+'</td>'+
+      '<td style="white-space:nowrap;"><button class="mini-btn" onclick="editarUsuario('+p.id+')">Editar</button><button class="x-btn" title="Eliminar" onclick="borrarUsuario('+p.id+')">✕</button></td></tr>';
+  }).join('') || '<tr><td colspan="5" class="muted">Sin usuarios cargados.</td></tr>';
+}
+function editarUsuario(id){
+  var p=PERFILES.find(function(x){return x.id===id;}); if(!p) return; uEditId=id;
+  document.getElementById('u-titulo').textContent='Editar usuario'; document.getElementById('u-cancel').hidden=false;
+  document.getElementById('u-email').value=p.email; document.getElementById('u-nombre').value=p.nombre||''; document.getElementById('u-rol').value=p.rolId||'';
+  document.querySelectorAll('.u-loc').forEach(function(c){ c.checked=(p.locales||[]).indexOf(c.value)>=0; });
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function cancelarEdicionU(){ uEditId=null; document.getElementById('u-titulo').textContent='Nuevo usuario'; document.getElementById('u-cancel').hidden=true; document.getElementById('u-email').value=''; document.getElementById('u-nombre').value=''; document.getElementById('u-rol').value=''; document.querySelectorAll('.u-loc').forEach(function(c){c.checked=false;}); }
+async function guardarUsuarioUI(){
+  var email=document.getElementById('u-email').value.trim(); if(!email){ toast('Poné el email','error'); return; }
+  var locales=[]; document.querySelectorAll('.u-loc:checked').forEach(function(c){ locales.push(c.value); });
+  var r=await window.sp('guardarPerfil',{ id:uEditId, email:email, nombre:document.getElementById('u-nombre').value.trim(), rolId:(document.getElementById('u-rol').value||null), locales:locales });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Usuario guardado'); cancelarEdicionU();
+  var rp=await window.sf('getPerfiles'); PERFILES=(rp.ok?rp.perfiles:[])||[]; renderUsuarios();
+}
+async function borrarUsuario(id){ if(!confirm('¿Eliminar este usuario?')) return; var r=await window.sp('eliminarPerfil',{id:id}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } toast('Usuario eliminado'); var rp=await window.sf('getPerfiles'); PERFILES=(rp.ok?rp.perfiles:[])||[]; renderUsuarios(); }
+
+// ---- ROLES ----
+function renderRoles(){
+  document.getElementById('roles-cont').innerHTML=ROLES.map(function(r){
+    var esAdmin=(r.permisos||[]).indexOf('*')>=0;
+    if(esAdmin){ return '<div class="rol-card"><h3>'+r.nombre+' <span class="pill p">acceso total</span></h3><p class="muted" style="font-size:.85rem;">Este rol puede todo y no se edita.</p></div>'; }
+    var body='<div class="perm-grid"><div class="perm-h">Módulos (qué ve en el menú)</div>'+
+      CAT_MODULOS.map(function(m){ return '<label><input type="checkbox" class="rp-'+r.id+'" value="'+m[0]+'" '+((r.permisos||[]).indexOf(m[0])>=0?'checked':'')+'> '+m[1]+'</label>'; }).join('')+
+      '<div class="perm-h">Acciones puntuales</div>'+
+      CAT_ACCIONES.map(function(a){ return '<label><input type="checkbox" class="rp-'+r.id+'" value="'+a[0]+'" '+((r.permisos||[]).indexOf(a[0])>=0?'checked':'')+'> '+a[1]+'</label>'; }).join('')+'</div>';
+    return '<div class="rol-card"><div style="display:flex;justify-content:space-between;align-items:center;"><h3>'+r.nombre+'</h3><button class="x-btn" title="Eliminar rol" onclick="borrarRol('+r.id+',\''+String(r.nombre).replace(/'/g,"\\'")+'\')">✕</button></div>'+body+
+      '<button class="btn" onclick="guardarPermisos('+r.id+')">Guardar permisos</button></div>';
+  }).join('');
+}
+async function guardarPermisos(rolId){
+  var permisos=[]; document.querySelectorAll('.rp-'+rolId+':checked').forEach(function(c){ permisos.push(c.value); });
+  var r=await window.sp('setRolPermisos',{rolId:rolId, permisos:permisos}); if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  var rr=await window.sf('getRoles'); ROLES=(rr.ok?rr.roles:[])||[]; toast('Permisos guardados'); renderRoles();
+}
+async function crearRolUI(){
+  var nom=document.getElementById('r-nom').value.trim(); if(!nom){ toast('Poné el nombre','error'); return; }
+  var r=await window.sp('guardarRol',{nombre:nom}); if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  document.getElementById('r-nom').value=''; var rr=await window.sf('getRoles'); ROLES=(rr.ok?rr.roles:[])||[]; poblarRolSelect(); renderRoles(); toast('Rol agregado');
+}
+async function borrarRol(id,nom){ if(!confirm('¿Eliminar el rol "'+nom+'"?')) return; var r=await window.sp('eliminarRol',{id:id}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } var rr=await window.sf('getRoles'); ROLES=(rr.ok?rr.roles:[])||[]; poblarRolSelect(); renderRoles(); toast('Rol eliminado'); }
+</script>
+</body>
+</html>

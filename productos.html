@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Productos — Carnicería</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css">
+<style>
+  /* Propios de Productos (usan los tokens de estilos.css) */
+  header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  header .ttl{font-size:var(--fs-xl);font-weight:700;}
+  header nav a{color:#dbe8ff;text-decoration:none;font-size:var(--fs-sm);font-weight:600;margin-right:14px;}
+  header nav a.on,header nav a:hover{color:#fff;}
+  header button{background:#fff;color:var(--brand);border:none;padding:7px 13px;border-radius:var(--radius-sm);font-weight:600;cursor:pointer;font-size:var(--fs-sm);}
+  .barra{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+  .barra > input{flex:1;min-width:200px;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;}
+  .barra label{font-size:var(--fs-sm);color:var(--ink-soft);display:flex;align-items:center;gap:5px;}
+  .resumen{margin-bottom:8px;}
+  .card2{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);}
+  .card2 h3{font-size:var(--fs-lg);margin-bottom:4px;}
+  table{width:100%;border-collapse:collapse;font-size:var(--fs-sm);}
+  th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line-2);white-space:nowrap;}
+  th{background:var(--surface-2);color:#6b7688;font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.04em;}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
+  tr.inactivo td{color:#aeb4c0;font-style:italic;}
+  details.alta{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:8px 16px;margin-bottom:14px;box-shadow:var(--shadow);}
+  details.alta summary{cursor:pointer;font-weight:700;color:var(--brand);padding:6px 0;}
+  /* Formularios: MISMO estilo (grid) para alta, categorías/listas y promos */
+  .alta-grid,.abm-nueva{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end;margin:10px 0;}
+  .abm-nueva{margin-top:14px;padding-top:14px;border-top:1px solid var(--line-2);}
+  .alta-grid label,.abm-nueva label{display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;text-transform:uppercase;letter-spacing:.03em;}
+  .alta-grid input,.alta-grid select,.abm-nueva input,.abm-nueva select{width:100%;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;background:#fff;}
+  .btn-alta{background:var(--brand);color:#fff;border:none;padding:9px 16px;border-radius:var(--radius-sm);font-weight:700;cursor:pointer;font-size:var(--fs-sm);font-family:inherit;align-self:end;}
+  /* autocompletar de productos (misma lógica que Ventas) */
+  .ac-pop{position:absolute;background:#fff;border:1px solid var(--border-inp);border-radius:var(--radius-sm);max-height:280px;overflow:auto;z-index:200;box-shadow:var(--shadow-pop);}
+  .ac-pop div{padding:8px 12px;cursor:pointer;font-size:var(--fs-sm);border-bottom:1px solid var(--line-2);}
+  .ac-pop div:hover,.ac-pop div.sel{background:var(--brand-soft);}
+  /* modal */
+  .ov{position:fixed;inset:0;background:rgba(15,25,45,.45);display:flex;align-items:center;justify-content:center;z-index:250;padding:16px;}
+  .ov .box{background:#fff;border-radius:14px;padding:22px;max-width:460px;width:100%;box-shadow:var(--shadow-pop);}
+  .ov h3{font-size:var(--fs-xl);margin-bottom:10px;}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>🥩 Carnicería</h1>
+    <p>Ingresá con tu usuario.</p>
+    <form id="login-form">
+      <label>Email</label><input type="email" id="li-email" autocomplete="username" required>
+      <label>Contraseña</label><input type="password" id="li-pass" autocomplete="current-password" required>
+      <button type="submit" id="li-btn">Entrar</button>
+      <div class="err" id="li-err"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div class="ttl">🏷️ Productos</div>
+      <nav><a href="index.html">📊 Tablero</a><a href="productos.html" class="on">🏷️ Productos</a><a href="clientes.html">👥 Clientes y Listas</a><a href="stock.html">📦 Stock</a><a href="compras.html">🧾 Compras</a><a href="remitos.html">🔄 Remitos</a><a href="cuentas.html">📒 Cuentas</a><a href="caja.html">💵 Caja</a><a href="ventas.html">🛒 Ventas</a><a href="configuracion.html">⚙️ Config</a></nav>
+    </div>
+    <button id="btn-salir">Salir</button>
+  </header>
+  <main>
+    <div class="tabs">
+      <button class="tab on" data-t="catalogo" onclick="switchTab('catalogo')">Catálogo</button>
+      <button class="tab" data-t="categorias" onclick="switchTab('categorias')">Categorías</button>
+      <button class="tab" data-t="promos" onclick="switchTab('promos')">Promos / Ofertas</button>
+    </div>
+    <div id="t-catalogo">
+    <details class="alta">
+      <summary>➕ Nuevo producto</summary>
+      <div class="alta-grid">
+        <div><label>Categoría</label><input id="a-cat" list="cats-list" placeholder="Ej: Cortes Vaca"><datalist id="cats-list"></datalist></div>
+        <div><label>Código interno</label><input id="a-cod" placeholder="Ej: 00042"></div>
+        <div><label>Nombre</label><input id="a-nom" placeholder="Ej: Bife angosto"></div>
+        <div><label>Tipo</label><select id="a-tipo"><option value="pesable">Pesable (kg)</option><option value="unidad">Por unidad</option></select></div>
+        <div><label>Costo</label><input id="a-costo" type="number" step="0.01" placeholder="0" oninput="sugerirAlta()"></div>
+        <div><label>Margen % (opc)</label><input id="a-margen" type="number" step="0.1" placeholder="usa el de la categoría" oninput="sugerirAlta()"></div>
+      </div>
+      <div style="margin:2px 0 4px;"><button class="mini-btn" type="button" onclick="sugerirAlta(true)">💡 Estimar Minorista (costo × margen)</button> <span class="muted" id="alta-sugerido"></span></div>
+      <div class="alta-grid" id="alta-precios"></div>
+      <button class="btn-alta" onclick="crearProductoUI()">Crear producto</button>
+    </details>
+    <details class="alta">
+      <summary>📥 Importar productos (masivo)</summary>
+      <p class="resumen">Pegá desde Excel/Sheets <b>con la fila de encabezados</b>. Columnas reconocidas: <code>codigo, nombre, marca, categoria, tipo, costo, margen</code> y una columna por cada <b>lista de precio</b> (ej. <code>Minorista</code>, <code>Mayorista</code>…). Crea los que no existen y actualiza los que sí (por código).</p>
+      <textarea id="imp-txt" style="width:100%;height:130px;font-family:monospace;font-size:.8rem;padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);" placeholder="codigo	nombre	categoria	tipo	costo	Minorista	Mayorista&#10;00042	Bife angosto	Cortes Vaca	pesable	5000	9000	8000"></textarea>
+      <div style="margin-top:8px;"><button class="btn-alta" type="button" onclick="importarUI()">Importar</button> <span class="muted" id="imp-res"></span></div>
+    </details>
+    <div class="barra">
+      <input id="q" placeholder="Buscar por código o nombre..." oninput="render()">
+      <label><input type="checkbox" id="soloAct" onchange="render()"> Solo activos</label>
+      <label title="Permite editar a mano las listas derivadas (Mayorista/Colaborador). Normalmente se calculan solas desde Minorista."><input type="checkbox" id="unlockDeriv" onchange="render()"> <span id="lockIco">🔒</span> Editar derivadas (admin)</label>
+    </div>
+    <div class="resumen" id="resumen"></div>
+    <div class="card p0"><div class="tblwrap"><table id="tabla"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div></div>
+    <div class="vacio" id="vacio" hidden>Sin productos.</div>
+    </div><!-- /t-catalogo -->
+
+    <div id="t-categorias" hidden>
+      <div class="card2 abm">
+        <h3>Categorías y márgenes</h3>
+        <p class="resumen" style="margin-bottom:14px;">El <b>margen</b> sugiere el precio de venta (costo + margen). El <b>plus de remito</b> es lo que gana el que elabora al remitir a otro local. Se guardan al salir del campo.</p>
+        <div class="tblwrap"><table><thead><tr><th>Categoría</th><th>Margen %</th><th>Plus remito %</th></tr></thead><tbody id="cat-tbody"></tbody></table></div>
+        <div class="abm-nueva">
+          <div><label>Nueva categoría</label><input id="nc-nom" placeholder="Ej: Cortes Cerdo"></div>
+          <div><label>Margen %</label><input id="nc-margen" type="number" step="0.1"></div>
+          <div><label>Plus remito %</label><input id="nc-plus" type="number" step="0.1"></div>
+          <button class="btn-alta" onclick="crearCategoriaUI()">Agregar</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="t-promos" hidden>
+      <div class="card2 abm" style="margin-bottom:16px;">
+        <h3>Ofertas <button class="mini-btn" type="button" onclick="ayuda('oferta')" title="Cómo cargar una oferta">?</button></h3>
+        <p class="resumen" style="margin-bottom:14px;">Precio especial para consumidor final. <b>Precio por kg/unidad</b> = promo, gana el menor. <b>Precio fijo por paquete</b> = pesable vendido a precio cerrado (descuenta el peso real).</p>
+        <div class="abm-nueva" style="border-top:none;padding-top:0;">
+          <div><label>Producto</label><input id="of-cod" class="prod-ac" autocomplete="off" placeholder="código o nombre"></div>
+          <div><label>Tipo</label><select id="of-tipo"><option value="kg">Precio por kg/unidad</option><option value="fija">Precio fijo por paquete</option></select></div>
+          <div><label>Precio</label><input id="of-precio" type="number" step="0.01"></div>
+          <div><label>Kilaje mín (opc)</label><input id="of-kil" type="number" step="0.001"></div>
+          <div><label>Kilaje máx (opc)</label><input id="of-kilmax" type="number" step="0.001"></div>
+          <div><label>Desde</label><input id="of-desde" type="date"></div>
+          <div><label>Hasta</label><input id="of-hasta" type="date"></div>
+          <div><label>Locales</label><select id="of-loc"></select></div>
+          <div><label>Forma de pago</label><select id="of-forma"></select></div>
+          <button class="btn-alta" onclick="crearOfertaUI()">Guardar oferta</button>
+        </div>
+        <div class="tblwrap" style="margin-top:14px;"><table><thead><tr><th>Producto</th><th>Tipo</th><th>Precio</th><th>Mín</th><th>Vigencia</th><th>Locales</th><th></th></tr></thead><tbody id="of-tbody"></tbody></table></div>
+      </div>
+      <div class="card2 abm">
+        <h3>Combos multi-producto <button class="mini-btn" type="button" onclick="ayuda('combo')" title="Cómo cargar un combo">?</button></h3>
+        <p class="resumen" style="margin-bottom:14px;">Se activa cuando la venta tiene <b>todos</b> los productos del combo y cada uno llega a su <b>mínimo</b>; cobra el precio promo. Peso por unidad: para pesables contados por unidad (ej. hamburguesas).</p>
+        <div class="abm-nueva" style="border-top:none;padding-top:0;">
+          <div><label>Nombre del combo</label><input id="cb-nom" placeholder="Ej: Promo asado"></div>
+          <div><label>Locales</label><select id="cb-loc"></select></div>
+        </div>
+        <div id="cb-comps" style="margin-top:12px;"></div>
+        <button class="mini-btn" onclick="addCompRow()" style="margin-top:8px;">+ Agregar producto al combo</button>
+        <div style="margin-top:10px;"><button class="btn-alta" onclick="crearComboUI()">Guardar combo</button></div>
+        <div class="tblwrap" style="margin-top:16px;"><table><thead><tr><th>Combo</th><th>Productos</th><th>Locales</th><th></th></tr></thead><tbody id="cb-tbody"></tbody></table></div>
+      </div>
+    </div>
+    <datalist id="prods-list"></datalist>
+  </main>
+</div>
+
+<div id="ac-pop" class="ac-pop" hidden></div>
+
+<div class="ov" id="ov-ayuda" hidden><div class="box">
+  <h3 id="ayuda-tit">Ayuda</h3>
+  <div id="ayuda-cuerpo" style="font-size:.9rem;line-height:1.5;"></div>
+  <div class="acts" style="margin-top:14px;text-align:right;"><button class="btn" onclick="document.getElementById('ov-ayuda').hidden=true">Entendido</button></div>
+</div></div>
+
+<div class="toast-c" id="toast-c"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="sb-api.js"></script>
+<script src="auth-guard.js"></script>
+<script>
+var sb = window.sbClient;
+var PRODS = {};   // codigo -> {..., precio:{lista:val}}
+var LISTAS = [];  // nombres de listas
+var LDEF = {};    // nombre -> {tipo, relacion}
+var baseName = 'Minorista';
+var CATS = [], LISTAS_FULL = [], MARG = {}, SUCSNOM = [], FORMASPAGO = [];
+function unlockDeriv(){ var e=document.getElementById('unlockDeriv'); return e && e.checked; }
+function derivar(min, rel){ return Math.ceil((Number(min)*Number(rel)/100)/10)*10; }
+
+function fmt$(n){ return (n==null||n==='')?'':'$'+Math.round(Number(n)).toLocaleString('es-AR'); }
+
+// LOGIN
+document.getElementById('login-form').addEventListener('submit', async function(e){
+  e.preventDefault();
+  var btn=document.getElementById('li-btn'), err=document.getElementById('li-err');
+  err.textContent=''; btn.disabled=true; btn.textContent='Entrando…';
+  var r = await sb.auth.signInWithPassword({ email:document.getElementById('li-email').value.trim(), password:document.getElementById('li-pass').value });
+  btn.disabled=false; btn.textContent='Entrar';
+  if(r.error){ err.textContent='No se pudo entrar: '+r.error.message; return; }
+  iniciar();
+});
+document.getElementById('btn-salir').addEventListener('click', async function(){ await sb.auth.signOut(); location.reload(); });
+(async function(){ var s=await sb.auth.getSession(); if(s.data && s.data.session) iniciar(); })();
+
+async function iniciar(){
+  document.getElementById('login').hidden=true;
+  document.getElementById('app').hidden=false;
+  document.getElementById('resumen').textContent='Cargando…';
+  // Definiciones de listas (tipo/relacion) para saber cuáles son derivadas
+  var dl = await window.sf('getListas');
+  LDEF={};
+  if(dl.ok && dl.listas && dl.listas.length){
+    dl.listas.forEach(function(l){ LDEF[l.nombre]={tipo:l.tipo, relacion:l.relacion}; if(l.tipo==='base') baseName=l.nombre; });
+    LISTAS = dl.listas.map(function(l){ return l.nombre; });
+  }
+  var dm = await window.sf('getMargenesCategorias'); MARG = (dm.ok?dm.margenes:{})||{};
+  var dsuc = await window.sf('getSucursales'); SUCSNOM = (dsuc.ok?(dsuc.sucursales||[]).map(function(s){return s.nombre;}):[]);
+  FORMASPAGO=['Efectivo','Tarjeta','Virtual','Cuenta Corriente'];
+  var dcfg = await window.sf('getConfigGeneral'); if(dcfg.ok && dcfg.config && dcfg.config.formas_pago){ try{ var af=JSON.parse(dcfg.config.formas_pago); if(af.length) FORMASPAGO=af.map(function(f){return f.nombre||f;}); }catch(e){} }
+  var res = await window.sf('getProductos&admin=1');
+  if(!res.ok){ document.getElementById('resumen').textContent='Error: '+res.error; return; }
+  PRODS = res.productos||{};
+  if(!LISTAS.length){ var setL={}; Object.keys(PRODS).forEach(function(cod){ Object.keys(PRODS[cod].precio||{}).forEach(function(l){ setL[l]=true; }); }); LISTAS=Object.keys(setL).sort(); }
+  poblarAlta();
+  render();
+}
+function toast(msg,tipo){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(tipo?' '+tipo:''); e.textContent=msg; c.appendChild(e); setTimeout(function(){ e.remove(); },2600); }
+function poblarAlta(){
+  var cats=Object.keys(PRODS).map(function(c){return PRODS[c].categoria;}).filter(Boolean);
+  cats=[...new Set(cats)].sort();
+  document.getElementById('cats-list').innerHTML=cats.map(function(c){ return '<option value="'+c+'">'; }).join('');
+  document.getElementById('alta-precios').innerHTML=LISTAS.map(function(l){
+    var d=LDEF[l]||{tipo:'especial'}; var esBase=(d.tipo==='base'), esDeriv=(d.tipo==='derivada');
+    var attr = esBase ? ' oninput="recalcAlta()"' : (esDeriv ? ' readonly' : '');
+    return '<div><label>Precio '+l+(esDeriv?' (auto)':'')+'</label><input id="a-precio-'+l+'" type="number" step="0.01" placeholder="0"'+attr+'></div>';
+  }).join('');
+}
+function sinPermiso(k,msg){ if(window.PERM && window.PERM.cargado && !window.PERM.puede(k)){ toast(msg||'No tenés permiso para esta acción','error'); render(); return true; } return false; }
+async function editarCosto(cod,val){
+  if(sinPermiso('productos.editar_costo','No tenés permiso para editar costos')) return;
+  var r=await window.sp('setCostoProducto',{codigo:cod,costo:val});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  if(PRODS[cod]) PRODS[cod].costo=(val===''?null:Number(val));
+  toast('Costo actualizado');
+}
+async function editarMargen(cod,val){
+  if(sinPermiso('productos.editar_precio','No tenés permiso para editar precios')) return;
+  var r=await window.sp('setMargenProducto',{codigo:cod,margen:val});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  if(PRODS[cod]) PRODS[cod].margenOverride=(val===''?null:Number(val));
+  toast('Margen actualizado');
+}
+// Estima el precio Minorista desde costo × margen (margen del producto o de la categoría).
+function sugerirAlta(force){
+  var costo=Number(document.getElementById('a-costo').value)||0;
+  var cat=(document.getElementById('a-cat').value||'').trim();
+  var mOv=document.getElementById('a-margen').value;
+  var margen=(mOv!==''&&mOv!=null)?Number(mOv):(MARG[cat]!=null?Number(MARG[cat]):null);
+  var hint=document.getElementById('alta-sugerido');
+  if(costo<=0 || margen==null){ if(hint) hint.textContent = force?'Poné costo y un margen (o categoría con margen)':''; return; }
+  var estimado=Math.ceil((costo*(1+margen/100))/10)*10;
+  var el=document.getElementById('a-precio-'+baseName);
+  if(el){ el.value=estimado; recalcAlta(); }
+  if(hint) hint.textContent='≈ '+fmt$(estimado)+' (margen '+margen+'%)';
+}
+async function importarUI(){
+  var filas=parseImport(document.getElementById('imp-txt').value);
+  if(!filas.length){ toast('No se detectaron filas (¿pusiste encabezados?)','error'); return; }
+  if(!confirm('¿Importar '+filas.length+' producto(s)?')) return;
+  document.getElementById('imp-res').textContent='Importando…';
+  var r=await window.sp('importProductos',{filas:filas});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  document.getElementById('imp-res').textContent='✓ '+r.creados+' creados, '+r.actualizados+' actualizados'+(r.errores&&r.errores.length?(', '+r.errores.length+' con error'):'');
+  if(r.errores&&r.errores.length) console.warn('Errores import:',r.errores);
+  toast('Import: '+r.creados+' creados, '+r.actualizados+' actualizados');
+  iniciar();
+}
+function parseImport(text){
+  var lines=String(text||'').trim().split(/\r?\n/).filter(function(l){return l.trim();});
+  if(lines.length<2) return [];
+  var delim = lines[0].indexOf('\t')>=0?'\t':(lines[0].indexOf(';')>=0?';':',');
+  var head=lines[0].split(delim).map(function(h){return h.trim().toLowerCase();});
+  function idx(names){ for(var i=0;i<head.length;i++){ if(names.indexOf(head[i])>=0) return i; } return -1; }
+  var iCod=idx(['codigo','codigo_interno','código','cod']), iNom=idx(['nombre']), iMar=idx(['marca']), iCat=idx(['categoria','categoría']), iTipo=idx(['tipo']), iCosto=idx(['costo']), iMargen=idx(['margen','margen_override']);
+  var listaCols={}; head.forEach(function(h,i){ LISTAS.forEach(function(l){ if(h===l.toLowerCase()) listaCols[l]=i; }); });
+  var num=function(v){ return String(v==null?'':v).replace(/[^\d.,-]/g,'').replace(',','.'); };
+  var filas=[];
+  for(var r=1;r<lines.length;r++){ var c=lines[r].split(delim); if(iCod<0||!c[iCod]||!String(c[iCod]).trim()) continue;
+    var precios={}; Object.keys(listaCols).forEach(function(l){ var v=c[listaCols[l]]; if(v!=null && String(v).trim()!=='') precios[l]=Number(num(v)); });
+    filas.push({ codigo:String(c[iCod]).trim(), nombre:iNom>=0?String(c[iNom]||'').trim():'', marca:iMar>=0?String(c[iMar]||'').trim():'', categoria:iCat>=0?String(c[iCat]||'').trim():'', tipo:(iTipo>=0?String(c[iTipo]||'').trim().toLowerCase():''), costo:iCosto>=0?num(c[iCosto]):'', margen:iMargen>=0?num(c[iMargen]):'', precios:precios });
+  }
+  return filas;
+}
+async function editarPrecio(cod,lista,val){
+  if(sinPermiso('productos.editar_precio','No tenés permiso para editar precios')) return;
+  if(val===''){ toast('Poné un precio (0 no borra)','error'); return; }
+  var r=await window.sp('setPrecioProducto',{codigo:cod,lista:lista,precio:val});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  if(PRODS[cod]){ PRODS[cod].precio=PRODS[cod].precio||{}; PRODS[cod].precio[lista]=Number(val); }
+  toast('Precio '+lista+' actualizado');
+}
+// Editar Minorista (base): guarda y RECALCULA todas las derivadas.
+async function editarMinorista(cod,val){
+  if(sinPermiso('productos.editar_precio','No tenés permiso para editar precios')) return;
+  if(val===''){ toast('Poné el precio Minorista','error'); return; }
+  var min=Number(val);
+  var r=await window.sp('setPrecioProducto',{codigo:cod,lista:baseName,precio:min});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  PRODS[cod]=PRODS[cod]||{}; PRODS[cod].precio=PRODS[cod].precio||{}; PRODS[cod].precio[baseName]=min;
+  for(var k=0;k<LISTAS.length;k++){
+    var l=LISTAS[k], d=LDEF[l];
+    if(d && d.tipo==='derivada' && d.relacion>0){
+      var pv=derivar(min,d.relacion);
+      var rr=await window.sp('setPrecioProducto',{codigo:cod,lista:l,precio:pv});
+      if(rr.ok) PRODS[cod].precio[l]=pv;
+    }
+  }
+  toast('Minorista y derivadas actualizadas'); render();
+}
+function recalcAlta(){
+  var minEl=document.getElementById('a-precio-'+baseName); if(!minEl) return;
+  var min=Number(minEl.value)||0;
+  LISTAS.forEach(function(l){ var d=LDEF[l]; if(d && d.tipo==='derivada'){ var el=document.getElementById('a-precio-'+l); if(el) el.value = (min>0 && d.relacion>0) ? derivar(min,d.relacion) : ''; } });
+}
+
+// ---- Tabs ----
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(function(b){ if(b.getAttribute('data-t')) b.classList.toggle('on', b.getAttribute('data-t')===name); });
+  ['catalogo','categorias','promos'].forEach(function(t){ var el=document.getElementById('t-'+t); if(el) el.hidden=(t!==name); });
+  if(name==='catalogo') render();
+  if(name==='categorias') renderCategorias();
+  if(name==='promos') renderPromos();
+}
+function resolverCod(v){ v=String(v||'').trim(); if(PRODS[v]) return v; var lc=v.toLowerCase(); var f=Object.keys(PRODS).find(function(c){ return (PRODS[c].nombre||'').toLowerCase()===lc; }); return f||v; }
+
+// ---- Promos ----
+function poblarProdsList(){
+  var dl=document.getElementById('prods-list'); if(!dl) return;
+  dl.innerHTML=Object.keys(PRODS).map(function(cod){ return '<option value="'+cod+'">'+(PRODS[cod].nombre||'').replace(/"/g,'&quot;')+'</option>'; }).join('');
+}
+async function renderPromos(){
+  poblarProdsList(); poblarLocalesSelects();
+  if(!document.getElementById('cb-comps').children.length){ addCompRow(); addCompRow(); }
+  renderOfertasList(); renderCombosList();
+}
+function poblarLocalesSelects(){
+  var opts='<option value="todos">Todos los locales</option>'+SUCSNOM.map(function(s){ return '<option value="'+String(s).replace(/"/g,'&quot;')+'">'+s+'</option>'; }).join('');
+  var of=document.getElementById('of-loc'); if(of) of.innerHTML=opts;
+  var cb=document.getElementById('cb-loc'); if(cb) cb.innerHTML=opts;
+  var ofF=document.getElementById('of-forma'); if(ofF) ofF.innerHTML='<option value="">Todas las formas</option>'+FORMASPAGO.map(function(f){ return '<option value="'+String(f).replace(/"/g,'&quot;')+'">'+f+'</option>'; }).join('');
+}
+// ---- Autocomplete de productos (misma lógica que Ventas), reutilizable ----
+var acInput=null, acMatches=[];
+function acFilter(v){ v=String(v||'').trim().toLowerCase(); if(!v) return []; return Object.keys(PRODS).filter(function(c){ return (c+' '+(PRODS[c].nombre||'')).toLowerCase().indexOf(v)>=0; }).slice(0,30); }
+function acShow(input){
+  acInput=input; acMatches=acFilter(input.value); var pop=document.getElementById('ac-pop');
+  if(!acMatches.length){ pop.hidden=true; return; }
+  pop.innerHTML=acMatches.map(function(c,i){ var p=PRODS[c]; return '<div data-i="'+i+'" onmousedown="acPick(event,'+i+')">'+(p.nombre||c)+' <span style="color:#8891a3">('+c+' · '+(p.tipo==='unidad'?'u':'kg')+')</span></div>'; }).join('');
+  var r=input.getBoundingClientRect();
+  pop.style.left=(r.left+window.scrollX)+'px'; pop.style.top=(r.bottom+window.scrollY)+'px'; pop.style.width=Math.max(r.width,240)+'px'; pop.hidden=false;
+}
+function acPick(ev,i){ if(ev) ev.preventDefault(); var c=acMatches[i]; if(acInput && c) acInput.value=c; document.getElementById('ac-pop').hidden=true; }
+document.addEventListener('input', function(e){ if(e.target.classList && e.target.classList.contains('prod-ac')) acShow(e.target); });
+document.addEventListener('click', function(e){ var pop=document.getElementById('ac-pop'); if(pop && !pop.hidden && e.target!==acInput && !pop.contains(e.target) && !(e.target.classList&&e.target.classList.contains('prod-ac'))) pop.hidden=true; });
+// ---- Ayuda (cómo cargar oferta / combo) ----
+function ayuda(tipo){
+  var t=document.getElementById('ayuda-tit'), c=document.getElementById('ayuda-cuerpo');
+  if(tipo==='oferta'){
+    t.textContent='Cómo cargar una Oferta';
+    c.innerHTML='<p><b>Producto:</b> escribí código o nombre y elegilo de la lista.</p>'+
+      '<p><b>Tipo:</b><br>• <b>Precio por kg/unidad</b> — precio promocional; en la venta <b>gana el más barato</b> entre la promo y el precio de lista del cliente.<br>• <b>Precio fijo por paquete</b> — el pesable se cobra a un <b>precio cerrado</b> (ej. paquete). Se descuenta del stock el <b>peso real</b>.</p>'+
+      '<p><b>Precio:</b> el $/kg (o $/unidad) para la promo; o el $ total del paquete si es fija.</p>'+
+      '<p><b>Kilaje mín / máx (opcional):</b> ventana de peso. Solo para la <b>fija</b>: aplica el precio cerrado únicamente si el peso cae entre el mín y el máx; fuera de ese rango se cobra por kg. Dejalos vacíos para que aplique a cualquier peso.</p>'+
+      '<p><b>Vigencia (desde/hasta):</b> opcional; vacío = sin límite.</p>'+
+      '<p><b>Locales:</b> Todos, o un local puntual.</p>';
+  } else {
+    t.textContent='Cómo cargar un Combo';
+    c.innerHTML='<p>Un combo son <b>2 o más productos</b> que, al estar todos en la venta y llegar cada uno a su mínimo, se cobran al <b>precio promo</b>.</p>'+
+      '<p><b>Nombre:</b> identificatorio (ej. "Promo asado").</p>'+
+      '<p><b>Locales:</b> Todos o uno puntual.</p>'+
+      '<p>Por cada producto (mínimo 2):<br>• <b>Producto:</b> código o nombre.<br>• <b>Mínimo:</b> kg (si es pesable) o unidades a partir de las cuales aplica.<br>• <b>Precio promo:</b> $/kg o $/unidad promocional.<br>• <b>Peso x unidad (opc):</b> para pesables que se cuentan por unidad (ej. hamburguesas).</p>'+
+      '<p>En la venta <b>gana el precio más bajo</b> para el cliente.</p>';
+  }
+  document.getElementById('ov-ayuda').hidden=false;
+}
+async function renderOfertasList(){
+  var r=await window.sf('getOfertas'); var tb=document.getElementById('of-tbody'); var ofs=(r.ok?r.ofertas:[])||[];
+  tb.innerHTML = ofs.length ? ofs.map(function(o){
+    var nom=(PRODS[o.cod]&&PRODS[o.cod].nombre)||o.nombre||o.cod;
+    var vig=(o.desde||o.hasta)?((o.desde||'…')+' a '+(o.hasta||'…')):'sin límite';
+    return '<tr><td>'+nom+' <span style="color:#8891a3">('+o.cod+')</span></td><td>'+(o.tipo==='fija'?'📦 Fija':'x kg/u')+'</td><td>$'+Math.round(o.precioOferta).toLocaleString('es-AR')+'</td><td>'+(o.tipo==='fija'&&(o.kilajeMinimo>0||o.kilajeMaximo>0)?((o.kilajeMinimo>0?o.kilajeMinimo:'0')+'–'+(o.kilajeMaximo>0?o.kilajeMaximo:'∞')):(o.kilajeMinimo>0?o.kilajeMinimo:'-'))+'</td><td>'+vig+'</td><td>'+(o.locales||'todos')+(o.formaPago?(' · <b>'+o.formaPago+'</b>'):'')+'</td><td><button class="x-btn" title="Eliminar oferta" onclick="eliminarOfertaUI(\''+o.cod+'\')">✕</button></td></tr>';
+  }).join('') : '<tr><td colspan="7" style="color:#8891a3">Sin ofertas.</td></tr>';
+}
+async function crearOfertaUI(){
+  var cod=resolverCod(document.getElementById('of-cod').value); var precio=document.getElementById('of-precio').value;
+  if(!cod||!PRODS[cod]){ toast('Elegí un producto válido','error'); return; }
+  if(precio===''||Number(precio)<=0){ toast('Precio inválido','error'); return; }
+  var r=await window.sp('crearOferta',{ codigo:cod, precio:precio, tipo:document.getElementById('of-tipo').value, kilaje:document.getElementById('of-kil').value, kilajeMax:document.getElementById('of-kilmax').value, desde:document.getElementById('of-desde').value, hasta:document.getElementById('of-hasta').value, locales:(document.getElementById('of-loc').value||'todos').trim(), formaPago:document.getElementById('of-forma').value });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Oferta guardada'); ['of-cod','of-precio','of-kil','of-kilmax','of-desde','of-hasta'].forEach(function(id){document.getElementById(id).value='';});
+  renderOfertasList();
+}
+async function eliminarOfertaUI(cod){ if(!confirm('¿Eliminar la oferta de '+cod+'?')) return; var r=await window.sp('eliminarOferta',{codigo:cod}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } toast('Oferta eliminada'); renderOfertasList(); }
+function addCompRow(){
+  var div=document.createElement('div'); div.className='abm-nueva'; div.style.borderTop='none'; div.style.paddingTop='0'; div.style.marginTop='6px';
+  div.innerHTML='<div><label>Producto</label><input class="cb-cod prod-ac" autocomplete="off" placeholder="código o nombre"></div>'+
+    '<div><label>Mínimo</label><input class="cb-min" type="number" step="0.001"></div>'+
+    '<div><label>Precio promo</label><input class="cb-pp" type="number" step="0.01"></div>'+
+    '<div><label>Peso x unidad (opc)</label><input class="cb-pu" type="number" step="0.001"></div>'+
+    '<button class="x-btn" title="Quitar" onclick="this.parentNode.remove()">✕</button>';
+  document.getElementById('cb-comps').appendChild(div);
+}
+async function crearComboUI(){
+  var nom=(document.getElementById('cb-nom').value||'').trim(); if(!nom){ toast('Poné el nombre del combo','error'); return; }
+  var comps=[];
+  document.querySelectorAll('#cb-comps .abm-nueva').forEach(function(row){
+    var cod=resolverCod(row.querySelector('.cb-cod').value); if(!cod||!PRODS[cod]) return;
+    comps.push({ codigo:cod, minimo:row.querySelector('.cb-min').value, precioPromo:row.querySelector('.cb-pp').value, pesoUnitario:row.querySelector('.cb-pu').value });
+  });
+  if(comps.length<2){ toast('El combo necesita al menos 2 productos válidos','error'); return; }
+  var r=await window.sp('crearCombo',{ nombre:nom, locales:(document.getElementById('cb-loc').value||'todos').trim(), componentes:comps });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Combo guardado'); document.getElementById('cb-nom').value=''; document.getElementById('cb-comps').innerHTML=''; addCompRow(); addCompRow();
+  renderCombosList();
+}
+async function renderCombosList(){
+  var r=await window.sf('getCombos'); var tb=document.getElementById('cb-tbody'); var cbs=(r.ok?r.combos:[])||[];
+  tb.innerHTML = cbs.length ? cbs.map(function(c){
+    var prods=(c.componentes||[]).map(function(k){ var nm=(PRODS[k.codigo]&&PRODS[k.codigo].nombre)||k.codigo; return nm+' (mín '+k.minimo+', $'+k.precioPromo+')'; }).join(', ');
+    return '<tr><td>'+c.nombre+'</td><td>'+prods+'</td><td>'+(c.locales||'todos')+'</td><td><button class="x-btn" title="Eliminar combo" onclick="eliminarComboUI('+c.id+')">✕</button></td></tr>';
+  }).join('') : '<tr><td colspan="4" style="color:#8891a3">Sin combos.</td></tr>';
+}
+async function eliminarComboUI(id){ if(!confirm('¿Eliminar este combo?')) return; var r=await window.sp('eliminarCombo',{id:id}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } toast('Combo eliminado'); renderCombosList(); }
+
+// ---- Categorías ----
+async function renderCategorias(){
+  var r=await window.sf('getCategoriasFull'); CATS=(r.ok?r.categorias:[])||[];
+  var tb=document.getElementById('cat-tbody');
+  if(!r.ok){ tb.innerHTML='<tr><td colspan="3">Error: '+r.error+'</td></tr>'; return; }
+  tb.innerHTML=CATS.map(function(c,i){
+    return '<tr><td>'+c.nombre+'</td>'+
+      '<td><input class="cell" type="number" step="0.1" value="'+c.margen+'" id="cm-'+i+'" onchange="guardarCatCell('+i+')"></td>'+
+      '<td><input class="cell" type="number" step="0.1" value="'+c.plusRemito+'" id="cp-'+i+'" onchange="guardarCatCell('+i+')"></td></tr>';
+  }).join('');
+}
+async function guardarCatCell(i){
+  var c=CATS[i]; if(!c) return;
+  var m=document.getElementById('cm-'+i).value, p=document.getElementById('cp-'+i).value;
+  var r=await window.sp('guardarCategoria',{nombre:c.nombre, margen:m, plusRemito:p});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  c.margen=m; c.plusRemito=p; toast('Categoría guardada');
+}
+async function crearCategoriaUI(){
+  var nom=(document.getElementById('nc-nom').value||'').trim(); if(!nom){ toast('Poné el nombre','error'); return; }
+  var r=await window.sp('guardarCategoria',{nombre:nom, margen:document.getElementById('nc-margen').value, plusRemito:document.getElementById('nc-plus').value});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Categoría agregada'); ['nc-nom','nc-margen','nc-plus'].forEach(function(id){document.getElementById(id).value='';});
+  renderCategorias();
+}
+
+// ---- Listas ----
+async function renderListas(){
+  var r=await window.sf('getListas'); LISTAS_FULL=(r.ok?r.listas:[])||[];
+  var tb=document.getElementById('lis-tbody');
+  if(!r.ok){ tb.innerHTML='<tr><td colspan="3">Error: '+r.error+'</td></tr>'; return; }
+  tb.innerHTML=LISTAS_FULL.map(function(l,i){
+    var opts=['base','derivada','especial'].map(function(t){ return '<option value="'+t+'"'+(l.tipo===t?' selected':'')+'>'+t+'</option>'; }).join('');
+    return '<tr><td>'+l.nombre+'</td>'+
+      '<td><select class="cell" id="lt-'+i+'" onchange="guardarListCell('+i+')">'+opts+'</select></td>'+
+      '<td><input class="cell" type="number" step="1" value="'+(l.tipo==='derivada'?l.relacion:'')+'" id="lr-'+i+'" onchange="guardarListCell('+i+')"'+(l.tipo==='derivada'?'':' disabled')+'></td></tr>';
+  }).join('');
+}
+async function guardarListCell(i){
+  var l=LISTAS_FULL[i]; if(!l) return;
+  var tipo=document.getElementById('lt-'+i).value, rel=document.getElementById('lr-'+i).value;
+  var r=await window.sp('guardarLista',{nombre:l.nombre, tipo:tipo, relacion:rel});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  l.tipo=tipo; l.relacion=Number(rel)||0; LDEF[l.nombre]={tipo:tipo, relacion:l.relacion}; if(tipo==='base') baseName=l.nombre;
+  toast('Lista guardada'); renderListas();
+}
+async function crearListaUI(){
+  var nom=(document.getElementById('nl-nom').value||'').trim(); if(!nom){ toast('Poné el nombre','error'); return; }
+  var tipo=document.getElementById('nl-tipo').value, rel=document.getElementById('nl-rel').value;
+  var r=await window.sp('guardarLista',{nombre:nom, tipo:tipo, relacion:rel});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  LDEF[nom]={tipo:tipo, relacion:Number(rel)||0}; if(LISTAS.indexOf(nom)<0) LISTAS.push(nom);
+  toast('Lista agregada — se ve como columna en Catálogo'); ['nl-nom','nl-rel'].forEach(function(id){document.getElementById(id).value='';});
+  renderListas();
+}
+async function toggleActivo(cod){
+  var p=PRODS[cod]; if(!p) return;
+  var nuevo=(p.activo===false);
+  if(!nuevo && !confirm('¿Dar de baja "'+(p.nombre||cod)+'"? (deja de venderse; se puede reactivar)')) return;
+  var r=await window.sp('setProductoActivo',{codigo:cod,activo:nuevo});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  p.activo=nuevo; toast(nuevo?'Producto reactivado':'Producto dado de baja'); render();
+}
+async function crearProductoUI(){
+  var cod=(document.getElementById('a-cod').value||'').trim(), nom=(document.getElementById('a-nom').value||'').trim();
+  if(!cod||!nom){ toast('Poné código y nombre','error'); return; }
+  if(PRODS[cod]){ toast('Ya existe un producto con ese código','error'); return; }
+  recalcAlta(); // asegurar derivadas calculadas desde Minorista
+  var precios={}; LISTAS.forEach(function(l){ var el=document.getElementById('a-precio-'+l); if(el && el.value) precios[l]=Number(el.value); });
+  var payload={ codigo:cod, nombre:nom, categoria:(document.getElementById('a-cat').value||'').trim(), tipo:document.getElementById('a-tipo').value, costo:document.getElementById('a-costo').value, margen:document.getElementById('a-margen').value, precios:precios };
+  var r=await window.sp('crearProducto',payload);
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Producto creado');
+  ['a-cod','a-nom','a-cat','a-costo','a-margen'].forEach(function(id){ document.getElementById(id).value=''; });
+  var hs=document.getElementById('alta-sugerido'); if(hs) hs.textContent='';
+  LISTAS.forEach(function(l){ var el=document.getElementById('a-precio-'+l); if(el) el.value=''; });
+  iniciar();
+}
+
+function render(){
+  var q=(document.getElementById('q').value||'').trim().toLowerCase();
+  var soloAct=document.getElementById('soloAct').checked;
+  var li=document.getElementById('lockIco'); if(li) li.textContent=unlockDeriv()?'🔓':'🔒';
+  var codes=Object.keys(PRODS).filter(function(cod){
+    var p=PRODS[cod];
+    if(soloAct && p.activo===false) return false;
+    if(q){ if((cod+' '+(p.nombre||'')).toLowerCase().indexOf(q)<0) return false; }
+    return true;
+  }).sort(function(a,b){ return (PRODS[a].nombre||'').localeCompare(PRODS[b].nombre||''); });
+
+  document.getElementById('resumen').textContent = codes.length+' producto'+(codes.length!==1?'s':'')+' · '+LISTAS.length+' lista'+(LISTAS.length!==1?'s':'')+' de precio';
+  document.getElementById('vacio').hidden = codes.length>0;
+
+  var thead='<tr><th>Código</th><th>Nombre</th><th>Categoría</th><th>Tipo</th><th class="num">Costo</th><th class="num" title="Margen puntual: pisa el de la categoría (vacío = usa el de la categoría)">Margen %</th>'+
+    LISTAS.map(function(l){ return '<th class="num">'+l+'</th>'; }).join('')+'<th>Estado</th></tr>';
+  document.getElementById('thead').innerHTML=thead;
+
+  document.getElementById('tbody').innerHTML = codes.map(function(cod){
+    var p=PRODS[cod];
+    var pill = (p.tipo==='unidad') ? '<span class="pill u">unidad</span>' : '<span class="pill p">kg</span>';
+    return '<tr class="'+(p.activo===false?'inactivo':'')+'">'+
+      '<td>'+cod+'</td><td>'+(p.nombre||'')+'</td><td>'+(p.categoria||'')+'</td><td>'+pill+'</td>'+
+      '<td class="num"><input class="cell" type="number" step="0.01" value="'+(p.costo==null?'':p.costo)+'" onchange="editarCosto(\''+cod+'\',this.value)"></td>'+
+      '<td class="num"><input class="cell" type="number" step="0.1" placeholder="cat" value="'+(p.margenOverride==null?'':p.margenOverride)+'" onchange="editarMargen(\''+cod+'\',this.value)"></td>'+
+      LISTAS.map(function(l){
+        var lq=l.replace(/'/g,"\\'"); var def=LDEF[l]||{tipo:'especial'};
+        var val=(((p.precio||{})[l]==null)?'':p.precio[l]);
+        var esBase=(def.tipo==='base'), esDeriv=(def.tipo==='derivada'), ro=(esDeriv && !unlockDeriv());
+        var handler = esBase ? ('editarMinorista(\''+cod+'\',this.value)') : ('editarPrecio(\''+cod+'\',\''+lq+'\',this.value)');
+        return '<td class="num"><input class="cell'+(ro?' ro':'')+'" type="number" step="0.01" value="'+val+'" '+(ro?'readonly title="Derivada: se calcula desde Minorista"':('onchange="'+handler+'"'))+'></td>';
+      }).join('')+
+      '<td>'+(p.activo===false?'Inactivo':'Activo')+'<button class="mini-btn" onclick="toggleActivo(\''+cod+'\')">'+(p.activo===false?'Reactivar':'Baja')+'</button></td></tr>';
+  }).join('');
+}
+</script>
+</body>
+</html>

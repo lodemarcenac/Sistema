@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tablero Carnicería</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:var(--font);background:var(--bg);color:var(--ink);}
+  header{background:linear-gradient(90deg,#1257c4,#2f7be6);color:#fff;padding:14px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  header .ttl{font-size:1.2rem;font-weight:700;}
+  header .sub{font-size:.72rem;opacity:.9;}
+  header button{background:#fff;color:#1257c4;border:none;padding:8px 14px;border-radius:7px;font-weight:600;cursor:pointer;font-size:.85rem;}
+  .barra{background:#fff;border-bottom:1px solid #dde2ea;padding:10px 22px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .barra .lbl{font-size:.72rem;font-weight:700;letter-spacing:.08em;color:#7a8296;text-transform:uppercase;}
+  .chip{background:#fff;border:1px solid #c7cede;color:#2f6fd6;padding:5px 14px;border-radius:16px;cursor:pointer;font-size:.85rem;font-weight:600;}
+  .chip.active{background:#2f6fd6;border-color:#2f6fd6;color:#fff;}
+  main{max-width:1180px;margin:0 auto;padding:18px;}
+  .nota{font-size:.72rem;color:#8891a3;margin:2px 0 14px;}
+  .seccion-head{font-weight:700;font-size:.9rem;padding:9px 14px;border-radius:8px;margin:22px 0 12px;}
+  .sh-ventas{background:#e7f0fe;color:#1257c4;} .sh-clientes{background:#fdf5da;color:#a9800f;} .sh-ticket{background:#f0e8fb;color:#6b3fb5;}
+  .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;}
+  .cardg{background:#fff;border:1px solid #e2e6ee;border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+  .cardg h4{font-size:.72rem;letter-spacing:.05em;color:#8891a3;text-transform:uppercase;margin-bottom:10px;font-weight:700;}
+  .cwrap{position:relative;height:260px;}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:6px;}
+  .kpi{background:#fff;border:1px solid #e2e6ee;border-radius:10px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+  .kpi .k-lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:#8891a3;font-weight:700;}
+  .kpi .k-val{font-size:1.4rem;font-weight:700;color:#1257c4;margin-top:4px;}
+  .cmp-ctrls{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:.85rem;color:#4a5262;margin-bottom:14px;}
+  .cmp-ctrls select{padding:5px 8px;border:1px solid #c7cede;border-radius:6px;font-size:.85rem;background:#fff;}
+  .cmp-res{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;}
+  .cmp-b{font-size:.8rem;color:#8891a3;margin-top:8px;}
+  #filtros{flex-direction:column;align-items:flex-start;gap:4px;}
+  .frow{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}
+  .frow .lbl{min-width:56px;font-size:.66rem;}
+  .frow .chip{font-size:.7rem;padding:2px 8px;border-radius:12px;}
+  .chip.mini{background:#eef2f8;border-color:#dbe2ee;color:#5a6472;font-size:.66rem;padding:2px 8px;}
+  .cmp-tabla{width:100%;border-collapse:collapse;font-size:.9rem;}
+  .cmp-tabla th,.cmp-tabla td{text-align:left;padding:7px 12px;border-bottom:1px solid #eef1f6;white-space:nowrap;}
+  .cmp-tabla th{color:#8891a3;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;}
+  .cmp-tabla td{font-variant-numeric:tabular-nums;}
+  .vacio{padding:40px 16px;text-align:center;color:#8891a3;background:#fff;border:1px dashed #c7cede;border-radius:10px;}
+  /* login */
+  #login{position:fixed;inset:0;background:linear-gradient(160deg,#1257c4,#0d3f92);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
+  #login .box{background:#fff;border-radius:14px;padding:30px 28px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+  #login h1{font-size:1.25rem;color:#1257c4;margin-bottom:4px;}
+  #login p{font-size:.85rem;color:#7a8296;margin-bottom:20px;}
+  #login label{display:block;font-size:.75rem;color:#7a8296;font-weight:600;margin:10px 0 4px;text-transform:uppercase;letter-spacing:.04em;}
+  #login input{width:100%;padding:11px 12px;border:1px solid #c7cede;border-radius:8px;font-size:.95rem;}
+  #login button{width:100%;margin-top:20px;padding:12px;background:#1257c4;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:.95rem;cursor:pointer;}
+  #login .err{color:#c0392b;font-size:.82rem;margin-top:12px;min-height:1em;}
+  [hidden]{display:none!important;}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>🥩 Tablero Carnicería</h1>
+    <p>Ingresá con tu usuario para ver los reportes.</p>
+    <form id="login-form">
+      <label>Email</label>
+      <input type="email" id="li-email" autocomplete="username" required>
+      <label>Contraseña</label>
+      <input type="password" id="li-pass" autocomplete="current-password" required>
+      <button type="submit" id="li-btn">Entrar</button>
+      <div class="err" id="li-err"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div>
+        <div class="ttl">📊 Tablero de Ventas</div>
+        <div class="sub" id="sub">—</div>
+      </div>
+      <nav style="display:flex;gap:14px;"><a href="index.html" style="color:#fff;font-weight:600;font-size:.85rem;text-decoration:none;">📊 Tablero</a><a href="productos.html" style="color:#dbe8ff;font-weight:600;font-size:.85rem;text-decoration:none;">🏷️ Productos</a><a href="clientes.html" style="color:#dbe8ff;font-weight:600;font-size:.85rem;text-decoration:none;">👥 Clientes</a><a href="stock.html" style="color:#dbe8ff;font-weight:600;font-size:.85rem;text-decoration:none;">📦 Stock</a><a href="compras.html" style="color:#dbe8ff;font-weight:600;font-size:.85rem;text-decoration:none;">🧾 Compras</a><a href="remitos.html" style="color:#dbe8ff;font-weight:600;font-size:.85rem;text-decoration:none;">🔄 Remitos</a><a href="cuentas.html" style="color:#dbe8ff;font-weight:600;font-size:.85rem;text-decoration:none;">📒 Cuentas</a><a href="caja.html" style="color:#dbe8ff;font-weight:600;font-size:.85rem;text-decoration:none;">💵 Caja</a><a href="ventas.html" style="color:#dbe8ff;font-weight:600;font-size:.85rem;text-decoration:none;">🛒 Ventas</a><a href="configuracion.html" style="color:#dbe8ff;font-weight:600;font-size:.85rem;text-decoration:none;">⚙️ Config</a></nav>
+    </div>
+    <button id="btn-salir">Salir</button>
+  </header>
+  <div class="barra" id="filtros"></div>
+  <main id="main"><div class="vacio">Cargando…</div></main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="sb-api.js"></script>
+<script src="auth-guard.js"></script>
+<script>
+// ---- Config Supabase (URL + anon key = públicas, van en el cliente) ----
+const SUPABASE_URL = 'https://wnrnnecqauzqvdopyuyr.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inducm5uZWNxYXV6cXZkb3B5dXlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MzgzNTIsImV4cCI6MjEwNDExNDM1Mn0.OXajZCCXn2xcjxEP_qtDECnpaByCsbX1I7eUH0b5jw8';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const COLORES={2021:'#5B9CF6',2022:'#3DBA6F',2023:'#E8A33D',2024:'#E05252',2025:'#9B6FE0',2026:'#3DC9C9',2027:'#E86FB0',2028:'#6FCF97'};
+const PALETA=['#5B9CF6','#3DBA6F','#E8A33D','#E05252','#9B6FE0','#3DC9C9','#E86FB0','#6FCF97'];
+function colorAnio(y,i){ return COLORES[y]||PALETA[i%PALETA.length]; }
+
+let DATA={};          // { sucursal: { anio: { mes: {monto,clientes} } } }
+let IPC={}, IPC_BASE=0, IPC_BASE_MES='';
+let selLoc=new Set(), selAnio=new Set(), selMes=new Set(), charts=[];
+
+// ---- LOGIN ----
+document.getElementById('login-form').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const btn=document.getElementById('li-btn'), err=document.getElementById('li-err');
+  err.textContent=''; btn.disabled=true; btn.textContent='Entrando…';
+  const { error } = await sb.auth.signInWithPassword({
+    email: document.getElementById('li-email').value.trim(),
+    password: document.getElementById('li-pass').value
+  });
+  btn.disabled=false; btn.textContent='Entrar';
+  if(error){ err.textContent = 'No se pudo entrar: '+error.message; return; }
+  iniciar();
+});
+document.getElementById('btn-salir').addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
+
+async function verSesion(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session) iniciar();
+}
+verSesion();
+
+// ---- CARGA DE DATOS ----
+async function iniciar(){
+  document.getElementById('login').hidden=true;
+  document.getElementById('app').hidden=false;
+  try{
+    // Paso 1: ventas mensuales (vista v_ventas_mensuales)
+    const { data:filas, error } = await sb.from('v_ventas_mensuales').select('*');
+    if(error) throw error;
+    DATA={};
+    (filas||[]).forEach(r=>{
+      const suc=r.sucursal||'(sin local)';
+      DATA[suc]=DATA[suc]||{}; DATA[suc][r.anio]=DATA[suc][r.anio]||{};
+      DATA[suc][r.anio][r.mes]={monto:Number(r.monto)||0, clientes:Number(r.clientes)||0};
+    });
+    // Paso 2: IPC del INDEC para ajustar por inflación
+    await cargarIPC();
+    document.getElementById('sub').textContent='Actualizado: '+new Date().toLocaleString('es-AR')+(IPC_BASE_MES?(' · pesos de '+IPC_BASE_MES):'');
+    initFiltros();
+    render();
+  }catch(e){
+    document.getElementById('main').innerHTML='<div class="vacio">No se pudieron cargar los datos.<br><small>'+(e.message||e)+'</small></div>';
+  }
+}
+
+async function cargarIPC(){
+  IPC={}; IPC_BASE=0; IPC_BASE_MES='';
+  try{
+    const r=await fetch('https://apis.datos.gob.ar/series/api/series/?ids=148.3_INIVELNAL_DICI_M_26&limit=5000&format=json');
+    const j=await r.json();
+    (j.data||[]).forEach(d=>{ const k=String(d[0]).substring(0,7); const v=Number(d[1]); if(v>0){ IPC[k]=v; if(k>IPC_BASE_MES){ IPC_BASE_MES=k; IPC_BASE=v; } } });
+  }catch(e){ /* sin IPC: se muestran valores nominales */ }
+}
+function factor(anio,mes){ const k=anio+'-'+(mes<10?'0'+mes:mes); return (IPC[k]&&IPC_BASE)?IPC_BASE/IPC[k]:1; }
+
+// ---- Helpers ----
+function fmt$(n){ return '$'+Math.round(n).toLocaleString('es-AR'); }
+function aniosGlobales(){ const s=new Set(); Object.values(DATA).forEach(a=>Object.keys(a).forEach(y=>s.add(Number(y)))); return [...s].sort((x,y)=>x-y); }
+function mesesSel(){ return [...selMes].map(Number).sort((a,b)=>a-b); }
+function aniosSel(){ return [...selAnio].map(Number).sort((a,b)=>a-b); }
+
+// Suma los locales elegidos en un agregado { año: { mes: {monto,clientes} } }
+function aggCombinado(){
+  const out={};
+  Object.keys(DATA).forEach(loc=>{ if(!selLoc.has(loc)) return; const a=DATA[loc];
+    Object.keys(a).forEach(y=>{ out[y]=out[y]||{}; Object.keys(a[y]).forEach(m=>{
+      out[y][m]=out[y][m]||{monto:0,clientes:0}; out[y][m].monto+=a[y][m].monto; out[y][m].clientes+=a[y][m].clientes; }); }); });
+  return out;
+}
+// Total (ajustado) de un año sobre los MESES elegidos
+function totalAnio(agg,y){ let monto=0,clientes=0; mesesSel().forEach(m=>{ const c=agg[y]&&agg[y][m]; if(c){ monto+=c.monto*factor(Number(y),m); clientes+=c.clientes; } }); return {monto:Math.round(monto),clientes}; }
+function pctTxt(a,b){ if(!(b>0)) return '—'; const p=(a-b)/b*100; const col=p>=0?'#2E7D4F':'#c0392b'; const s=p>=0?'▲':'▼'; return '<span style="color:'+col+';font-weight:700">'+s+' '+Math.abs(p).toFixed(1)+'%</span>'; }
+
+// Charts: eje X = meses elegidos; una serie por año elegido; suma de locales elegidos
+function datasetsFiltrado(agg, metric, linea){
+  const meses=mesesSel();
+  return aniosSel().map((y,i)=>({ label:String(y), backgroundColor:colorAnio(y,i), borderColor:colorAnio(y,i), borderWidth:linea?2:1, fill:false, tension:.3, pointRadius:linea?3:0, spanGaps:true,
+    data: meses.map(m=>{ const c=agg[y]&&agg[y][m]; if(!c) return null; if(metric==='clientes') return c.clientes; const real=c.monto*factor(y,m); if(metric==='ventas') return Math.round(real); if(metric==='ticket') return c.clientes>0?Math.round(real/c.clientes):null; }) }));
+}
+function mk(id,cfg){ const c=new Chart(document.getElementById(id),cfg); charts.push(c); }
+function ejeMonto(){ return {ticks:{callback:v=>'$'+Number(v).toLocaleString('es-AR')}}; }
+function chartMes(id,agg,metric,money,linea){
+  mk(id,{ type:linea?'line':'bar',
+    data:{labels:mesesSel().map(m=>MESES[m-1]), datasets:datasetsFiltrado(agg,metric,linea)},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:10}}}},
+      scales:{y:{beginAtZero:true, ...(money?ejeMonto():{})}}}});
+}
+function card(id,t){ return '<div class="cardg"><h4>'+t+'</h4><div class="cwrap"><canvas id="'+id+'"></canvas></div></div>'; }
+
+// ---- Filtros (multi-selección) ----
+function chipRow(lbl, items){ // items: [{val,txt,on}]
+  return '<div class="frow"><span class="lbl">'+lbl+'</span>'+
+    '<span class="chip mini" data-kind="'+lbl+'" data-val="__todos__">Todos</span>'+
+    items.map(it=>'<span class="chip'+(it.on?' active':'')+'" data-kind="'+lbl+'" data-val="'+it.val+'">'+it.txt+'</span>').join('')+'</div>';
+}
+function renderFiltros(){
+  const cont=document.getElementById('filtros'); if(!cont) return;
+  cont.innerHTML=
+    chipRow('Locales', Object.keys(DATA).sort().map(l=>({val:l,txt:l,on:selLoc.has(l)})))+
+    chipRow('Años', aniosGlobales().map(y=>({val:String(y),txt:String(y),on:selAnio.has(String(y))})))+
+    chipRow('Meses', MESES.map((m,i)=>({val:String(i+1),txt:m,on:selMes.has(String(i+1))})));
+  cont.querySelectorAll('.chip').forEach(ch=>ch.addEventListener('click',function(){
+    const kind=this.getAttribute('data-kind'), val=this.getAttribute('data-val');
+    const set = kind==='Locales'?selLoc : kind==='Años'?selAnio : selMes;
+    const all = kind==='Locales'? Object.keys(DATA) : kind==='Años'? aniosGlobales().map(String) : MESES.map((_,i)=>String(i+1));
+    if(val==='__todos__'){ const full=(set.size===all.length); set.clear(); if(!full) all.forEach(v=>set.add(v)); }
+    else { if(set.has(val)) set.delete(val); else set.add(val); }
+    render();
+  }));
+}
+
+function render(){
+  charts.forEach(c=>{try{c.destroy();}catch(e){}}); charts=[];
+  renderFiltros();
+  const main=document.getElementById('main');
+  if(!selLoc.size || !selAnio.size || !selMes.size){ main.innerHTML='<div class="vacio">Elegí al menos un local, un año y un mes.</div>'; return; }
+  const agg=aggCombinado();
+  const anios=aniosSel();
+  const nota=IPC_BASE_MES?('Ventas y ticket ajustados por inflación a pesos de '+IPC_BASE_MES+' (IPC INDEC). Suma de los locales elegidos, sobre los meses elegidos.'):'IPC no disponible: valores nominales.';
+  // Tabla comparativa por año (sobre meses + locales elegidos)
+  let filas='', prev=null;
+  anios.forEach(y=>{ const t=totalAnio(agg,y); const tk=t.clientes>0?t.monto/t.clientes:0;
+    filas+='<tr><td><b>'+y+'</b></td><td>'+fmt$(t.monto)+'</td><td>'+t.clientes.toLocaleString('es-AR')+'</td><td>'+(t.clientes>0?fmt$(tk):'—')+'</td><td>'+(prev?pctTxt(t.monto,prev.monto):'—')+'</td></tr>';
+    prev=t;
+  });
+  const lblMeses = selMes.size<12 ? ('meses: '+mesesSel().map(m=>MESES[m-1]).join(', ')) : 'año completo';
+  const tabla=
+    '<div class="cardg" style="margin-bottom:16px;"><h4>Comparativo por año · '+lblMeses+'</h4>'+
+    '<div style="overflow-x:auto"><table class="cmp-tabla"><thead><tr><th>Año</th><th>Ventas (ajust.)</th><th>Clientes</th><th>Ticket prom.</th><th>Δ Ventas vs año previo</th></tr></thead><tbody>'+filas+'</tbody></table></div>'+
+    '<div class="cmp-b">Locales sumados: '+[...selLoc].sort().join(', ')+'</div></div>';
+  main.innerHTML=
+    tabla+
+    '<div class="seccion-head sh-ventas">💰 VENTAS (ajustadas por inflación)</div>'+
+    '<div class="nota">'+nota+'</div>'+
+    '<div class="grid3">'+card('v-bar','Barras — por mes')+card('v-line','Líneas — por mes')+'</div>'+
+    '<div class="seccion-head sh-clientes">👥 CLIENTES (cantidad de ventas)</div>'+
+    '<div class="grid3">'+card('c-bar','Barras — por mes')+card('c-line','Líneas — por mes')+'</div>'+
+    '<div class="seccion-head sh-ticket">🎟 TICKET PROMEDIO (ajustado)</div>'+
+    '<div class="grid3">'+card('t-bar','Barras — por mes')+'</div>';
+  chartMes('v-bar',agg,'ventas',true,false); chartMes('v-line',agg,'ventas',true,true);
+  chartMes('c-bar',agg,'clientes',false,false); chartMes('c-line',agg,'clientes',false,true);
+  chartMes('t-bar',agg,'ticket',true,false);
+}
+function initFiltros(){
+  selLoc=new Set(Object.keys(DATA));
+  selAnio=new Set(aniosGlobales().map(String));
+  selMes=new Set(MESES.map((_,i)=>String(i+1)));
+}
+</script>
+</body>
+</html>

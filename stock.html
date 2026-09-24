@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock — Carnicería</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css">
+<style>
+  header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  header .ttl{font-size:var(--fs-xl);font-weight:700;}
+  header nav a{color:#dbe8ff;text-decoration:none;font-size:var(--fs-sm);font-weight:600;margin-right:14px;}
+  header nav a.on,header nav a:hover{color:#fff;}
+  header button{background:#fff;color:var(--brand);border:none;padding:7px 13px;border-radius:var(--radius-sm);font-weight:600;cursor:pointer;font-size:var(--fs-sm);}
+  main{max-width:1250px;}
+  .barra{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+  .barra > input[type=text]{flex:1;min-width:200px;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;}
+  table.data td.stk input{width:80px;padding:5px 6px;border:1px solid #dbe2ee;border-radius:var(--radius-xs);font-size:var(--fs-sm);text-align:right;font-variant-numeric:tabular-nums;font-family:inherit;}
+  table.data tr.bajo td.tot{color:var(--bad);font-weight:700;}
+  .hint{font-size:var(--fs-sm);color:var(--muted);margin:0 0 12px;}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>🥩 Carnicería</h1>
+    <p>Ingresá con tu usuario.</p>
+    <form id="login-form">
+      <label>Email</label><input type="email" id="li-email" autocomplete="username" required>
+      <label>Contraseña</label><input type="password" id="li-pass" autocomplete="current-password" required>
+      <button type="submit" id="li-btn">Entrar</button>
+      <div class="err" id="li-err"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div class="ttl">📦 Stock</div>
+      <nav><a href="index.html">📊 Tablero</a><a href="productos.html">🏷️ Productos</a><a href="clientes.html">👥 Clientes</a><a href="stock.html" class="on">📦 Stock</a><a href="compras.html">🧾 Compras</a><a href="remitos.html">🔄 Remitos</a><a href="cuentas.html">📒 Cuentas</a><a href="caja.html">💵 Caja</a><a href="ventas.html">🛒 Ventas</a><a href="configuracion.html">⚙️ Config</a></nav>
+    </div>
+    <button id="btn-salir">Salir</button>
+  </header>
+  <main>
+    <div class="card" style="margin-bottom:14px;">
+      <h3 style="font-size:var(--fs-lg);margin-bottom:4px;">Carga inicial / masiva por Excel</h3>
+      <p class="hint">1) <b>Descargá la base</b> (viene con los códigos y los locales exactos, en 0). 2) Completá las cantidades en ese mismo Excel. 3) <b>Importalo</b>: setea el stock tal cual el archivo. Así evitás errores de código o de nombre de local.</p>
+      <div id="exp-locs" style="margin:4px 0 12px;font-size:var(--fs-sm);"></div>
+      <button class="btn" onclick="exportarExcel()">⬇️ Descargar base de stock (Excel)</button>
+      <label class="btn-sec" style="display:inline-block;cursor:pointer;">⬆️ Importar Excel completado
+        <input type="file" id="imp-file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarExcel(event)">
+      </label>
+      <span class="muted" id="imp-res"></span>
+    </div>
+
+    <div class="barra">
+      <input type="text" id="q" placeholder="Buscar por código o nombre…" oninput="render()">
+      <label class="muted"><input type="checkbox" id="soloBajo" onchange="render()"> Solo bajo mínimo</label>
+      <span class="resumen muted" id="resumen"></span>
+    </div>
+    <div class="card p0"><div class="tblwrap"><table class="data"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div></div>
+    <div class="vacio" id="vacio" hidden>Sin productos.</div>
+  </main>
+</div>
+
+<div class="ov" id="ov-kardex" hidden style="position:fixed;inset:0;background:rgba(15,25,45,.45);display:flex;align-items:center;justify-content:center;z-index:250;padding:16px;">
+  <div style="background:#fff;border-radius:14px;padding:22px;max-width:620px;width:100%;box-shadow:0 6px 20px rgba(0,0,0,.3);">
+    <h3 id="kx-tit" style="font-size:1.15rem;margin-bottom:10px;">Movimientos</h3>
+    <div class="tblwrap" style="max-height:60vh;overflow:auto;"><table class="data"><thead><tr><th>Fecha</th><th>Local</th><th>Tipo</th><th class="num">Δ (kg/u)</th></tr></thead><tbody id="kx-tbody"></tbody></table></div>
+    <div style="text-align:right;margin-top:12px;"><button class="btn-sec" onclick="document.getElementById('ov-kardex').hidden=true">Cerrar</button></div>
+  </div>
+</div>
+
+<div class="toast-c" id="toast-c"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="sb-api.js"></script>
+<script src="auth-guard.js"></script>
+<script>
+var sb=window.sbClient;
+var PRODS={}, LOCS=[], STK={};   // STK: codigo -> { local: cantidad }
+function fmt(n){ n=Number(n)||0; return (Math.round(n*1000)/1000).toLocaleString('es-AR'); }
+function toast(msg,tipo){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(tipo?' '+tipo:''); e.textContent=msg; c.appendChild(e); setTimeout(function(){ e.remove(); },2600); }
+
+document.getElementById('login-form').addEventListener('submit', async function(e){
+  e.preventDefault();
+  var btn=document.getElementById('li-btn'), err=document.getElementById('li-err');
+  err.textContent=''; btn.disabled=true; btn.textContent='Entrando…';
+  var r=await sb.auth.signInWithPassword({ email:document.getElementById('li-email').value.trim(), password:document.getElementById('li-pass').value });
+  btn.disabled=false; btn.textContent='Entrar';
+  if(r.error){ err.textContent='No se pudo entrar: '+r.error.message; return; }
+  iniciar();
+});
+document.getElementById('btn-salir').addEventListener('click', async function(){ await sb.auth.signOut(); location.reload(); });
+(async function(){ var s=await sb.auth.getSession(); if(s.data && s.data.session) iniciar(); })();
+
+async function iniciar(){
+  document.getElementById('login').hidden=true; document.getElementById('app').hidden=false;
+  document.getElementById('resumen').textContent='Cargando…';
+  var rp=await window.sf('getProductos'); if(!rp.ok){ toast('Error: '+rp.error,'error'); return; } PRODS=rp.productos||{};
+  var rs=await window.sf('getSucursales'); LOCS=(rs.ok?(rs.sucursales||[]).map(function(s){return s.nombre;}):[]);
+  poblarExpLocs();
+  await cargarStock();
+  render();
+}
+async function cargarStock(){
+  STK={}; var r=await window.sf('getStock');
+  if(r.ok){ (r.stock||[]).forEach(function(x){ STK[x.codigo]=STK[x.codigo]||{}; STK[x.codigo][x.local]=x.cantidad; }); }
+}
+function qtyDe(cod,loc){ return (STK[cod]&&STK[cod][loc]!=null)?STK[cod][loc]:0; }
+function totalDe(cod){ var t=0; LOCS.forEach(function(l){ t+=qtyDe(cod,l); }); return t; }
+
+function render(){
+  var q=(document.getElementById('q').value||'').trim().toLowerCase();
+  var soloBajo=document.getElementById('soloBajo').checked;
+  var codes=Object.keys(PRODS).filter(function(c){
+    if(q && (c+' '+(PRODS[c].nombre||'')).toLowerCase().indexOf(q)<0) return false;
+    if(soloBajo){ var min=PRODS[c].stockMinimo; if(!(min>0 && totalDe(c)<min)) return false; }
+    return true;
+  }).sort(function(a,b){ return (PRODS[a].nombre||'').localeCompare(PRODS[b].nombre||''); });
+
+  document.getElementById('resumen').textContent=codes.length+' producto'+(codes.length!==1?'s':'')+' · '+LOCS.length+' local'+(LOCS.length!==1?'es':'');
+  document.getElementById('vacio').hidden=codes.length>0;
+
+  document.getElementById('thead').innerHTML='<tr><th>Código</th><th>Producto</th>'+
+    LOCS.map(function(l){ return '<th class="num">'+l+'</th>'; }).join('')+'<th class="num">Total</th><th class="num">Mín</th></tr>';
+
+  document.getElementById('tbody').innerHTML=codes.map(function(cod){
+    var p=PRODS[cod]; var min=p.stockMinimo; var tot=totalDe(cod); var bajo=(min>0 && tot<min);
+    return '<tr class="'+(bajo?'bajo':'')+'"><td>'+cod+'</td><td>'+(p.nombre||'')+' <button class="mini-btn" title="Ver movimientos (kardex)" onclick="verKardex(\''+cod+'\')">📋</button></td>'+
+      LOCS.map(function(l){ return '<td class="num stk"><input type="number" step="0.001" value="'+(qtyDe(cod,l)||'')+'" onchange="ajustar(\''+cod+'\',\''+String(l).replace(/'/g,"\\'")+'\',this.value)"></td>'; }).join('')+
+      '<td class="num tot">'+fmt(tot)+'</td><td class="num">'+(min>0?fmt(min):'-')+'</td></tr>';
+  }).join('');
+}
+
+async function verKardex(cod){
+  document.getElementById('kx-tit').textContent='Movimientos — '+((PRODS[cod]&&PRODS[cod].nombre)||cod);
+  document.getElementById('kx-tbody').innerHTML='<tr><td colspan="4" class="muted">Cargando…</td></tr>';
+  document.getElementById('ov-kardex').hidden=false;
+  var r=await window.sf('getKardex&codigo='+encodeURIComponent(cod));
+  var movs=(r.ok?r.movimientos:[])||[];
+  document.getElementById('kx-tbody').innerHTML = movs.length ? movs.map(function(m){
+    var f=m.fecha?new Date(m.fecha).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+    var pos=m.delta>=0;
+    return '<tr><td>'+f+'</td><td>'+(m.local||'')+'</td><td>'+m.tipo+(m.ref?(' <span class="muted">('+m.ref+')</span>'):'')+'</td><td class="num" style="color:'+(pos?'var(--good)':'var(--bad)')+'">'+(pos?'+':'')+m.delta+'</td></tr>';
+  }).join('') : '<tr><td colspan="4" class="muted">Sin movimientos registrados.</td></tr>';
+}
+async function ajustar(cod,loc,val){
+  var r=await window.sp('ajustarStock',{codigo:cod, local:loc, cantidad:val, tipo:'ajuste', motivo:'ajuste manual'});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  STK[cod]=STK[cod]||{}; STK[cod][loc]=(val===''?0:Number(val));
+  // refresca total de la fila
+  render();
+  toast('Stock actualizado');
+}
+
+// ---- EXPORT ----
+function poblarExpLocs(){
+  document.getElementById('exp-locs').innerHTML='<span class="muted">Exportar locales:</span> '+
+    '<label style="margin:0 12px 0 6px;"><a href="javascript:void(0)" onclick="marcarExp(true)">todos</a> / <a href="javascript:void(0)" onclick="marcarExp(false)">ninguno</a></label>'+
+    LOCS.map(function(l){ return '<label style="margin-right:12px;white-space:nowrap;"><input type="checkbox" class="exp-loc" value="'+String(l).replace(/"/g,'&quot;')+'" checked style="width:auto;"> '+l+'</label>'; }).join('');
+}
+function marcarExp(v){ document.querySelectorAll('.exp-loc').forEach(function(c){ c.checked=v; }); }
+function localesExport(){ var a=[]; document.querySelectorAll('.exp-loc:checked').forEach(function(c){ a.push(c.value); }); return a; }
+function exportarExcel(){
+  var sel=localesExport();
+  if(!sel.length){ toast('Elegí al menos un local para exportar','error'); return; }
+  var aoa=[['producto','codigo'].concat(sel)];
+  Object.keys(PRODS).sort(function(a,b){ return (PRODS[a].nombre||'').localeCompare(PRODS[b].nombre||''); }).forEach(function(cod){
+    var row=[PRODS[cod].nombre||'', cod].concat(sel.map(function(l){ return qtyDe(cod,l); }));
+    aoa.push(row);
+  });
+  var ws=XLSX.utils.aoa_to_sheet(aoa); var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Stock');
+  var nom = sel.length===LOCS.length ? 'stock_base.xlsx' : ('stock_'+sel.join('_').replace(/[^\w]+/g,'-')+'.xlsx');
+  XLSX.writeFile(wb, nom);
+}
+
+// ---- IMPORT ----
+function importarExcel(ev){
+  var file=ev.target.files[0]; if(!file) return;
+  var reader=new FileReader();
+  reader.onload=async function(e){
+    try{
+      var wb=XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var rows=XLSX.utils.sheet_to_json(ws, {defval:''});   // objetos por encabezado
+      if(!rows.length){ toast('El Excel está vacío','error'); return; }
+      // detectar columnas de local: las que matchean nombres de locales
+      var headers=Object.keys(rows[0]);
+      var colCod=headers.find(function(h){ return h.trim().toLowerCase()==='codigo' || h.trim().toLowerCase()==='código'; });
+      if(!colCod){ toast('Falta la columna "codigo"','error'); return; }
+      var locCols=headers.filter(function(h){ return LOCS.indexOf(h.trim())>=0; });
+      if(!locCols.length){ toast('No reconocí columnas de local (revisá los nombres)','error'); return; }
+      var filas=[];
+      rows.forEach(function(r){
+        var cod=String(r[colCod]||'').trim(); if(!cod) return;
+        var cantidades={};
+        locCols.forEach(function(h){ var v=r[h]; if(v!==''&&v!=null){ var n=Number(String(v).replace(',','.')); if(!isNaN(n)) cantidades[h.trim()]=n; } });
+        filas.push({ codigo:cod, cantidades:cantidades });
+      });
+      if(!confirm('¿Importar stock de '+filas.length+' producto(s)? Setea las cantidades tal cual el archivo.')){ ev.target.value=''; return; }
+      document.getElementById('imp-res').textContent='Importando…';
+      var res=await window.sp('importStockInicial',{filas:filas});
+      if(!res.ok){ toast('Error: '+res.error,'error'); return; }
+      document.getElementById('imp-res').textContent='✓ '+res.actualizados+' celdas actualizadas'+(res.errores&&res.errores.length?(' · '+res.errores.length+' con error'):'');
+      if(res.errores&&res.errores.length) console.warn('Errores import stock:',res.errores);
+      toast('Stock importado');
+      await cargarStock(); render();
+    }catch(err){ toast('Error leyendo el Excel: '+err.message,'error'); }
+    ev.target.value='';
+  };
+  reader.readAsArrayBuffer(file);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cuentas — Carnicería</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css">
+<style>
+  header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  header .ttl{font-size:var(--fs-xl);font-weight:700;}
+  header nav a{color:#dbe8ff;text-decoration:none;font-size:var(--fs-sm);font-weight:600;margin-right:14px;}
+  header nav a.on,header nav a:hover{color:#fff;}
+  header .suc select{padding:5px 8px;border-radius:var(--radius-sm);border:none;font-family:inherit;font-size:var(--fs-sm);}
+  header button{background:#fff;color:var(--brand);border:none;padding:7px 13px;border-radius:var(--radius-sm);font-weight:600;cursor:pointer;font-size:var(--fs-sm);}
+  main{max-width:900px;}
+  .abm-nueva{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;align-items:end;}
+  .abm-nueva label{display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;text-transform:uppercase;letter-spacing:.03em;}
+  .abm-nueva input,.abm-nueva select{width:100%;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;background:#fff;}
+  .saldo{font-size:var(--fs-2xl);font-weight:700;}
+  .saldo.debe{color:var(--bad);} .saldo.favor{color:var(--good);} .saldo.cero{color:var(--muted);}
+  table.data td.cargo{color:var(--bad);} table.data td.pago{color:var(--good);}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>🥩 Carnicería</h1><p>Ingresá con tu usuario.</p>
+    <form id="login-form">
+      <label>Email</label><input type="email" id="li-email" autocomplete="username" required>
+      <label>Contraseña</label><input type="password" id="li-pass" autocomplete="current-password" required>
+      <button type="submit" id="li-btn">Entrar</button><div class="err" id="li-err"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div class="ttl">📒 Cuentas</div>
+      <nav><a href="index.html">📊 Tablero</a><a href="clientes.html">👥 Clientes</a><a href="compras.html">🧾 Compras</a><a href="remitos.html">🔄 Remitos</a><a href="cuentas.html" class="on">📒 Cuentas</a><a href="caja.html">💵 Caja</a><a href="ventas.html">🛒 Ventas</a></nav>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div class="suc">📍 <select id="selSuc" onchange="cambiarSuc()"></select></div>
+      <button id="btn-salir">Salir</button>
+    </div>
+  </header>
+  <main>
+    <div class="tabs">
+      <button class="tab on" data-t="cli" onclick="switchTab('cli')">Cuenta corriente clientes</button>
+      <button class="tab" data-t="prov" onclick="switchTab('prov')">Deuda a proveedores</button>
+      <button class="tab" data-t="inter" onclick="switchTab('inter')">Entre locales</button>
+    </div>
+
+    <div id="t-cli">
+      <div class="card" style="margin-bottom:14px;">
+        <div class="abm-nueva" style="align-items:center;">
+          <div style="grid-column:1/-1;"><label>Cliente</label><select id="cc-cli" onchange="verCliente()"></select></div>
+        </div>
+        <div id="cc-saldo-box" hidden style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <div><div class="muted">Saldo</div><div class="saldo" id="cc-saldo">$0</div></div>
+          <div class="abm-nueva" style="flex:1;max-width:420px;">
+            <div><label>Registrar pago $</label><input id="cc-monto" type="number" step="0.01"></div>
+            <div><label>Forma</label><select id="cc-fp"></select></div>
+            <button class="btn" onclick="pagarCC()">Registrar pago</button>
+          </div>
+        </div>
+      </div>
+      <div class="card p0" id="cc-movs-box" hidden><div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th><th>Concepto</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th></tr></thead><tbody id="cc-tbody"></tbody></table></div></div>
+    </div>
+
+    <div id="t-prov" hidden>
+      <div class="card" style="margin-bottom:14px;">
+        <div class="abm-nueva">
+          <div style="grid-column:1/-1;"><label>Proveedor / Cuenta (de este local)</label><select id="pv-prov" onchange="verProveedor()"></select></div>
+        </div>
+        <div id="pv-saldo-box" hidden style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <div><div class="muted">Deuda</div><div class="saldo" id="pv-saldo">$0</div></div>
+          <div class="abm-nueva" style="flex:1;max-width:520px;">
+            <div><label>Monto $</label><input id="pv-monto" type="number" step="0.01"></div>
+            <div><label>Forma</label><select id="pv-fp"></select></div>
+            <div><label>Fondo (si efectivo)</label><select id="pv-fondo"><option value="caja">Caja del día</option><option value="reserva">Efectivo guardado</option></select></div>
+            <div><label>Tipo</label><select id="pv-tipo"><option value="pago">Pago</option><option value="cargo">Cargo manual</option></select></div>
+            <button class="btn" onclick="movProv()">Registrar</button>
+          </div>
+        </div>
+      </div>
+      <div class="card p0" id="pv-movs-box" hidden><div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th><th>Detalle</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th></tr></thead><tbody id="pv-tbody"></tbody></table></div></div>
+    </div>
+
+    <div id="t-inter" hidden>
+      <div class="card" style="margin-bottom:14px;">
+        <h3>Saldos entre locales</h3>
+        <p class="resumen" style="margin-bottom:12px;">Cuando un local cobra la cuenta corriente de un cliente que <b>administra otro local</b>, esa plata queda debiéndose entre locales. Acá se ve el neto.</p>
+        <div id="inter-net"></div>
+      </div>
+      <div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th><th>Origen (debe)</th><th>Destino (acreedor)</th><th>Concepto</th><th class="num">Monto</th></tr></thead><tbody id="inter-tbody"></tbody></table></div></div>
+    </div>
+  </main>
+</div>
+
+<div class="toast-c" id="toast-c"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="sb-api.js"></script>
+<script src="auth-guard.js"></script>
+<script>
+var sb=window.sbClient;
+var CLIENTES=[], PROVS=[], SUCS=[], SUCID={}, FORMAS=['Efectivo','Tarjeta','Virtual'], sucActual='';
+function fmt$(n){ return '$'+Math.round(Number(n)||0).toLocaleString('es-AR'); }
+function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
+
+document.getElementById('login-form').addEventListener('submit', async function(e){
+  e.preventDefault(); var btn=document.getElementById('li-btn'), err=document.getElementById('li-err'); err.textContent=''; btn.disabled=true; btn.textContent='Entrando…';
+  var r=await sb.auth.signInWithPassword({ email:document.getElementById('li-email').value.trim(), password:document.getElementById('li-pass').value });
+  btn.disabled=false; btn.textContent='Entrar'; if(r.error){ err.textContent='No se pudo entrar: '+r.error.message; return; } iniciar();
+});
+document.getElementById('btn-salir').addEventListener('click', async function(){ await sb.auth.signOut(); location.reload(); });
+(async function(){ var s=await sb.auth.getSession(); if(s.data && s.data.session) iniciar(); })();
+
+async function iniciar(){
+  document.getElementById('login').hidden=true; document.getElementById('app').hidden=false;
+  var rc=await window.sf('getClientes'); CLIENTES=(rc.ok?rc.clientes:[])||[];
+  var rs=await window.sf('getSucursales'); var suc=(rs.ok?(rs.sucursales||[]):[]); SUCS=suc.map(function(s){return s.nombre;}); SUCID={}; suc.forEach(function(s){ SUCID[s.id]=s.nombre; });
+  var rcfg=await window.sf('getConfigGeneral'); if(rcfg.ok && rcfg.config && rcfg.config.formas_pago){ try{ var a=JSON.parse(rcfg.config.formas_pago); if(a.length) FORMAS=a.map(function(f){return f.nombre||f;}); }catch(e){} }
+  poblarSuc();
+  var fp=FORMAS.map(function(f){return '<option>'+f+'</option>';}).join('');
+  document.getElementById('cc-fp').innerHTML=fp; document.getElementById('pv-fp').innerHTML=fp;
+  document.getElementById('cc-cli').innerHTML='<option value="">(elegir cliente)</option>'+CLIENTES.map(function(c){return '<option value="'+c.realId+'">'+c.nombre+'</option>';}).join('');
+  await cargarCuentasProv();
+}
+function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; }
+function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarCuentasProv(); }
+async function cargarCuentasProv(){
+  var r=await window.sf('getCuentasDeLocal&sucursal='+encodeURIComponent(sucActual)); var cuentas=(r.ok?r.cuentas:[])||[];
+  document.getElementById('pv-prov').innerHTML = cuentas.length ? ('<option value="">(elegir cuenta)</option>'+cuentas.map(function(c){ return '<option value="'+c.id+'">'+c.proveedor+(c.nombre?(' — '+c.nombre):'')+'</option>'; }).join('')) : '<option value="">(este local no tiene cuentas de proveedor)</option>';
+  document.getElementById('pv-saldo-box').hidden=true; document.getElementById('pv-movs-box').hidden=true;
+}
+function switchTab(name){ document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); }); ['cli','prov','inter'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); }); if(name==='inter') cargarInter(); }
+async function cargarInter(){
+  var r=await window.sf('getCuentasInternas'); var movs=(r.ok?r.movimientos:[])||[];
+  // neto por par: origen le debe a destino
+  var net={};
+  movs.forEach(function(m){ var k=m.origenId+'>'+m.destinoId; net[k]=(net[k]||0)+m.monto; });
+  // combinar A>B con B>A
+  var vistos={}, filas=[];
+  Object.keys(net).forEach(function(k){ var pa=k.split('>'); var a=pa[0], b=pa[1]; if(vistos[k]) return; var inv=b+'>'+a; var val=net[k]-(net[inv]||0); vistos[k]=true; vistos[inv]=true; if(Math.abs(val)>0.5){ if(val>0) filas.push({deudor:a, acreedor:b, monto:val}); else filas.push({deudor:b, acreedor:a, monto:-val}); } });
+  document.getElementById('inter-net').innerHTML = filas.length ? filas.map(function(f){ return '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;"><span><b>'+(SUCID[f.deudor]||f.deudor)+'</b> le debe a <b>'+(SUCID[f.acreedor]||f.acreedor)+'</b>: <span style="color:var(--bad);font-weight:700;">'+fmt$(f.monto)+'</span></span><button class="btn-sec" onclick="saldarInter('+f.deudor+','+f.acreedor+','+f.monto+')">Saldar / registrar pago</button></div>'; }).join('') : '<div class="muted">No hay saldos pendientes entre locales.</div>';
+  document.getElementById('inter-tbody').innerHTML = movs.length ? movs.map(function(m){ var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; return '<tr><td>'+f+'</td><td>'+(SUCID[m.origenId]||'')+'</td><td>'+(SUCID[m.destinoId]||'')+'</td><td>'+(m.concepto||'')+'</td><td class="num">'+fmt$(m.monto)+'</td></tr>'; }).join('') : '<tr><td colspan="5" class="muted">Sin movimientos.</td></tr>';
+}
+async function saldarInter(deudorId, acreedorId, monto){
+  var m=prompt('¿Qué monto salda '+(SUCID[deudorId]||'')+' → '+(SUCID[acreedorId]||'')+'?', Math.round(monto));
+  if(m===null) return; var val=Number(m); if(!(val>0)){ toast('Monto inválido','error'); return; }
+  var r=await window.sp('registrarLiquidacion',{ deudor:(SUCID[deudorId]||deudorId), acreedor:(SUCID[acreedorId]||acreedorId), monto:val });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Liquidación registrada'); cargarInter();
+}
+function pintarSaldo(el, s, etiquetaDebe, etiquetaFavor){ if(s>0.5){ el.className='saldo debe'; el.textContent=fmt$(s); } else if(s<-0.5){ el.className='saldo favor'; el.textContent=fmt$(-s)+' a favor'; } else { el.className='saldo cero'; el.textContent='$0'; } }
+
+// ---- CLIENTES ----
+async function verCliente(){
+  var id=document.getElementById('cc-cli').value;
+  var box=document.getElementById('cc-saldo-box'), mb=document.getElementById('cc-movs-box');
+  if(!id){ box.hidden=true; mb.hidden=true; return; }
+  var r=await window.sf('getMovimientosCC&id='+encodeURIComponent(id));
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  box.hidden=false; mb.hidden=false;
+  pintarSaldo(document.getElementById('cc-saldo'), r.saldo);
+  document.getElementById('cc-tbody').innerHTML=(r.movimientos||[]).slice().reverse().map(function(m){
+    var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
+    var esPago=/pago/i.test(m.tipo);
+    return '<tr><td>'+f+'</td><td>'+(m.concepto||'')+'</td><td>'+(m.comprobante||'')+'</td>'+
+      '<td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="muted">Sin movimientos.</td></tr>';
+}
+async function pagarCC(){
+  var id=document.getElementById('cc-cli').value; var monto=document.getElementById('cc-monto').value;
+  if(!id){ toast('Elegí un cliente','error'); return; } if(!(Number(monto)>0)){ toast('Poné un monto','error'); return; }
+  var r=await window.sp('registrarPagoCC',{clienteId:id, sucursal:sucActual, monto:monto, formaPago:document.getElementById('cc-fp').value, concepto:'Pago cta cte'});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  document.getElementById('cc-monto').value=''; toast('Pago registrado'); verCliente();
+}
+
+// ---- PROVEEDORES ----
+async function verProveedor(){
+  var id=document.getElementById('pv-prov').value;
+  var box=document.getElementById('pv-saldo-box'), mb=document.getElementById('pv-movs-box');
+  if(!id){ box.hidden=true; mb.hidden=true; return; }
+  var r=await window.sf('getMovCuenta&id='+encodeURIComponent(id));
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  box.hidden=false; mb.hidden=false;
+  pintarSaldo(document.getElementById('pv-saldo'), r.saldo);
+  document.getElementById('pv-tbody').innerHTML=(r.movimientos||[]).slice().reverse().map(function(m){
+    var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
+    var esPago=/pago/i.test(m.tipo);
+    return '<tr><td>'+f+'</td><td>'+(m.descripcion||'')+(m.local?(' <span class="muted">('+m.local+')</span>'):'')+'</td><td>'+(m.comprobante||'')+'</td>'+
+      '<td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="muted">Sin movimientos.</td></tr>';
+}
+async function movProv(){
+  var id=document.getElementById('pv-prov').value; var monto=document.getElementById('pv-monto').value;
+  if(!id){ toast('Elegí una cuenta','error'); return; } if(!(Number(monto)>0)){ toast('Poné un monto','error'); return; }
+  var r=await window.sp('registrarPagoProveedor',{cuentaId:id, sucursal:sucActual, tipo:document.getElementById('pv-tipo').value, monto:monto, formaPago:document.getElementById('pv-fp').value, fondo:document.getElementById('pv-fondo').value, descripcion:(document.getElementById('pv-tipo').value==='cargo'?'Cargo manual':'Pago a proveedor')});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  document.getElementById('pv-monto').value=''; toast('Registrado'); verProveedor();
+}
+</script>
+</body>
+</html>

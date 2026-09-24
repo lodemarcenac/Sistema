@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compras — Carnicería</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css">
+<style>
+  header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  header .ttl{font-size:var(--fs-xl);font-weight:700;}
+  header nav a{color:#dbe8ff;text-decoration:none;font-size:var(--fs-sm);font-weight:600;margin-right:14px;}
+  header nav a.on,header nav a:hover{color:#fff;}
+  header .suc select{padding:5px 8px;border-radius:var(--radius-sm);border:none;font-family:inherit;font-size:var(--fs-sm);}
+  header button{background:#fff;color:var(--brand);border:none;padding:7px 13px;border-radius:var(--radius-sm);font-weight:600;cursor:pointer;font-size:var(--fs-sm);}
+  main{max-width:1050px;}
+  .abm-nueva{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end;}
+  .abm-nueva label{display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;text-transform:uppercase;letter-spacing:.03em;}
+  .abm-nueva input,.abm-nueva select,.linea input,.linea select{width:100%;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;background:#fff;}
+  .linea{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;}
+  .linea label{display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;}
+  .tot{font-size:var(--fs-xl);font-weight:700;color:var(--brand);}
+  .ac-pop{position:absolute;background:#fff;border:1px solid var(--border-inp);border-radius:var(--radius-sm);max-height:260px;overflow:auto;z-index:200;box-shadow:var(--shadow-pop);}
+  .ac-pop div{padding:8px 12px;cursor:pointer;font-size:var(--fs-sm);border-bottom:1px solid var(--line-2);}
+  .ac-pop div:hover{background:var(--brand-soft);}
+  .locs label{display:inline-flex;align-items:center;gap:5px;margin-right:14px;font-size:var(--fs-sm);}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>🥩 Carnicería</h1><p>Ingresá con tu usuario.</p>
+    <form id="login-form">
+      <label>Email</label><input type="email" id="li-email" autocomplete="username" required>
+      <label>Contraseña</label><input type="password" id="li-pass" autocomplete="current-password" required>
+      <button type="submit" id="li-btn">Entrar</button><div class="err" id="li-err"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div class="ttl">🧾 Compras</div>
+      <nav><a href="index.html">📊 Tablero</a><a href="productos.html">🏷️ Productos</a><a href="stock.html">📦 Stock</a><a href="compras.html" class="on">🧾 Compras</a><a href="remitos.html">🔄 Remitos</a><a href="cuentas.html">📒 Cuentas</a><a href="caja.html">💵 Caja</a><a href="ventas.html">🛒 Ventas</a><a href="configuracion.html">⚙️ Config</a></nav>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div class="suc">📍 <select id="selSuc" onchange="cambiarSuc()"></select></div>
+      <button id="btn-salir">Salir</button>
+    </div>
+  </header>
+  <main>
+    <div class="tabs">
+      <button class="tab on" data-t="compra" onclick="switchTab('compra')">Nueva compra</button>
+      <button class="tab" data-t="gastos" onclick="switchTab('gastos')">Gastos</button>
+      <button class="tab" data-t="elab" onclick="switchTab('elab')">Elaboración</button>
+      <button class="tab" data-t="prov" onclick="switchTab('prov')">Proveedores</button>
+    </div>
+
+    <!-- NUEVA COMPRA -->
+    <div id="t-compra">
+      <div class="card">
+        <h3>Nueva compra</h3>
+        <div class="abm-nueva" style="margin-bottom:12px;">
+          <div><label>Proveedor / Cuenta</label><select id="c-cuenta"></select></div>
+          <div><label>Comprobante (opc)</label><input id="c-comp" placeholder="N° factura / remito"></div>
+        </div>
+        <div id="c-lineas"></div>
+        <button class="mini-btn" onclick="addLineaCompra()">+ Agregar producto</button>
+        <div class="form-row sep" style="justify-content:space-between;align-items:center;margin-top:14px;">
+          <div class="abm-nueva" style="flex:1;">
+            <div><label>Pago ahora (opc)</label><input id="c-pago" type="number" step="0.01" placeholder="0 = queda a cuenta"></div>
+            <div><label>Forma de pago</label><select id="c-fp"></select></div>
+            <div><label>Fondo (si efectivo)</label><select id="c-fondo"><option value="caja">Caja del día</option><option value="reserva">Efectivo guardado</option></select></div>
+          </div>
+          <div style="text-align:right;"><div class="muted">Total compra</div><div class="tot" id="c-total">$0</div></div>
+        </div>
+        <div style="margin-top:12px;"><button class="btn" onclick="registrarCompraUI()">Registrar compra</button></div>
+      </div>
+    </div>
+
+    <!-- GASTOS -->
+    <div id="t-gastos" hidden>
+      <div class="card" style="margin-bottom:14px;">
+        <h3 id="g-titulo">Nuevo gasto</h3>
+        <div class="abm-nueva">
+          <div><label>Fecha</label><input id="g-fecha" type="date"></div>
+          <div><label>Imputado a (local)</label><select id="g-local"></select></div>
+          <div><label>Categoría</label><select id="g-cat"></select></div>
+          <div><label>Proveedor (opc)</label><select id="g-prov"></select></div>
+          <div><label>Monto</label><input id="g-monto" type="number" step="0.01"></div>
+          <div><label>Forma de pago</label><select id="g-fp"></select></div>
+          <div><label>Fondo (si es efectivo)</label><select id="g-fondo"><option value="caja">Caja del día</option><option value="reserva">Efectivo guardado</option></select></div>
+          <div><label>Comprobante (opc)</label><input id="g-comp"></div>
+          <div style="grid-column:1/-1;"><label>Descripción</label><input id="g-desc" placeholder="Detalle del gasto"></div>
+        </div>
+        <div style="margin-top:12px;"><button class="btn" onclick="guardarGastoUI()">Guardar gasto</button> <button class="btn-sec" id="g-cancel" hidden onclick="cancelarEdicionGasto()">Cancelar edición</button></div>
+      </div>
+      <div class="card p0">
+        <div style="padding:12px;"><input id="g-buscar" placeholder="Buscar gasto (descripción, categoría, proveedor)…" oninput="renderGastos()" style="width:100%;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></div>
+        <div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Local</th><th>Proveedor</th><th class="num">Monto</th><th>Pago</th><th></th></tr></thead><tbody id="g-tbody"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- ELABORACIÓN -->
+    <div id="t-elab" hidden>
+      <div class="card">
+        <h3>Elaboración / Troceo</h3>
+        <p class="resumen" style="margin-bottom:12px;">Los <b>insumos salen</b> del stock y las <b>salidas entran</b>. Ej.: troceás media res (insumo) y obtenés cortes (salidas).</p>
+        <div class="abm-nueva" style="margin-bottom:12px;">
+          <div><label>Tipo</label><select id="e-tipo"><option value="troceo">Troceo</option><option value="elaborado">Elaborado</option></select></div>
+        </div>
+        <h4 style="margin:6px 0;">Insumos (salen)</h4>
+        <div id="e-insumos"></div><button class="mini-btn" onclick="addLineaElab('e-insumos')">+ Insumo</button>
+        <h4 style="margin:14px 0 6px;">Salidas (entran)</h4>
+        <div id="e-salidas"></div><button class="mini-btn" onclick="addLineaElab('e-salidas')">+ Salida</button>
+        <div style="margin-top:14px;"><button class="btn" onclick="registrarElabUI()">Registrar elaboración</button></div>
+      </div>
+    </div>
+
+    <!-- PROVEEDORES -->
+    <div id="t-prov" hidden>
+      <div class="card">
+        <h3>Proveedores</h3>
+        <div class="tblwrap"><table class="data"><thead><tr><th>Nombre</th><th>CUIT</th><th>Teléfono</th><th>Email</th><th></th></tr></thead><tbody id="p-tbody"></tbody></table></div>
+        <div class="abm-nueva" style="margin-top:12px;">
+          <div><label>Nuevo proveedor</label><input id="np-nom" placeholder="Nombre"></div>
+          <div><label>CUIT</label><input id="np-cuit"></div>
+          <div><label>Teléfono</label><input id="np-tel"></div>
+          <div><label>Email</label><input id="np-email"></div>
+          <button class="btn" onclick="crearProvUI()">Agregar</button>
+        </div>
+      </div>
+      <div class="card" style="margin-top:14px;">
+        <h3>Cuentas de proveedor</h3>
+        <p class="muted" style="font-size:.85rem;margin-bottom:10px;">Cada cuenta agrupa uno o varios locales que <b>comparten ese saldo</b> con el proveedor. Cada local ve solo las cuentas donde participa.</p>
+        <div class="abm-nueva" style="margin-bottom:10px;"><div><label>Proveedor</label><select id="cp-prov" onchange="renderCuentas()"></select></div></div>
+        <div id="cp-lista"></div>
+        <div class="abm-nueva" style="border-top:1px solid var(--line-2);padding-top:12px;margin-top:6px;">
+          <div style="grid-column:1/-1;"><label>Nueva cuenta (etiqueta)</label><input id="cp-nom" placeholder="Ej: Central+Playa (junta) o Fábrica"></div>
+          <div style="grid-column:1/-1;"><label>Locales de esta cuenta</label><div class="locs" id="cp-locs"></div></div>
+          <button class="btn" onclick="crearCuentaUI()">Agregar cuenta</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="ac-pop" class="ac-pop" hidden></div>
+<div class="toast-c" id="toast-c"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="sb-api.js"></script>
+<script src="auth-guard.js"></script>
+<script>
+var sb=window.sbClient;
+var PRODS={}, SUCS=[], PROVS=[], CG=[], FORMAS=['Efectivo','Tarjeta','Virtual','Cuenta Corriente'];
+var sucActual='', GASTOS=[], gastoEditId=null, SUCID={};
+var CUENTAS_LOCAL=[], CUENTAS_PROV=[];
+function fmt$(n){ return '$'+Math.round(Number(n)||0).toLocaleString('es-AR'); }
+function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
+
+document.getElementById('login-form').addEventListener('submit', async function(e){
+  e.preventDefault(); var btn=document.getElementById('li-btn'), err=document.getElementById('li-err'); err.textContent=''; btn.disabled=true; btn.textContent='Entrando…';
+  var r=await sb.auth.signInWithPassword({ email:document.getElementById('li-email').value.trim(), password:document.getElementById('li-pass').value });
+  btn.disabled=false; btn.textContent='Entrar'; if(r.error){ err.textContent='No se pudo entrar: '+r.error.message; return; } iniciar();
+});
+document.getElementById('btn-salir').addEventListener('click', async function(){ await sb.auth.signOut(); location.reload(); });
+(async function(){ var s=await sb.auth.getSession(); if(s.data && s.data.session) iniciar(); })();
+
+async function iniciar(){
+  document.getElementById('login').hidden=true; document.getElementById('app').hidden=false;
+  var rp=await window.sf('getProductos'); PRODS=(rp.ok?rp.productos:{})||{};
+  var rs=await window.sf('getSucursales'); var suc=(rs.ok?(rs.sucursales||[]):[]); SUCS=suc.map(function(s){return s.nombre;}); SUCID={}; suc.forEach(function(s){ SUCID[s.id]=s.nombre; });
+  var rpr=await window.sf('getProveedores'); PROVS=(rpr.ok?rpr.proveedores:[])||[];
+  var rcp=await window.sf('getCuentasProveedor'); CUENTAS_PROV=(rcp.ok?rcp.proveedores:[])||[];
+  var rcg=await window.sf('getCategoriasGasto'); CG=(rcg.ok?rcg.categorias:[])||[];
+  var rc=await window.sf('getConfigGeneral'); if(rc.ok && rc.config && rc.config.formas_pago){ try{ var a=JSON.parse(rc.config.formas_pago); if(a.length) FORMAS=a.map(function(f){return f.nombre||f;}); }catch(e){} }
+  poblarSuc(); poblarSelects(); await cargarCuentasLocal();
+  document.getElementById('g-fecha').value=new Date().toLocaleDateString('en-CA');
+  addLineaCompra(); addLineaCompra(); addLineaElab('e-insumos'); addLineaElab('e-salidas');
+  renderProv();
+}
+function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; }
+function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarCuentasLocal(); }
+async function cargarCuentasLocal(){
+  var r=await window.sf('getCuentasDeLocal&sucursal='+encodeURIComponent(sucActual)); CUENTAS_LOCAL=(r.ok?r.cuentas:[])||[];
+  var sel=document.getElementById('c-cuenta');
+  sel.innerHTML = CUENTAS_LOCAL.length ? ('<option value="">(elegir proveedor / cuenta)</option>'+CUENTAS_LOCAL.map(function(c){ return '<option value="'+c.id+'">'+c.proveedor+(c.nombre?(' — '+c.nombre):'')+'</option>'; }).join('')) : '<option value="">(este local no tiene cuentas — cargalas en Proveedores)</option>';
+}
+function poblarSelects(){
+  var fp=FORMAS.map(function(f){return '<option>'+f+'</option>';}).join('');
+  document.getElementById('c-fp').innerHTML=fp; document.getElementById('g-fp').innerHTML=fp;
+  document.getElementById('g-prov').innerHTML='<option value="">(sin proveedor)</option>'+PROVS.map(function(p){return '<option value="'+p.id+'">'+p.nombre+'</option>';}).join('');
+  document.getElementById('g-local').innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join('');
+  document.getElementById('g-cat').innerHTML='<option value="">(elegir categoría)</option>'+CG.map(function(c){return '<option value="'+c.id+'">'+c.nombre+(c.grupo?(' — '+c.grupo):'')+'</option>';}).join('');
+}
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); });
+  ['compra','gastos','elab','prov'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); });
+  if(name==='gastos') cargarGastos();
+  if(name==='prov') renderProv();
+}
+
+// ---- autocomplete productos (mismo de Ventas/Productos) ----
+var acInput=null, acM=[];
+function acFilter(v){ v=String(v||'').trim().toLowerCase(); if(!v) return []; return Object.keys(PRODS).filter(function(c){ return (c+' '+(PRODS[c].nombre||'')).toLowerCase().indexOf(v)>=0; }).slice(0,30); }
+function acShow(input){ acInput=input; acM=acFilter(input.value); var p=document.getElementById('ac-pop'); if(!acM.length){ p.hidden=true; return; } p.innerHTML=acM.map(function(c,i){ var pr=PRODS[c]; return '<div onmousedown="acPick(event,'+i+')">'+(pr.nombre||c)+' <span style="color:#8891a3">('+c+')</span></div>'; }).join(''); var r=input.getBoundingClientRect(); p.style.left=(r.left+scrollX)+'px'; p.style.top=(r.bottom+scrollY)+'px'; p.style.width=Math.max(r.width,240)+'px'; p.hidden=false; }
+function acPick(ev,i){ if(ev) ev.preventDefault(); var c=acM[i]; if(acInput&&c){ acInput.value=c; acInput.dispatchEvent(new Event('change')); } document.getElementById('ac-pop').hidden=true; }
+document.addEventListener('input', function(e){ if(e.target.classList&&e.target.classList.contains('prod-ac')) acShow(e.target); });
+document.addEventListener('click', function(e){ var p=document.getElementById('ac-pop'); if(p&&!p.hidden&&e.target!==acInput&&!p.contains(e.target)&&!(e.target.classList&&e.target.classList.contains('prod-ac'))) p.hidden=true; });
+
+// ---- NUEVA COMPRA ----
+function addLineaCompra(){
+  var d=document.createElement('div'); d.className='linea';
+  d.innerHTML='<div><label>Producto</label><input class="c-cod prod-ac" autocomplete="off" placeholder="código o nombre" onchange="totalCompra()"></div>'+
+    '<div><label>Cantidad</label><input class="c-cant" type="number" step="0.001" oninput="totalCompra()"></div>'+
+    '<div><label>Costo unit.</label><input class="c-cu" type="number" step="0.01" oninput="totalCompra()"></div>'+
+    '<div><label>Subtotal</label><input class="c-sub" readonly style="background:#f2f4f8;"></div>'+
+    '<button class="x-btn" title="Quitar" onclick="this.parentNode.remove();totalCompra()">✕</button>';
+  document.getElementById('c-lineas').appendChild(d);
+}
+function totalCompra(){
+  var tot=0;
+  document.querySelectorAll('#c-lineas .linea').forEach(function(l){ var cant=Number(l.querySelector('.c-cant').value)||0; var cu=Number(l.querySelector('.c-cu').value)||0; var sub=+(cant*cu).toFixed(2); l.querySelector('.c-sub').value=sub?fmt$(sub):''; tot+=sub; });
+  document.getElementById('c-total').textContent=fmt$(tot);
+  return tot;
+}
+async function registrarCompraUI(){
+  var cuentaId=document.getElementById('c-cuenta').value;
+  var cuenta=CUENTAS_LOCAL.find(function(c){ return String(c.id)===String(cuentaId); });
+  var provId=cuenta?cuenta.proveedorId:null;
+  var items=[];
+  document.querySelectorAll('#c-lineas .linea').forEach(function(l){ var cod=(l.querySelector('.c-cod').value||'').trim(); var cant=l.querySelector('.c-cant').value; var cu=l.querySelector('.c-cu').value; if(cod && Number(cant)>0){ items.push({codigo:cod, cantidad:cant, costo_unit:cu}); } });
+  if(!items.length){ toast('Cargá al menos un producto con cantidad','error'); return; }
+  var total=totalCompra();
+  var r=await window.sp('registrarCompra',{compra:{ sucursal:sucActual, proveedor_id:(provId||null), cuenta_id:(cuentaId||null), comprobante:document.getElementById('c-comp').value.trim(), total:total, pago_monto:document.getElementById('c-pago').value||0, forma_pago:document.getElementById('c-fp').value, fondo:document.getElementById('c-fondo').value, items:items }});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Compra registrada — stock y costo actualizados');
+  document.getElementById('c-lineas').innerHTML=''; document.getElementById('c-comp').value=''; document.getElementById('c-pago').value=''; addLineaCompra(); addLineaCompra(); totalCompra();
+  var rp=await window.sf('getProductos'); PRODS=(rp.ok?rp.productos:{})||{};
+}
+
+// ---- GASTOS ----
+async function cargarGastos(){ var r=await window.sf('getGastos&limit=300'); GASTOS=(r.ok?r.gastos:[])||[]; renderGastos(); }
+function renderGastos(){
+  var q=(document.getElementById('g-buscar').value||'').trim().toLowerCase();
+  var arr=GASTOS.filter(function(g){ return !q || (g.descripcion+' '+g.categoria+' '+g.proveedor).toLowerCase().indexOf(q)>=0; });
+  document.getElementById('g-tbody').innerHTML=arr.map(function(g){
+    var f=g.fecha?new Date(g.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
+    return '<tr><td>'+f+'</td><td>'+(g.categoria||'')+(g.grupo?' <span class="muted">('+g.grupo+')</span>':'')+'</td><td>'+(g.descripcion||'')+'</td><td>'+(SUCID[g.destinatarioId]||'')+'</td><td>'+(g.proveedor||'')+'</td>'+
+      '<td class="num">'+fmt$(g.monto)+'</td><td>'+(g.formaPago||'')+'</td>'+
+      '<td style="white-space:nowrap;"><button class="mini-btn" onclick="editarGasto('+g.id+')">Editar</button><button class="x-btn" title="Eliminar" onclick="borrarGasto('+g.id+')">✕</button></td></tr>';
+  }).join('') || '<tr><td colspan="8" class="muted">Sin gastos.</td></tr>';
+}
+async function guardarGastoUI(){
+  var monto=document.getElementById('g-monto').value; if(!(Number(monto)>0)){ toast('Poné un monto','error'); return; }
+  var payload={ id:gastoEditId, fecha:document.getElementById('g-fecha').value, destinatario:document.getElementById('g-local').value, sucursal:sucActual, categoriaId:(document.getElementById('g-cat').value||null), proveedorId:(document.getElementById('g-prov').value||null), monto:monto, formaPago:document.getElementById('g-fp').value, fondo:document.getElementById('g-fondo').value, comprobante:document.getElementById('g-comp').value.trim(), descripcion:document.getElementById('g-desc').value.trim() };
+  var r=await window.sp('guardarGasto',payload);
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast(gastoEditId?'Gasto actualizado':'Gasto guardado'); cancelarEdicionGasto(); cargarGastos();
+}
+function editarGasto(id){
+  var g=GASTOS.find(function(x){return x.id===id;}); if(!g) return;
+  gastoEditId=id; document.getElementById('g-titulo').textContent='Editar gasto'; document.getElementById('g-cancel').hidden=false;
+  document.getElementById('g-fecha').value=g.fecha?g.fecha.slice(0,10):'';
+  document.getElementById('g-cat').value=g.categoriaId||''; document.getElementById('g-prov').value=g.proveedorId||'';
+  document.getElementById('g-monto').value=g.monto; document.getElementById('g-fp').value=g.formaPago||''; document.getElementById('g-comp').value=g.comprobante||''; document.getElementById('g-desc').value=g.descripcion||'';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function cancelarEdicionGasto(){ gastoEditId=null; document.getElementById('g-titulo').textContent='Nuevo gasto'; document.getElementById('g-cancel').hidden=true; ['g-monto','g-comp','g-desc'].forEach(function(id){document.getElementById(id).value='';}); }
+async function borrarGasto(id){ if(!confirm('¿Eliminar este gasto?')) return; var r=await window.sp('eliminarGasto',{id:id}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } toast('Gasto eliminado'); cargarGastos(); }
+
+// ---- ELABORACIÓN ----
+function addLineaElab(cont){
+  var d=document.createElement('div'); d.className='linea'; d.style.gridTemplateColumns='2fr 1fr auto';
+  d.innerHTML='<div><label>Producto</label><input class="e-cod prod-ac" autocomplete="off" placeholder="código o nombre"></div>'+
+    '<div><label>Cantidad</label><input class="e-cant" type="number" step="0.001"></div>'+
+    '<button class="x-btn" title="Quitar" onclick="this.parentNode.remove()">✕</button>';
+  document.getElementById(cont).appendChild(d);
+}
+function leerLineasElab(cont){ var arr=[]; document.querySelectorAll('#'+cont+' .linea').forEach(function(l){ var cod=(l.querySelector('.e-cod').value||'').trim(); var cant=l.querySelector('.e-cant').value; if(cod && Number(cant)>0) arr.push({codigo:cod, cantidad:cant}); }); return arr; }
+async function registrarElabUI(){
+  var insumos=leerLineasElab('e-insumos'), salidas=leerLineasElab('e-salidas');
+  if(!insumos.length || !salidas.length){ toast('Cargá al menos un insumo y una salida','error'); return; }
+  var r=await window.sp('registrarElaboracion',{elaboracion:{ sucursal:sucActual, tipo:document.getElementById('e-tipo').value, insumos:insumos, salidas:salidas }});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Elaboración registrada — stock actualizado');
+  document.getElementById('e-insumos').innerHTML=''; document.getElementById('e-salidas').innerHTML=''; addLineaElab('e-insumos'); addLineaElab('e-salidas');
+}
+
+// ---- PROVEEDORES ----
+function renderProv(){
+  document.getElementById('p-tbody').innerHTML=PROVS.map(function(p,i){
+    return '<tr><td><input value="'+(p.nombre||'').replace(/"/g,'&quot;')+'" onchange="editarProv('+p.id+',\'nombre\',this.value)" style="border:none;background:none;width:100%;font-family:inherit;"></td>'+
+      '<td><input value="'+(p.cuit||'').replace(/"/g,'&quot;')+'" onchange="editarProv('+p.id+',\'cuit\',this.value)" style="border:none;background:none;width:100%;font-family:inherit;"></td>'+
+      '<td><input value="'+(p.telefono||'').replace(/"/g,'&quot;')+'" onchange="editarProv('+p.id+',\'telefono\',this.value)" style="border:none;background:none;width:100%;font-family:inherit;"></td>'+
+      '<td><input value="'+(p.email||'').replace(/"/g,'&quot;')+'" onchange="editarProv('+p.id+',\'email\',this.value)" style="border:none;background:none;width:100%;font-family:inherit;"></td>'+
+      '<td><button class="x-btn" title="Eliminar" onclick="borrarProv('+p.id+',\''+String(p.nombre).replace(/'/g,"\\'")+'\')">✕</button></td></tr>';
+  }).join('') || '<tr><td colspan="5" class="muted">Sin proveedores.</td></tr>';
+  poblarCP();
+}
+function poblarCP(){
+  var sel=document.getElementById('cp-prov'); var cur=sel.value;
+  sel.innerHTML='<option value="">(elegir proveedor)</option>'+CUENTAS_PROV.map(function(p){return '<option value="'+p.id+'">'+p.nombre+'</option>';}).join('');
+  sel.value=cur;
+  document.getElementById('cp-locs').innerHTML=SUCS.map(function(s){return '<label><input type="checkbox" class="cp-loc" value="'+String(s).replace(/"/g,'&quot;')+'"> '+s+'</label>';}).join('');
+  renderCuentas();
+}
+function renderCuentas(){
+  var pid=document.getElementById('cp-prov').value; var cont=document.getElementById('cp-lista');
+  if(!pid){ cont.innerHTML='<p class="muted" style="font-size:.85rem;">Elegí un proveedor para ver/crear sus cuentas.</p>'; return; }
+  var prov=CUENTAS_PROV.find(function(p){return String(p.id)===String(pid);}); var cuentas=(prov&&prov.cuentas)||[];
+  cont.innerHTML = cuentas.length ? cuentas.map(function(c){
+    return '<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><input value="'+String(c.nombre).replace(/"/g,'&quot;')+'" id="cn-'+c.id+'" placeholder="etiqueta" style="flex:1;padding:6px 9px;border:1px solid var(--border-inp);border-radius:6px;font-family:inherit;"><button class="x-btn" title="Eliminar cuenta" onclick="borrarCuenta('+c.id+')">✕</button></div>'+
+      '<div class="locs" style="margin-top:8px;">'+SUCS.map(function(s){ return '<label><input type="checkbox" class="cl-'+c.id+'" value="'+String(s).replace(/"/g,'&quot;')+'" '+((c.locales||[]).indexOf(s)>=0?'checked':'')+'> '+s+'</label>'; }).join('')+'</div>'+
+      '<button class="mini-btn" style="margin-top:8px;" onclick="guardarCuentaRow('+c.id+','+pid+')">Guardar cuenta</button></div>';
+  }).join('') : '<p class="muted" style="font-size:.85rem;">Este proveedor no tiene cuentas todavía.</p>';
+}
+async function crearCuentaUI(){
+  var pid=document.getElementById('cp-prov').value; if(!pid){ toast('Elegí un proveedor','error'); return; }
+  var locs=[]; document.querySelectorAll('.cp-loc:checked').forEach(function(c){locs.push(c.value);});
+  if(!locs.length){ toast('Elegí al menos un local para la cuenta','error'); return; }
+  var r=await window.sp('guardarCuentaProveedor',{proveedorId:Number(pid), nombre:document.getElementById('cp-nom').value.trim(), locales:locs});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  document.getElementById('cp-nom').value=''; document.querySelectorAll('.cp-loc').forEach(function(c){c.checked=false;});
+  await recargarCuentas(); toast('Cuenta creada');
+}
+async function guardarCuentaRow(cid,pid){
+  var locs=[]; document.querySelectorAll('.cl-'+cid+':checked').forEach(function(c){locs.push(c.value);});
+  if(!locs.length){ toast('La cuenta necesita al menos un local','error'); return; }
+  var r=await window.sp('guardarCuentaProveedor',{id:cid, proveedorId:Number(pid), nombre:document.getElementById('cn-'+cid).value.trim(), locales:locs});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  await recargarCuentas(); toast('Cuenta guardada');
+}
+async function borrarCuenta(cid){ if(!confirm('¿Eliminar esta cuenta?')) return; var r=await window.sp('eliminarCuentaProveedor',{id:cid}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } await recargarCuentas(); toast('Cuenta eliminada'); }
+async function recargarCuentas(){ var rcp=await window.sf('getCuentasProveedor'); CUENTAS_PROV=(rcp.ok?rcp.proveedores:[])||[]; poblarCP(); await cargarCuentasLocal(); }
+async function editarProv(id,campo,val){
+  var p=PROVS.find(function(x){return x.id===id;}); if(!p) return; var pay={id:id, nombre:p.nombre, cuit:p.cuit, telefono:p.telefono, email:p.email}; pay[campo]=val;
+  var r=await window.sp('guardarProveedor',pay); if(!r.ok){ toast('Error: '+r.error,'error'); return; } p[campo]=val; toast('Proveedor guardado');
+}
+async function crearProvUI(){
+  var nom=document.getElementById('np-nom').value.trim(); if(!nom){ toast('Poné el nombre','error'); return; }
+  var r=await window.sp('guardarProveedor',{nombre:nom, cuit:document.getElementById('np-cuit').value, telefono:document.getElementById('np-tel').value, email:document.getElementById('np-email').value});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  ['np-nom','np-cuit','np-tel','np-email'].forEach(function(id){document.getElementById(id).value='';});
+  var rpr=await window.sf('getProveedores'); PROVS=(rpr.ok?rpr.proveedores:[])||[];
+  var rcp=await window.sf('getCuentasProveedor'); CUENTAS_PROV=(rcp.ok?rcp.proveedores:[])||[];
+  poblarSelects(); renderProv(); toast('Proveedor agregado');
+}
+async function borrarProv(id,nom){ if(!confirm('¿Eliminar el proveedor "'+nom+'"?')) return; var r=await window.sp('eliminarProveedor',{id:id}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } toast(r.soft?'Proveedor desactivado (tenía movimientos)':'Proveedor eliminado'); var rpr=await window.sf('getProveedores'); PROVS=(rpr.ok?rpr.proveedores:[])||[]; poblarSelects(); renderProv(); }
+</script>
+</body>
+</html>
