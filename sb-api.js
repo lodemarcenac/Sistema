@@ -169,6 +169,16 @@
       var r=await q; if(r.error) throw r.error;
       return {ok:true, gastos:(r.data||[]).map(function(g){ return { id:g.id, fecha:g.fecha, monto:Number(g.monto)||0, descripcion:g.descripcion||'', formaPago:g.forma_pago||'', comprobante:g.comprobante||'', sucursalId:g.sucursal_id, destinatarioId:g.destinatario_id, categoriaId:g.categoria_gasto_id, proveedorId:g.proveedor_id, categoria:g.cat?g.cat.nombre:'', grupo:g.cat?g.cat.grupo:'', proveedor:g.prov?g.prov.nombre:'' }; })};
     },
+    getSaldosClientes: async function(){
+      var cc=await sb.from('cuenta_corriente').select('cliente_id,tipo,monto'); if(cc.error) throw cc.error;
+      var saldo={}; (cc.data||[]).forEach(function(x){ if(x.cliente_id==null) return; var v=Number(x.monto)||0; saldo[x.cliente_id]=(saldo[x.cliente_id]||0)+(/pago/i.test(x.tipo)?-v:v); });
+      var ids=Object.keys(saldo); if(!ids.length) return {ok:true, clientes:[]};
+      var cl=await sb.from('clientes').select('id,nombre').in('id',ids); if(cl.error) throw cl.error;
+      var nom={}; (cl.data||[]).forEach(function(c){ nom[c.id]=c.nombre; });
+      var arr=ids.map(function(id){ return { clienteId:Number(id), nombre:nom[id]||('#'+id), saldo:+(saldo[id]).toFixed(2) }; });
+      arr.sort(function(a,b){ return b.saldo-a.saldo; });
+      return {ok:true, clientes:arr};
+    },
     getMovimientosCC: async function(params){
       var id=params&&params.id; if(!id) return {ok:true, movimientos:[], saldo:0};
       var r=await sb.from('cuenta_corriente').select('fecha,tipo,monto,concepto,comprobante,forma_pago').eq('cliente_id',id).order('fecha'); if(r.error) throw r.error;

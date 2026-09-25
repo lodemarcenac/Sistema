@@ -132,11 +132,13 @@ async function iniciar(){
 }
 function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarTodo(); }
 async function cargarTodo(){ await cargarCaja(); await cargarReserva(); await cargarHist(); }
+document.addEventListener('perm-listo', function(){ var ca=document.getElementById('ab-cajero'); if(ca && !ca.value) ca.value=(window.PERM&&(window.PERM.nombre||window.PERM.email))||''; });
 
 async function cargarCaja(){
   var r=await window.sf('getCajaAbierta&sucursal='+encodeURIComponent(sucActual)); cajaActual=(r.ok?r.caja:null);
   document.getElementById('caja-cerrada').hidden=!!cajaActual;
   document.getElementById('caja-abierta').hidden=!cajaActual;
+  if(!cajaActual){ var ca=document.getElementById('ab-cajero'); if(ca && !ca.value) ca.value=(window.PERM&&(window.PERM.nombre||window.PERM.email))||''; }
   if(!cajaActual) return;
   var rr=await window.sf('getCajaResumen&id='+cajaActual.id); var d=(rr.ok?rr.resumen:{})||{};
   document.getElementById('ca-info').textContent='Cajero: '+(cajaActual.cajero||'—')+' · abierta '+new Date(cajaActual.abiertaAt).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'});

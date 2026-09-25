@@ -93,6 +93,7 @@
     </div>
   </header>
   <main>
+    <div id="caja-banner" hidden style="background:#fdf0d5;border:1px solid #e7c66b;color:#7a5b00;border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:var(--fs-sm);"></div>
     <div class="grid">
       <div>
         <div class="scan">
@@ -137,13 +138,6 @@
       </div>
     </div>
   </main>
-</div>
-
-<div class="ov" id="ov-caja" hidden>
-  <div class="box" style="max-width:420px;">
-    <h3 id="ovc-tit">Caja</h3>
-    <div id="ovc-body"></div>
-  </div>
 </div>
 
 <div class="toast-c" id="toast-c"></div>
@@ -244,26 +238,27 @@ async function verificarCaja(){
   var r=await window.sf('getCajaAbierta&sucursal='+encodeURIComponent(sucActual));
   var caja=(r.ok?r.caja:null);
   var hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'});
-  var ov=document.getElementById('ov-caja'), body=document.getElementById('ovc-body'), tit=document.getElementById('ovc-tit');
+  var ban=document.getElementById('caja-banner');
   if(!caja){
-    cajaOK=false; tit.textContent='💵 Abrí la caja para vender';
-    body.innerHTML='<p class="muted" style="margin-bottom:10px;">Para vender en <b>'+sucActual+'</b> tenés que abrir la caja del día.</p>'+
-      '<label style="font-size:.72rem;color:var(--muted);text-transform:uppercase;font-weight:600;">Cajero</label><input id="ovc-cajero" style="width:100%;padding:9px;margin:4px 0 8px;border:1px solid var(--border-inp);border-radius:8px;font-family:inherit;">'+
-      '<label style="font-size:.72rem;color:var(--muted);text-transform:uppercase;font-weight:600;">Monto de apertura</label><input id="ovc-monto" type="number" step="0.01" value="0" style="width:100%;padding:9px;margin:4px 0 12px;border:1px solid var(--border-inp);border-radius:8px;font-family:inherit;">'+
-      '<button class="btn" onclick="abrirCajaVentas()">Abrir caja</button>';
-    ov.hidden=false; return;
+    cajaOK=false;
+    ban.style.background='#fdf0d5'; ban.style.borderColor='#e7c66b'; ban.style.color='#7a5b00';
+    ban.innerHTML='<span>💵 La caja está <b>cerrada</b>. Para <b>cobrar</b> tenés que abrirla.</span><button class="btn" onclick="abrirCajaVentas()">Abrir caja</button>';
+    ban.hidden=false; return;
   }
   var abrDia=new Date(caja.abiertaAt).toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'});
   if(abrDia!==hoy){
-    cajaOK=false; tit.textContent='⚠️ Cerrá la caja del día anterior';
-    body.innerHTML='<p class="muted" style="margin-bottom:12px;">Hay una caja abierta desde el <b>'+abrDia+'</b> (cajero '+(caja.cajero||'—')+'). Antes de vender hoy tenés que <b>cerrarla</b> y abrir una nueva.</p>'+
-      '<a class="btn" href="caja.html" style="text-decoration:none;display:inline-block;">Ir a Caja para cerrar</a>';
-    ov.hidden=false; return;
+    cajaOK=false;
+    ban.style.background='#fbeaea'; ban.style.borderColor='#e2a3a3'; ban.style.color='var(--bad)';
+    ban.innerHTML='<span>⚠️ Hay una caja abierta del <b>'+abrDia+'</b> (cajero '+(caja.cajero||'—')+'). Cerrala para poder cobrar hoy.</span><a class="btn" href="caja.html" style="text-decoration:none;">Ir a Caja</a>';
+    ban.hidden=false; return;
   }
-  cajaOK=true; ov.hidden=true;
+  cajaOK=true; ban.hidden=true;
 }
 async function abrirCajaVentas(){
-  var r=await window.sp('abrirCaja',{ sucursal:sucActual, cajero:document.getElementById('ovc-cajero').value.trim(), apertura:document.getElementById('ovc-monto').value });
+  var cajero=(window.PERM&&(window.PERM.nombre||window.PERM.email))||'';
+  var monto=prompt('Abrir caja de '+sucActual+' (cajero: '+(cajero||'—')+')\nMonto de apertura:', '0');
+  if(monto===null) return;
+  var r=await window.sp('abrirCaja',{ sucursal:sucActual, cajero:cajero, apertura:monto });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   toast('Caja abierta'); await verificarCaja(); document.getElementById('scan').focus();
 }

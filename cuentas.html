@@ -48,29 +48,11 @@
   </header>
   <main>
     <div class="tabs">
-      <button class="tab on" data-t="cli" onclick="switchTab('cli')">Cuenta corriente clientes</button>
-      <button class="tab" data-t="prov" onclick="switchTab('prov')">Deuda a proveedores</button>
+      <button class="tab on" data-t="prov" onclick="switchTab('prov')">Deuda a proveedores</button>
       <button class="tab" data-t="inter" onclick="switchTab('inter')">Entre locales</button>
     </div>
 
-    <div id="t-cli">
-      <div class="card" style="margin-bottom:14px;">
-        <div class="abm-nueva" style="align-items:center;">
-          <div style="grid-column:1/-1;"><label>Cliente</label><select id="cc-cli" onchange="verCliente()"></select></div>
-        </div>
-        <div id="cc-saldo-box" hidden style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
-          <div><div class="muted">Saldo</div><div class="saldo" id="cc-saldo">$0</div></div>
-          <div class="abm-nueva" style="flex:1;max-width:420px;">
-            <div><label>Registrar pago $</label><input id="cc-monto" type="number" step="0.01"></div>
-            <div><label>Forma</label><select id="cc-fp"></select></div>
-            <button class="btn" onclick="pagarCC()">Registrar pago</button>
-          </div>
-        </div>
-      </div>
-      <div class="card p0" id="cc-movs-box" hidden><div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th><th>Concepto</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th></tr></thead><tbody id="cc-tbody"></tbody></table></div></div>
-    </div>
-
-    <div id="t-prov" hidden>
+    <div id="t-prov">
       <div class="card" style="margin-bottom:14px;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
           <h3 style="margin:0;">Deuda con proveedores</h3>
@@ -129,15 +111,13 @@ async function iniciar(){
   var rs=await window.sf('getSucursales'); var suc=(rs.ok?(rs.sucursales||[]):[]); SUCS=suc.map(function(s){return s.nombre;}); SUCID={}; suc.forEach(function(s){ SUCID[s.id]=s.nombre; });
   var rcfg=await window.sf('getConfigGeneral'); if(rcfg.ok && rcfg.config && rcfg.config.formas_pago){ try{ var a=JSON.parse(rcfg.config.formas_pago); if(a.length) FORMAS=a.map(function(f){return f.nombre||f;}); }catch(e){} }
   poblarSuc();
-  var fp=FORMAS.map(function(f){return '<option>'+f+'</option>';}).join('');
-  document.getElementById('cc-fp').innerHTML=fp; document.getElementById('pv-fp').innerHTML=fp;
-  document.getElementById('cc-cli').innerHTML='<option value="">(elegir cliente)</option>'+CLIENTES.map(function(c){return '<option value="'+c.realId+'">'+c.nombre+'</option>';}).join('');
+  document.getElementById('pv-fp').innerHTML=FORMAS.map(function(f){return '<option>'+f+'</option>';}).join('');
   await cargarCuentasProv();
 }
 function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; }
 function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarCuentasProv(); }
 async function cargarCuentasProv(){ cerrarPagoProv(); await renderDeudas(); }
-function switchTab(name){ document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); }); ['cli','prov','inter'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); }); if(name==='inter') cargarInter(); }
+function switchTab(name){ document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); }); ['prov','inter'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); }); if(name==='inter') cargarInter(); if(name==='prov') cargarCuentasProv(); }
 async function cargarInter(){
   var r=await window.sf('getCuentasInternas'); var movs=(r.ok?r.movimientos:[])||[];
   // neto por par: origen le debe a destino
@@ -157,30 +137,6 @@ async function saldarInter(deudorId, acreedorId, monto){
   toast('Liquidación registrada'); cargarInter();
 }
 function pintarSaldo(el, s, etiquetaDebe, etiquetaFavor){ if(s>0.5){ el.className='saldo debe'; el.textContent=fmt$(s); } else if(s<-0.5){ el.className='saldo favor'; el.textContent=fmt$(-s)+' a favor'; } else { el.className='saldo cero'; el.textContent='$0'; } }
-
-// ---- CLIENTES ----
-async function verCliente(){
-  var id=document.getElementById('cc-cli').value;
-  var box=document.getElementById('cc-saldo-box'), mb=document.getElementById('cc-movs-box');
-  if(!id){ box.hidden=true; mb.hidden=true; return; }
-  var r=await window.sf('getMovimientosCC&id='+encodeURIComponent(id));
-  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  box.hidden=false; mb.hidden=false;
-  pintarSaldo(document.getElementById('cc-saldo'), r.saldo);
-  document.getElementById('cc-tbody').innerHTML=(r.movimientos||[]).slice().reverse().map(function(m){
-    var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
-    var esPago=/pago/i.test(m.tipo);
-    return '<tr><td>'+f+'</td><td>'+(m.concepto||'')+'</td><td>'+(m.comprobante||'')+'</td>'+
-      '<td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td></tr>';
-  }).join('') || '<tr><td colspan="6" class="muted">Sin movimientos.</td></tr>';
-}
-async function pagarCC(){
-  var id=document.getElementById('cc-cli').value; var monto=document.getElementById('cc-monto').value;
-  if(!id){ toast('Elegí un cliente','error'); return; } if(!(Number(monto)>0)){ toast('Poné un monto','error'); return; }
-  var r=await window.sp('registrarPagoCC',{clienteId:id, sucursal:sucActual, monto:monto, formaPago:document.getElementById('cc-fp').value, concepto:'Pago cta cte'});
-  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  document.getElementById('cc-monto').value=''; toast('Pago registrado'); verCliente();
-}
 
 // ---- PROVEEDORES (listado consolidado de deudas) ----
 var DEUDAS=[], pvCuentaSel=null;

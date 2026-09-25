@@ -18,7 +18,7 @@
       if(!window.sbClient || !window.sf) return;
       var s=await window.sbClient.auth.getSession(); if(!(s.data && s.data.session)) return;
       var r=await window.sf('getMiPerfil'); if(!r || !r.ok) return;
-      window.PERM={ cargado:true, esAdmin:!!r.esAdmin, permisos:r.permisos||[], locales:r.locales||[], rol:r.rol, bootstrap:!!r.bootstrap, puede:mkPuede(r.esAdmin, r.permisos) };
+      window.PERM={ cargado:true, esAdmin:!!r.esAdmin, permisos:r.permisos||[], locales:r.locales||[], rol:r.rol, nombre:r.nombre||'', email:r.email||'', bootstrap:!!r.bootstrap, puede:mkPuede(r.esAdmin, r.permisos) };
       window.puede=function(k){ return window.PERM.puede(k); };
       filtrarNav(); filtrarLocales();
       document.dispatchEvent(new Event('perm-listo'));
