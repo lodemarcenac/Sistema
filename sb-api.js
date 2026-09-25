@@ -207,6 +207,15 @@
       var cu=await sb.from('proveedor_cuentas').select('id,nombre,activo,prov:proveedores(id,nombre)').in('id',ids);
       return {ok:true, cuentas:(cu.data||[]).filter(function(c){return c.activo!==false;}).map(function(c){ return { id:c.id, nombre:c.nombre||'', proveedorId:(c.prov?c.prov.id:null), proveedor:(c.prov?c.prov.nombre:'') }; })};
     },
+    getDeudasLocal: async function(params){
+      var m=await sucIdMap(); var sid=params&&params.sucursal?m[params.sucursal]:null; if(!sid) return {ok:true, deudas:[]};
+      var cl=await sb.from('proveedor_cuenta_locales').select('cuenta_id').eq('sucursal_id',sid);
+      var ids=(cl.data||[]).map(function(x){return x.cuenta_id;}); if(!ids.length) return {ok:true, deudas:[]};
+      var cu=await sb.from('proveedor_cuentas').select('id,nombre,activo,prov:proveedores(nombre)').in('id',ids);
+      var dp=await sb.from('deuda_proveedores').select('cuenta_id,tipo,monto').in('cuenta_id',ids);
+      var saldo={}; (dp.data||[]).forEach(function(x){ var v=Number(x.monto)||0; saldo[x.cuenta_id]=(saldo[x.cuenta_id]||0)+(/pago/i.test(x.tipo)?-v:v); });
+      return {ok:true, deudas:(cu.data||[]).filter(function(c){return c.activo!==false;}).map(function(c){ return { cuentaId:c.id, proveedor:(c.prov?c.prov.nombre:''), nombre:c.nombre||'', saldo:+((saldo[c.id]||0)).toFixed(2) }; })};
+    },
     getMovCuenta: async function(params){
       var id=params&&params.id; if(!id) return {ok:true, movimientos:[], saldo:0};
       var r=await sb.from('deuda_proveedores').select('fecha,tipo,monto,descripcion,comprobante,forma_pago,sucursal_id').eq('cuenta_id',id).order('fecha'); if(r.error) throw r.error;

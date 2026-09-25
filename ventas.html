@@ -139,6 +139,13 @@
   </main>
 </div>
 
+<div class="ov" id="ov-caja" hidden>
+  <div class="box" style="max-width:420px;">
+    <h3 id="ovc-tit">Caja</h3>
+    <div id="ovc-body"></div>
+  </div>
+</div>
+
 <div class="toast-c" id="toast-c"></div>
 
 <div class="ov" id="ov-peso" hidden>
@@ -188,6 +195,7 @@ var CLIENTES=[], SUCS=[], SIGLAS={}, BALANZAS={}, SUCINFO={};
 var ofertasVigentes={}, ofertasFijas={};
 var COMBOS=[], COMBO_UNIT={};   // combos vigentes + precio promo efectivo por código
 var PROMO_FORMA_OK={};          // cod -> true si su promo por forma de pago quedó habilitada
+var cajaOK=false;               // solo se puede vender con caja del día abierta
 var carrito=[];      // {cod,nombre,tipo,categoria,marca,peso,cantidad,descPct}
 var clienteActual={ realId:null, id:null, nombre:'', lista:'Minorista', esCF:true };
 var sucActual='';
@@ -229,7 +237,35 @@ async function iniciar(){
   var ro=await window.sf('getOfertas'); if(ro.ok) cargarOfertas(ro.ofertas||[]);
   var rco=await window.sf('getCombos'); if(rco.ok) cargarCombos(rco.combos||[]);
   resetPagos(); renderCliente(); render();
+  await verificarCaja();
   document.getElementById('scan').focus();
+}
+async function verificarCaja(){
+  var r=await window.sf('getCajaAbierta&sucursal='+encodeURIComponent(sucActual));
+  var caja=(r.ok?r.caja:null);
+  var hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'});
+  var ov=document.getElementById('ov-caja'), body=document.getElementById('ovc-body'), tit=document.getElementById('ovc-tit');
+  if(!caja){
+    cajaOK=false; tit.textContent='💵 Abrí la caja para vender';
+    body.innerHTML='<p class="muted" style="margin-bottom:10px;">Para vender en <b>'+sucActual+'</b> tenés que abrir la caja del día.</p>'+
+      '<label style="font-size:.72rem;color:var(--muted);text-transform:uppercase;font-weight:600;">Cajero</label><input id="ovc-cajero" style="width:100%;padding:9px;margin:4px 0 8px;border:1px solid var(--border-inp);border-radius:8px;font-family:inherit;">'+
+      '<label style="font-size:.72rem;color:var(--muted);text-transform:uppercase;font-weight:600;">Monto de apertura</label><input id="ovc-monto" type="number" step="0.01" value="0" style="width:100%;padding:9px;margin:4px 0 12px;border:1px solid var(--border-inp);border-radius:8px;font-family:inherit;">'+
+      '<button class="btn" onclick="abrirCajaVentas()">Abrir caja</button>';
+    ov.hidden=false; return;
+  }
+  var abrDia=new Date(caja.abiertaAt).toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'});
+  if(abrDia!==hoy){
+    cajaOK=false; tit.textContent='⚠️ Cerrá la caja del día anterior';
+    body.innerHTML='<p class="muted" style="margin-bottom:12px;">Hay una caja abierta desde el <b>'+abrDia+'</b> (cajero '+(caja.cajero||'—')+'). Antes de vender hoy tenés que <b>cerrarla</b> y abrir una nueva.</p>'+
+      '<a class="btn" href="caja.html" style="text-decoration:none;display:inline-block;">Ir a Caja para cerrar</a>';
+    ov.hidden=false; return;
+  }
+  cajaOK=true; ov.hidden=true;
+}
+async function abrirCajaVentas(){
+  var r=await window.sp('abrirCaja',{ sucursal:sucActual, cajero:document.getElementById('ovc-cajero').value.trim(), apertura:document.getElementById('ovc-monto').value });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Caja abierta'); await verificarCaja(); document.getElementById('scan').focus();
 }
 
 function poblarSuc(){
@@ -239,7 +275,7 @@ function poblarSuc(){
   if(sucActual) sel.value=sucActual;
   aplicarBalanza();
 }
-function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); aplicarBalanza(); cargarOfertasRefresh(); }
+function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); aplicarBalanza(); cargarOfertasRefresh(); verificarCaja(); }
 var balCfg={ prefijo:'20', dato:'precio', codlen:5, datolen:5 };
 function aplicarBalanza(){ var b=BALANZAS[sucActual]; if(b){ balCfg={ prefijo:String(b.prefijo||'20'), dato:String(b.dato||'precio'), codlen:parseInt(b.codlen)||5, datolen:parseInt(b.datolen)||5 }; } }
 async function cargarOfertasRefresh(){ var ro=await window.sf('getOfertas'); if(ro.ok) cargarOfertas(ro.ofertas||[]); var rc=await window.sf('getCombos'); if(rc.ok) cargarCombos(rc.combos||[]); render(); }
@@ -515,6 +551,7 @@ function totalActual(){ var bruto=carrito.reduce(function(s,it){ return s+calcLi
 // ---- COBRAR ----
 async function cobrar(){
   if(!carrito.length) return;
+  if(!cajaOK){ toast('Tenés que abrir la caja del día para vender','error'); verificarCaja(); return; }
   evaluarCombos(); evaluarPromosForma();
   var total=totalActual();
   var pagosLimpios=metodosDisponibles().filter(function(m){ return Number(pagosMonto[m])>0; }).map(function(m){ return {metodo:m, monto:+Number(pagosMonto[m]).toFixed(2), cta:esCta(m)}; });
