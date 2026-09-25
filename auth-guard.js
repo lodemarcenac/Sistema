@@ -20,9 +20,19 @@
       var r=await window.sf('getMiPerfil'); if(!r || !r.ok) return;
       window.PERM={ cargado:true, esAdmin:!!r.esAdmin, permisos:r.permisos||[], locales:r.locales||[], rol:r.rol, bootstrap:!!r.bootstrap, puede:mkPuede(r.esAdmin, r.permisos) };
       window.puede=function(k){ return window.PERM.puede(k); };
-      filtrarNav();
+      filtrarNav(); filtrarLocales();
       document.dispatchEvent(new Event('perm-listo'));
     }catch(e){ /* ante cualquier error no bloqueamos el uso */ }
+  }
+  function filtrarLocales(){
+    if(!window.PERM.cargado || window.PERM.esAdmin) return;
+    var locs=window.PERM.locales||[]; if(!locs.length) return;   // sin locales asignados = no se limita
+    var sel=document.getElementById('selSuc'); if(!sel) return;
+    var quedan=[];
+    Array.prototype.slice.call(sel.options).forEach(function(o){ if(locs.indexOf(o.value)>=0 || locs.indexOf(o.textContent)>=0) quedan.push(o.value); else o.remove(); });
+    if(!sel.options.length) return;
+    if(quedan.indexOf(sel.value)<0){ sel.value=sel.options[0].value; try{ sel.dispatchEvent(new Event('change')); }catch(e){} }
+    if(sel.options.length===1) sel.disabled=true;
   }
   function filtrarNav(){
     document.querySelectorAll('#sidenav .sn-item[data-perm]').forEach(function(a){

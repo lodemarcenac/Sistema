@@ -55,9 +55,10 @@
     <div id="t-usuarios">
       <div class="card" style="margin-bottom:14px;">
         <h3 id="u-titulo">Nuevo usuario</h3>
-        <p class="hint muted" style="margin-bottom:10px;">El usuario de login (email + contraseña) se crea en <b>Supabase → Authentication → Add user</b>. Acá le asignás <b>rol</b> y <b>locales</b>, vinculado por el <b>mismo email</b>.</p>
+        <p class="hint muted" style="margin-bottom:10px;">Cargá email + contraseña, rol y locales, y el usuario se crea <b>completo desde acá</b> (login incluido). Al <b>editar</b> uno existente, la contraseña se deja en blanco (no se cambia).</p>
         <div class="abm-nueva">
           <div><label>Email</label><input id="u-email" type="email" placeholder="usuario@correo.com"></div>
+          <div><label>Contraseña <span style="text-transform:none;font-weight:400;">(solo al crear)</span></label><input id="u-pass" type="text" placeholder="mín. 6 caracteres"></div>
           <div><label>Nombre</label><input id="u-nombre" placeholder="Nombre y apellido"></div>
           <div><label>Rol</label><select id="u-rol"></select></div>
         </div>
@@ -122,14 +123,23 @@ function renderUsuarios(){
 function editarUsuario(id){
   var p=PERFILES.find(function(x){return x.id===id;}); if(!p) return; uEditId=id;
   document.getElementById('u-titulo').textContent='Editar usuario'; document.getElementById('u-cancel').hidden=false;
-  document.getElementById('u-email').value=p.email; document.getElementById('u-nombre').value=p.nombre||''; document.getElementById('u-rol').value=p.rolId||'';
+  document.getElementById('u-email').value=p.email; document.getElementById('u-pass').value=''; document.getElementById('u-nombre').value=p.nombre||''; document.getElementById('u-rol').value=p.rolId||'';
   document.querySelectorAll('.u-loc').forEach(function(c){ c.checked=(p.locales||[]).indexOf(c.value)>=0; });
   window.scrollTo({top:0,behavior:'smooth'});
 }
-function cancelarEdicionU(){ uEditId=null; document.getElementById('u-titulo').textContent='Nuevo usuario'; document.getElementById('u-cancel').hidden=true; document.getElementById('u-email').value=''; document.getElementById('u-nombre').value=''; document.getElementById('u-rol').value=''; document.querySelectorAll('.u-loc').forEach(function(c){c.checked=false;}); }
+function cancelarEdicionU(){ uEditId=null; document.getElementById('u-titulo').textContent='Nuevo usuario'; document.getElementById('u-cancel').hidden=true; document.getElementById('u-email').value=''; document.getElementById('u-pass').value=''; document.getElementById('u-nombre').value=''; document.getElementById('u-rol').value=''; document.querySelectorAll('.u-loc').forEach(function(c){c.checked=false;}); }
 async function guardarUsuarioUI(){
   var email=document.getElementById('u-email').value.trim(); if(!email){ toast('Poné el email','error'); return; }
   var locales=[]; document.querySelectorAll('.u-loc:checked').forEach(function(c){ locales.push(c.value); });
+  // Al crear uno nuevo, si hay contraseña, se crea el login (Edge Function)
+  if(!uEditId){
+    var pw=document.getElementById('u-pass').value;
+    if(pw){
+      if(pw.length<6){ toast('La contraseña debe tener al menos 6 caracteres','error'); return; }
+      var ra=await window.sp('crearUsuarioAuth',{ email:email, password:pw });
+      if(!ra.ok && !/registered|already|exist|duplicate|duplicad|ya /i.test(ra.error||'')){ toast('Error creando el login: '+ra.error,'error'); return; }
+    }
+  }
   var r=await window.sp('guardarPerfil',{ id:uEditId, email:email, nombre:document.getElementById('u-nombre').value.trim(), rolId:(document.getElementById('u-rol').value||null), locales:locales });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   toast('Usuario guardado'); cancelarEdicionU();

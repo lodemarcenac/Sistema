@@ -470,6 +470,14 @@
       if(rows.length){ var r=await sb.from('rol_permisos').insert(rows); if(r.error) throw r.error; }
       return {ok:true};
     },
+    crearUsuarioAuth: async function(p){
+      var s=await sb.auth.getSession(); var tok=(s.data&&s.data.session&&s.data.session.access_token)||'';
+      try{
+        var res=await fetch(SUPABASE_URL+'/functions/v1/crear-usuario', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tok, 'apikey':SUPABASE_ANON }, body:JSON.stringify({ email:p.email, password:p.password }) });
+        var j=await res.json();
+        return j;
+      }catch(e){ return {ok:false, error:'No se pudo contactar la función (¿está deployada?): '+(e.message||e)}; }
+    },
     guardarPerfil: async function(p){
       var email=String(p.email||'').trim().toLowerCase(); if(!email) throw new Error('Falta el email');
       var m=await sucIdMap(); var payload={ email:email, nombre:(p.nombre||null), rol_id:(p.rolId||null) }; var pid=p.id;
