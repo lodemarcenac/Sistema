@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reportes — Carnicería</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css">
+<style>
+  header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  header .ttl{font-size:var(--fs-xl);font-weight:700;}
+  header .sub{font-size:var(--fs-xs);opacity:.9;}
+  header nav a{color:#dbe8ff;text-decoration:none;font-size:var(--fs-sm);font-weight:600;margin-right:14px;}
+  header nav a.on,header nav a:hover{color:#fff;}
+  header .suc select{padding:5px 8px;border-radius:var(--radius-sm);border:none;font-family:inherit;font-size:var(--fs-sm);}
+  header button{background:#fff;color:var(--brand);border:none;padding:7px 13px;border-radius:var(--radius-sm);font-weight:600;cursor:pointer;font-size:var(--fs-sm);}
+  main{max-width:1100px;}
+  .filtros{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;}
+  .filtros .field{display:flex;flex-direction:column;}
+  .filtros label{font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;text-transform:uppercase;letter-spacing:.03em;}
+  .filtros input,.filtros select{padding:7px 10px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;background:#fff;}
+  .chips{display:flex;gap:5px;flex-wrap:wrap;}
+  .seccion{font-weight:700;font-size:.9rem;padding:8px 13px;border-radius:8px;margin:18px 0 12px;background:var(--brand-soft);color:var(--brand);}
+  .kpi .k-sub{font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-top:2px;}
+  .kpi.warn .k-val{color:var(--warn);} .kpi.bad .k-val{color:var(--bad);} .kpi.good .k-val{color:var(--good);}
+  /* barras horizontales simples */
+  .bl-row{display:grid;grid-template-columns:150px 1fr 150px;gap:10px;align-items:center;margin:6px 0;font-size:var(--fs-sm);}
+  .bl-lbl{color:var(--ink-soft);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bl-bar{background:var(--surface-3);border-radius:6px;height:16px;overflow:hidden;}
+  .bl-fill{display:block;height:100%;background:linear-gradient(90deg,var(--brand),var(--brand-2));border-radius:6px;}
+  .bl-val{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink);}
+  .bl-val small{color:var(--muted);}
+  table.data td.num small{color:var(--muted);font-weight:400;}
+  table.data tfoot td{font-weight:700;background:var(--surface-2);border-top:2px solid var(--line);}
+  .pos{color:var(--good);} .neg{color:var(--bad);}
+  .card-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
+  .nota{font-size:var(--fs-xs);color:var(--muted);margin-top:10px;}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>🥩 Carnicería</h1><p>Ingresá con tu usuario.</p>
+    <form id="login-form">
+      <label>Email</label><input type="email" id="li-email" autocomplete="username" required>
+      <label>Contraseña</label><input type="password" id="li-pass" autocomplete="current-password" required>
+      <button type="submit" id="li-btn">Entrar</button><div class="err" id="li-err"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div><div class="ttl">📈 Reportes</div><div class="sub" id="sub">—</div></div>
+      <nav><a href="index.html">📊 Tablero</a><a href="ventas.html">🛒 Ventas</a><a href="caja.html">💵 Caja</a><a href="cuentas.html">📒 Cuentas</a></nav>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div class="suc">📍 <select id="selSuc" onchange="renderActual()"></select></div>
+      <button id="btn-salir">Salir</button>
+    </div>
+  </header>
+  <main>
+    <div class="tabs">
+      <button class="tab on" data-t="dia" onclick="switchTab('dia')">📅 Tablero del día</button>
+      <button class="tab" data-t="pnl" onclick="switchTab('pnl')">💰 P&amp;L por local</button>
+      <button class="tab" data-t="rank" onclick="switchTab('rank')">🏆 Rankings</button>
+    </div>
+
+    <!-- ======================= TABLERO DEL DÍA ======================= -->
+    <div id="t-dia">
+      <div class="filtros">
+        <div class="field"><label>Fecha</label><input type="date" id="td-fecha" onchange="renderTablero()"></div>
+        <div class="chips" style="padding-bottom:2px;">
+          <span class="chip mini" onclick="fechaRapida('hoy')">Hoy</span>
+          <span class="chip mini" onclick="fechaRapida('ayer')">Ayer</span>
+        </div>
+      </div>
+      <div id="dia-body"><div class="vacio">Cargando…</div></div>
+    </div>
+
+    <!-- ======================= P&L POR LOCAL ======================= -->
+    <div id="t-pnl" hidden>
+      <div class="filtros">
+        <div class="field"><label>Desde</label><input type="date" id="pl-desde"></div>
+        <div class="field"><label>Hasta</label><input type="date" id="pl-hasta"></div>
+        <button class="btn" onclick="renderPnl()">Ver</button>
+        <div class="chips" style="padding-bottom:2px;">
+          <span class="chip mini" onclick="periodo('pl','mes')">Este mes</span>
+          <span class="chip mini" onclick="periodo('pl','mesant')">Mes anterior</span>
+          <span class="chip mini" onclick="periodo('pl','anio')">Año</span>
+        </div>
+        <button class="btn-sec" onclick="exportarPnl()" style="margin-left:auto;">⬇ Excel</button>
+      </div>
+      <div id="pnl-body"><div class="vacio">Elegí un período y tocá “Ver”.</div></div>
+    </div>
+
+    <!-- ======================= RANKINGS ======================= -->
+    <div id="t-rank" hidden>
+      <div class="filtros">
+        <div class="field"><label>Desde</label><input type="date" id="rk-desde"></div>
+        <div class="field"><label>Hasta</label><input type="date" id="rk-hasta"></div>
+        <div class="field"><label>Ordenar por</label><select id="rk-metric" onchange="renderRank()"><option value="importe">Importe $</option><option value="kg">Kilos</option></select></div>
+        <div class="field"><label>Mostrar</label><select id="rk-top" onchange="renderRank()"><option value="20">Top 20</option><option value="50">Top 50</option><option value="100">Top 100</option><option value="0">Todos</option></select></div>
+        <button class="btn" onclick="renderRank()">Ver</button>
+        <div class="chips" style="padding-bottom:2px;">
+          <span class="chip mini" onclick="periodo('rk','mes')">Este mes</span>
+          <span class="chip mini" onclick="periodo('rk','mesant')">Mes anterior</span>
+          <span class="chip mini" onclick="periodo('rk','anio')">Año</span>
+        </div>
+        <button class="btn-sec" onclick="exportarRank()" style="margin-left:auto;">⬇ Excel</button>
+      </div>
+      <div id="rank-body"><div class="vacio">Elegí un período y tocá “Ver”.</div></div>
+    </div>
+  </main>
+</div>
+
+<div class="toast-c" id="toast-c"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="sb-api.js"></script>
+<script src="auth-guard.js"></script>
+<script src="nav.js"></script>
+<script>
+var sb=window.sbClient;
+var SUCS=[], SUCID={}, TAB='dia';
+var PNL_ROWS=[], RANK_ROWS=[];
+
+function p2(n){ return (n<10?'0':'')+n; }
+function iso(d){ return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate()); }
+function hoyISO(){ return iso(new Date()); }
+function fmt$(n){ return '$'+Math.round(Number(n)||0).toLocaleString('es-AR'); }
+function fmtKg(n){ n=Number(n)||0; return n.toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:1}); }
+function fmtN(n){ return (Number(n)||0).toLocaleString('es-AR'); }
+function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
+function sucSel(){ var v=document.getElementById('selSuc').value; return v?Number(v):null; }
+function sucNombre(){ var v=document.getElementById('selSuc').value; return v?(SUCID[Number(v)]||''):'Todos los locales'; }
+
+// ---- Login / sesión ----
+document.getElementById('login-form').addEventListener('submit', async function(e){
+  e.preventDefault(); var btn=document.getElementById('li-btn'), err=document.getElementById('li-err'); err.textContent=''; btn.disabled=true; btn.textContent='Entrando…';
+  var r=await sb.auth.signInWithPassword({ email:document.getElementById('li-email').value.trim(), password:document.getElementById('li-pass').value });
+  btn.disabled=false; btn.textContent='Entrar'; if(r.error){ err.textContent='No se pudo entrar: '+r.error.message; return; } iniciar();
+});
+document.getElementById('btn-salir').addEventListener('click', async function(){ await sb.auth.signOut(); location.reload(); });
+(async function(){ var s=await sb.auth.getSession(); if(s.data && s.data.session) iniciar(); })();
+
+async function iniciar(){
+  document.getElementById('login').hidden=true; document.getElementById('app').hidden=false;
+  var rs=await window.sf('getSucursales'); var suc=(rs.ok?(rs.sucursales||[]):[]);
+  SUCS=suc; SUCID={}; suc.forEach(function(s){ SUCID[s.id]=s.nombre; });
+  var sel=document.getElementById('selSuc');
+  sel.innerHTML='<option value="">Todos los locales</option>'+suc.map(function(s){ return '<option value="'+s.id+'">'+s.nombre+'</option>'; }).join('');
+  // defaults de fechas
+  document.getElementById('td-fecha').value=hoyISO();
+  periodo('pl','mes',true); periodo('rk','mes',true);
+  document.getElementById('sub').textContent='Costeo por último costo · '+new Date().toLocaleDateString('es-AR');
+  renderTablero();
+}
+
+function switchTab(name){
+  TAB=name;
+  document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); });
+  ['dia','pnl','rank'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); });
+  renderActual();
+}
+function renderActual(){ if(TAB==='dia') renderTablero(); else if(TAB==='pnl') renderPnl(); else renderRank(); }
+
+// ---- Períodos ----
+function fechaRapida(k){ var d=new Date(); if(k==='ayer') d.setDate(d.getDate()-1); document.getElementById('td-fecha').value=iso(d); renderTablero(); }
+function periodo(pref, k, soloSet){
+  var hoy=new Date(), desde, hasta;
+  if(k==='mes'){ desde=new Date(hoy.getFullYear(),hoy.getMonth(),1); hasta=hoy; }
+  else if(k==='mesant'){ desde=new Date(hoy.getFullYear(),hoy.getMonth()-1,1); hasta=new Date(hoy.getFullYear(),hoy.getMonth(),0); }
+  else if(k==='anio'){ desde=new Date(hoy.getFullYear(),0,1); hasta=hoy; }
+  document.getElementById(pref+'-desde').value=iso(desde);
+  document.getElementById(pref+'-hasta').value=iso(hasta);
+  if(!soloSet){ if(pref==='pl') renderPnl(); else renderRank(); }
+}
+
+// ---- Barras horizontales ----
+function barList(items, money){
+  if(!items.length) return '<p class="muted">Sin datos.</p>';
+  var max=Math.max.apply(null, items.map(function(i){return i.val;}).concat([1]));
+  return items.map(function(it){
+    var w=Math.max(2, Math.round((it.val/max)*100));
+    return '<div class="bl-row"><span class="bl-lbl" title="'+it.label+'">'+it.label+'</span>'+
+      '<span class="bl-bar"><span class="bl-fill" style="width:'+w+'%"></span></span>'+
+      '<span class="bl-val">'+(money?fmt$(it.val):fmtKg(it.val))+(it.pct!=null?' <small>('+it.pct.toFixed(1)+'%)</small>':'')+'</span></div>';
+  }).join('');
+}
+
+// ============================ TABLERO DEL DÍA ============================
+async function renderTablero(){
+  var f=document.getElementById('td-fecha').value || hoyISO();
+  var suc=sucSel();
+  var body=document.getElementById('dia-body'); body.innerHTML='<div class="vacio">Cargando…</div>';
+  var r=await sb.rpc('reporte_dia',{ p_desde:f, p_hasta:f, p_suc:suc });
+  if(r.error){ body.innerHTML='<div class="vacio">No se pudo cargar.<br><small>'+r.error.message+'</small></div>'; return; }
+  var d=r.data||{};
+  // Estado de caja
+  var cajaTxt='—', cajaCls='';
+  try{
+    var cq=sb.from('cajas').select('cerrada,sucursal_id').eq('fecha',f); if(suc) cq=cq.eq('sucursal_id',suc);
+    var cr=await cq; var cajas=(cr.data||[]);
+    if(suc){ if(!cajas.length){ cajaTxt='Sin abrir'; cajaCls='warn'; } else { cajaTxt=cajas[0].cerrada?'Cerrada':'Abierta'; cajaCls=cajas[0].cerrada?'':'good'; } }
+    else { var ab=cajas.filter(function(x){return !x.cerrada;}).length; cajaTxt=ab+' abierta'+(ab===1?'':'s'); cajaCls=ab?'good':'warn'; }
+  }catch(e){}
+  var ventas=Number(d.ventas)||0, tickets=Number(d.tickets)||0, margen=Number(d.margen)||0, cmv=Number(d.cmv)||0;
+  var tprom=tickets>0?ventas/tickets:0, mpct=ventas>0?(margen/ventas*100):0;
+  // Formas de pago
+  var formas=d.formas||{}, sumF=0; Object.keys(formas).forEach(function(k){ sumF+=Number(formas[k])||0; });
+  var itemsF=Object.keys(formas).map(function(k){ var v=Number(formas[k])||0; return {label:k, val:v, pct:sumF>0?v/sumF*100:0}; }).sort(function(a,b){return b.val-a.val;});
+
+  body.innerHTML=
+    '<div class="kpis">'+
+      kpi('Ventas del día', fmt$(ventas), fmtKg(d.kg)+' kg', '')+
+      kpi('Tickets', fmtN(tickets), 'Ticket prom. '+fmt$(tprom), '')+
+      kpi('Margen bruto', fmt$(margen), mpct.toFixed(1)+'% · costo '+fmt$(cmv), 'good')+
+      kpi('Estado de caja', cajaTxt, sucNombre(), cajaCls)+
+    '</div>'+
+    '<div class="kpis" style="margin-top:12px;">'+
+      kpi('Stock bajo mínimo', fmtN(d.bajo_minimo), 'productos a reponer', Number(d.bajo_minimo)>0?'warn':'good')+
+      kpi('A cobrar', fmt$(d.a_cobrar), 'cta cte clientes', '')+
+      kpi('A pagar', fmt$(d.a_pagar), 'deuda proveedores', Number(d.a_pagar)>0?'bad':'good')+
+      kpi('Remitos pendientes', fmtN(d.remitos_pend), 'en tránsito', Number(d.remitos_pend)>0?'warn':'good')+
+    '</div>'+
+    '<div class="seccion">💳 Ventas por forma de pago</div>'+
+    '<div class="card">'+barList(itemsF, true)+'</div>'+
+    '<div class="nota">Fecha: '+f+' · '+sucNombre()+'. «A cobrar / A pagar» son saldos actuales (no del día). Margen = ventas − costo (último costo).</div>';
+}
+function kpi(lbl,val,sub,cls){ return '<div class="kpi'+(cls?' '+cls:'')+'"><div class="k-lbl">'+lbl+'</div><div class="k-val">'+val+'</div><div class="k-sub">'+sub+'</div></div>'; }
+
+// ============================ P&L POR LOCAL ============================
+async function renderPnl(){
+  var desde=document.getElementById('pl-desde').value, hasta=document.getElementById('pl-hasta').value;
+  var body=document.getElementById('pnl-body'); body.innerHTML='<div class="vacio">Cargando…</div>';
+  var r=await sb.rpc('reporte_pnl',{ p_desde:desde, p_hasta:hasta });
+  if(r.error){ body.innerHTML='<div class="vacio">No se pudo cargar.<br><small>'+r.error.message+'</small></div>'; return; }
+  var rows=(r.data||[]).map(function(x){
+    var ventas=Number(x.ventas)||0, cmv=Number(x.cmv)||0, gastos=Number(x.gastos)||0, plus=Number(x.plus_remitos)||0;
+    var margen=ventas-cmv, resultado=margen-gastos+plus;
+    return {local:x.sucursal, ventas:ventas, cmv:cmv, margen:margen, gastos:gastos, plus:plus, resultado:resultado};
+  });
+  PNL_ROWS=rows;
+  var tot={ventas:0,cmv:0,margen:0,gastos:0,plus:0,resultado:0};
+  rows.forEach(function(r){ for(var k in tot) tot[k]+=r[k]; });
+  function res(v){ return '<td class="num '+(v>=0?'pos':'neg')+'">'+fmt$(v)+'</td>'; }
+  var filas=rows.map(function(r){
+    return '<tr><td>'+r.local+'</td><td class="num">'+fmt$(r.ventas)+'</td><td class="num">'+fmt$(r.cmv)+'</td>'+
+      '<td class="num">'+fmt$(r.margen)+'</td><td class="num">'+fmt$(r.gastos)+'</td>'+
+      '<td class="num">'+(r.plus?fmt$(r.plus):'—')+'</td>'+res(r.resultado)+'</tr>';
+  }).join('');
+  body.innerHTML=
+    '<div class="card p0"><div class="tblwrap"><table class="data">'+
+    '<thead><tr><th>Local</th><th class="num">Ventas</th><th class="num">Costo merc.</th><th class="num">Margen bruto</th><th class="num">Gastos</th><th class="num">Plus remitos</th><th class="num">Resultado</th></tr></thead>'+
+    '<tbody>'+(filas||'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">Sin datos en el período.</td></tr>')+'</tbody>'+
+    '<tfoot><tr><td>TOTAL</td><td class="num">'+fmt$(tot.ventas)+'</td><td class="num">'+fmt$(tot.cmv)+'</td><td class="num">'+fmt$(tot.margen)+'</td><td class="num">'+fmt$(tot.gastos)+'</td><td class="num">'+fmt$(tot.plus)+'</td>'+res(tot.resultado)+'</tr></tfoot>'+
+    '</table></div></div>'+
+    '<div class="nota">Período '+desde+' → '+hasta+'. Resultado = Ventas − Costo mercadería (último costo) − Gastos + Plus por remitos emitidos. La mercadería entre locales se transfiere a costo; el que elabora gana el «plus». El destino la valúa a último costo al venderla.</div>';
+}
+
+// ============================ RANKINGS ============================
+async function renderRank(){
+  var desde=document.getElementById('rk-desde').value, hasta=document.getElementById('rk-hasta').value;
+  var metric=document.getElementById('rk-metric').value, topN=Number(document.getElementById('rk-top').value)||0;
+  var suc=sucSel();
+  var body=document.getElementById('rank-body'); body.innerHTML='<div class="vacio">Cargando…</div>';
+  var r=await sb.rpc('reporte_ranking',{ p_desde:desde, p_hasta:hasta, p_suc:suc });
+  if(r.error){ body.innerHTML='<div class="vacio">No se pudo cargar.<br><small>'+r.error.message+'</small></div>'; return; }
+  var rows=(r.data||[]).map(function(x){ return {codigo:x.codigo, nombre:x.nombre||x.codigo, categoria:x.categoria, kg:Number(x.kg)||0, importe:Number(x.importe)||0, tickets:Number(x.tickets)||0}; });
+  rows.sort(function(a,b){ return metric==='kg'?(b.kg-a.kg):(b.importe-a.importe); });
+  RANK_ROWS=rows;
+  var totImp=0, totKg=0; rows.forEach(function(r){ totImp+=r.importe; totKg+=r.kg; });
+  var totMetric=metric==='kg'?totKg:totImp;
+  var lista=topN>0?rows.slice(0,topN):rows;
+  var filas=lista.map(function(r,i){
+    var val=metric==='kg'?r.kg:r.importe; var pct=totMetric>0?val/totMetric*100:0;
+    return '<tr><td class="num">'+(i+1)+'</td><td>'+r.nombre+'</td><td>'+r.categoria+'</td>'+
+      '<td class="num">'+fmtKg(r.kg)+'</td><td class="num">'+fmt$(r.importe)+'</td>'+
+      '<td class="num">'+fmtN(r.tickets)+'</td><td class="num">'+pct.toFixed(1)+'%</td></tr>';
+  }).join('');
+  // Mix por categoría
+  var cat={}; rows.forEach(function(r){ if(!cat[r.categoria]) cat[r.categoria]={imp:0,kg:0}; cat[r.categoria].imp+=r.importe; cat[r.categoria].kg+=r.kg; });
+  var itemsCat=Object.keys(cat).map(function(k){ var v=metric==='kg'?cat[k].kg:cat[k].imp; return {label:k, val:v, pct:totMetric>0?v/totMetric*100:0}; }).sort(function(a,b){return b.val-a.val;});
+
+  body.innerHTML=
+    '<div class="card" style="margin-bottom:14px;"><div class="card-head"><h3 style="margin:0;">Productos más vendidos</h3>'+
+      '<span class="muted">'+lista.length+' de '+rows.length+' · Total '+fmt$(totImp)+' / '+fmtKg(totKg)+' kg</span></div>'+
+      '<div class="tblwrap"><table class="data"><thead><tr><th class="num">#</th><th>Producto</th><th>Categoría</th><th class="num">Kg</th><th class="num">Importe</th><th class="num">Tickets</th><th class="num">% '+(metric==='kg'?'kg':'$')+'</th></tr></thead>'+
+      '<tbody>'+(filas||'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">Sin ventas en el período.</td></tr>')+'</tbody></table></div></div>'+
+    '<div class="seccion">🥩 Mix por categoría ('+(metric==='kg'?'por kg':'por $')+')</div>'+
+    '<div class="card">'+barList(itemsCat, metric!=='kg')+'</div>'+
+    '<div class="nota">Período '+desde+' → '+hasta+' · '+sucNombre()+'.</div>';
+}
+
+// ============================ EXPORT EXCEL ============================
+function bajar(aoa, hoja, archivo){
+  var ws=XLSX.utils.aoa_to_sheet(aoa); var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, hoja);
+  XLSX.writeFile(wb, archivo);
+}
+function exportarPnl(){
+  if(!PNL_ROWS.length){ toast('Primero generá el reporte','error'); return; }
+  var aoa=[['Local','Ventas','Costo mercadería','Margen bruto','Gastos','Plus remitos','Resultado']];
+  PNL_ROWS.forEach(function(r){ aoa.push([r.local, r.ventas, r.cmv, r.margen, r.gastos, r.plus, r.resultado]); });
+  var t={ventas:0,cmv:0,margen:0,gastos:0,plus:0,resultado:0}; PNL_ROWS.forEach(function(r){ for(var k in t) t[k]+=r[k]; });
+  aoa.push(['TOTAL', t.ventas, t.cmv, t.margen, t.gastos, t.plus, t.resultado]);
+  bajar(aoa,'P&L','PL_'+document.getElementById('pl-desde').value+'_'+document.getElementById('pl-hasta').value+'.xlsx');
+}
+function exportarRank(){
+  if(!RANK_ROWS.length){ toast('Primero generá el reporte','error'); return; }
+  var aoa=[['#','Código','Producto','Categoría','Kg','Importe','Tickets']];
+  RANK_ROWS.forEach(function(r,i){ aoa.push([i+1, r.codigo, r.nombre, r.categoria, r.kg, r.importe, r.tickets]); });
+  bajar(aoa,'Ranking','Ranking_'+document.getElementById('rk-desde').value+'_'+document.getElementById('rk-hasta').value+'.xlsx');
+}
+</script>
+</body>
+</html>

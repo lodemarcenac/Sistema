@@ -138,9 +138,12 @@
         <h3>Combos multi-producto <button class="mini-btn" type="button" onclick="ayuda('combo')" title="Cómo cargar un combo">?</button></h3>
         <p class="resumen" style="margin-bottom:14px;">Se activa cuando la venta tiene <b>todos</b> los productos del combo y cada uno llega a su <b>mínimo</b>; cobra el precio promo. Peso por unidad: para pesables contados por unidad (ej. hamburguesas).</p>
         <div class="abm-nueva" style="border-top:none;padding-top:0;">
-          <div><label>Nombre del combo</label><input id="cb-nom" placeholder="Ej: Promo asado"></div>
+          <div><label>Nombre del combo</label><input id="cb-nom" placeholder="Ej: Combo hamburguesas"></div>
+          <div><label>Tipo</label><select id="cb-tipo" onchange="onTipoCombo()"><option value="promo">Promo por kg/unidad (gana el menor)</option><option value="cerrado">Precio cerrado (set a precio fijo)</option></select></div>
+          <div id="cb-precio-wrap" style="display:none;"><label>Precio total del combo</label><input id="cb-precio" type="number" step="0.01" placeholder="$ del set completo"></div>
           <div><label>Locales</label><select id="cb-loc"></select></div>
         </div>
+        <p class="resumen" id="cb-hint" style="margin:6px 0 0;"></p>
         <div id="cb-comps" style="margin-top:12px;"></div>
         <button class="mini-btn" onclick="addCompRow()" style="margin-top:8px;">+ Agregar producto al combo</button>
         <div style="margin-top:10px;"><button class="btn-alta" onclick="crearComboUI()">Guardar combo</button></div>
@@ -398,24 +401,37 @@ function addCompRow(){
     '<button class="x-btn" title="Quitar" onclick="this.parentNode.remove()">✕</button>';
   document.getElementById('cb-comps').appendChild(div);
 }
+function onTipoCombo(){
+  var t=document.getElementById('cb-tipo').value;
+  document.getElementById('cb-precio-wrap').style.display=(t==='cerrado')?'':'none';
+  document.getElementById('cb-hint').innerHTML=(t==='cerrado')
+    ? 'Precio cerrado: el combo se cobra a un <b>precio fijo</b>. En cada producto, <b>Mínimo = cantidad</b> y <b>Peso x unidad = peso nominal</b> (kg por unidad, para descontar stock). El "Precio promo" no se usa. En Ventas se agrega como un ítem y descuenta el stock por el peso nominal.'
+    : 'Promo por kg/unidad: cada producto va a su precio promo y se activa cuando todos llegan a su mínimo (gana el más barato para el cliente).';
+}
 async function crearComboUI(){
   var nom=(document.getElementById('cb-nom').value||'').trim(); if(!nom){ toast('Poné el nombre del combo','error'); return; }
+  var tipo=document.getElementById('cb-tipo').value;
   var comps=[];
   document.querySelectorAll('#cb-comps .abm-nueva').forEach(function(row){
     var cod=resolverCod(row.querySelector('.cb-cod').value); if(!cod||!PRODS[cod]) return;
     comps.push({ codigo:cod, minimo:row.querySelector('.cb-min').value, precioPromo:row.querySelector('.cb-pp').value, pesoUnitario:row.querySelector('.cb-pu').value });
   });
-  if(comps.length<2){ toast('El combo necesita al menos 2 productos válidos','error'); return; }
-  var r=await window.sp('crearCombo',{ nombre:nom, locales:(document.getElementById('cb-loc').value||'todos').trim(), componentes:comps });
+  if(tipo==='cerrado'){
+    if(!comps.length){ toast('Agregá al menos un producto al combo','error'); return; }
+    var precio=document.getElementById('cb-precio').value; if(!(Number(precio)>0)){ toast('Poné el precio total del combo','error'); return; }
+  } else if(comps.length<2){ toast('El combo promo necesita al menos 2 productos','error'); return; }
+  var r=await window.sp('crearCombo',{ nombre:nom, tipo:tipo, precioCerrado:document.getElementById('cb-precio').value, locales:(document.getElementById('cb-loc').value||'todos').trim(), componentes:comps });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  toast('Combo guardado'); document.getElementById('cb-nom').value=''; document.getElementById('cb-comps').innerHTML=''; addCompRow(); addCompRow();
+  toast('Combo guardado'); document.getElementById('cb-nom').value=''; document.getElementById('cb-precio').value=''; document.getElementById('cb-comps').innerHTML=''; addCompRow(); addCompRow();
   renderCombosList();
 }
 async function renderCombosList(){
   var r=await window.sf('getCombos'); var tb=document.getElementById('cb-tbody'); var cbs=(r.ok?r.combos:[])||[];
   tb.innerHTML = cbs.length ? cbs.map(function(c){
-    var prods=(c.componentes||[]).map(function(k){ var nm=(PRODS[k.codigo]&&PRODS[k.codigo].nombre)||k.codigo; return nm+' (mín '+k.minimo+', $'+k.precioPromo+')'; }).join(', ');
-    return '<tr><td>'+c.nombre+'</td><td>'+prods+'</td><td>'+(c.locales||'todos')+'</td><td><button class="x-btn" title="Eliminar combo" onclick="eliminarComboUI('+c.id+')">✕</button></td></tr>';
+    var cerr=(c.tipo==='cerrado');
+    var prods=(c.componentes||[]).map(function(k){ var nm=(PRODS[k.codigo]&&PRODS[k.codigo].nombre)||k.codigo; return cerr?(nm+' x'+k.minimo):(nm+' (mín '+k.minimo+', $'+k.precioPromo+')'); }).join(', ');
+    var etq=cerr?('<span class="pill p">cerrado $'+Math.round(c.precioCerrado).toLocaleString('es-AR')+'</span> '):'';
+    return '<tr><td>'+etq+c.nombre+'</td><td>'+prods+'</td><td>'+(c.locales||'todos')+'</td><td><button class="x-btn" title="Eliminar combo" onclick="eliminarComboUI('+c.id+')">✕</button></td></tr>';
   }).join('') : '<tr><td colspan="4" style="color:#8891a3">Sin combos.</td></tr>';
 }
 async function eliminarComboUI(id){ if(!confirm('¿Eliminar este combo?')) return; var r=await window.sp('eliminarCombo',{id:id}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } toast('Combo eliminado'); renderCombosList(); }

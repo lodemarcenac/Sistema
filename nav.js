@@ -7,6 +7,7 @@
 (function(){
   var ITEMS=[
     ['index.html','📊','Tablero','tableros'],
+    ['reportes.html','📈','Reportes','reportes'],
     ['ventas.html','🛒','Ventas','ventas'],
     ['caja.html','💵','Caja','caja'],
     ['productos.html','🏷️','Productos','productos'],

@@ -99,11 +99,11 @@
     },
 
     getCombos: async function(){
-      var res = await sb.from('combos').select('id,nombre,activo,locales,comp:combo_componentes(minimo,precio_promo,peso_unitario,prod:productos(codigo_interno))');
+      var res = await sb.from('combos').select('id,nombre,activo,locales,tipo,precio_cerrado,comp:combo_componentes(minimo,precio_promo,peso_unitario,prod:productos(codigo_interno,nombre,tipo))');
       if(res.error) throw res.error;
       return {ok:true, combos:(res.data||[]).filter(function(c){return c.activo!==false;}).map(function(c){
-        return { id:c.id, nombre:c.nombre, locales:c.locales||'todos',
-          componentes:(c.comp||[]).map(function(k){ return { codigo:k.prod?k.prod.codigo_interno:'', minimo:Number(k.minimo)||0, precioPromo:Number(k.precio_promo)||0, pesoUnitario:(k.peso_unitario==null?'':Number(k.peso_unitario)) }; }) };
+        return { id:c.id, nombre:c.nombre, locales:c.locales||'todos', tipo:c.tipo||'promo', precioCerrado:(c.precio_cerrado==null?0:Number(c.precio_cerrado)),
+          componentes:(c.comp||[]).map(function(k){ return { codigo:k.prod?k.prod.codigo_interno:'', nombreProd:(k.prod?k.prod.nombre:''), tipoProd:(k.prod?k.prod.tipo:'pesable'), minimo:Number(k.minimo)||0, precioPromo:Number(k.precio_promo)||0, pesoUnitario:(k.peso_unitario==null?'':Number(k.peso_unitario)) }; }) };
       })};
     },
 
@@ -416,7 +416,7 @@
     },
     // --- COMBOS ---
     crearCombo: async function(p){
-      var ins=await sb.from('combos').insert({ nombre:p.nombre, activo:true, locales:(p.locales||'todos') }).select('id').single();
+      var ins=await sb.from('combos').insert({ nombre:p.nombre, activo:true, locales:(p.locales||'todos'), tipo:(p.tipo||'promo'), precio_cerrado:(p.precioCerrado===''||p.precioCerrado==null?null:Number(p.precioCerrado)) }).select('id').single();
       if(ins.error) throw ins.error; var cid=ins.data.id, comps=[];
       for(var i=0;i<(p.componentes||[]).length;i++){ var c=p.componentes[i]; if(!c.codigo) continue; var pid=await prodIdPorCod(c.codigo); if(!pid) continue;
         comps.push({ combo_id:cid, producto_id:pid, minimo:(c.minimo===''||c.minimo==null?null:Number(c.minimo)), precio_promo:(c.precioPromo===''||c.precioPromo==null?null:Number(c.precioPromo)), peso_unitario:(c.pesoUnitario===''||c.pesoUnitario==null?null:Number(c.pesoUnitario)) }); }

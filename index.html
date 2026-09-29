@@ -142,11 +142,14 @@ async function iniciar(){
       DATA[suc]=DATA[suc]||{}; DATA[suc][r.anio]=DATA[suc][r.anio]||{};
       DATA[suc][r.anio][r.mes]={monto:Number(r.monto)||0, clientes:Number(r.clientes)||0};
     });
-    // Paso 2: IPC del INDEC para ajustar por inflación
-    await cargarIPC();
-    document.getElementById('sub').textContent='Actualizado: '+new Date().toLocaleString('es-AR')+(IPC_BASE_MES?(' · pesos de '+IPC_BASE_MES):'');
+    // Paso 2: dibujar YA (valores nominales) para no depender de la API de IPC
     initFiltros();
+    document.getElementById('sub').textContent='Actualizado: '+new Date().toLocaleString('es-AR');
     render();
+    // Paso 3: IPC del INDEC en segundo plano; cuando llega, re-dibuja ajustado
+    cargarIPC().then(function(){
+      if(IPC_BASE_MES){ document.getElementById('sub').textContent='Actualizado: '+new Date().toLocaleString('es-AR')+' · pesos de '+IPC_BASE_MES; render(); }
+    });
   }catch(e){
     document.getElementById('main').innerHTML='<div class="vacio">No se pudieron cargar los datos.<br><small>'+(e.message||e)+'</small></div>';
   }
@@ -155,7 +158,9 @@ async function iniciar(){
 async function cargarIPC(){
   IPC={}; IPC_BASE=0; IPC_BASE_MES='';
   try{
-    const r=await fetch('https://apis.datos.gob.ar/series/api/series/?ids=148.3_INIVELNAL_DICI_M_26&limit=5000&format=json');
+    const ctrl=new AbortController(); const to=setTimeout(function(){ ctrl.abort(); }, 7000);
+    const r=await fetch('https://apis.datos.gob.ar/series/api/series/?ids=148.3_INIVELNAL_DICI_M_26&limit=5000&format=json', {signal:ctrl.signal});
+    clearTimeout(to);
     const j=await r.json();
     (j.data||[]).forEach(d=>{ const k=String(d[0]).substring(0,7); const v=Number(d[1]); if(v>0){ IPC[k]=v; if(k>IPC_BASE_MES){ IPC_BASE_MES=k; IPC_BASE=v; } } });
   }catch(e){ /* sin IPC: se muestran valores nominales */ }

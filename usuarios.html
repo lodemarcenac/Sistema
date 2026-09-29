@@ -87,7 +87,7 @@
 <script>
 var sb=window.sbClient;
 var ROLES=[], PERFILES=[], SUCS=[], uEditId=null;
-var CAT_MODULOS=[['tableros','Tableros'],['productos','Productos'],['clientes','Clientes y Listas'],['stock','Stock'],['compras','Compras'],['remitos','Remitos'],['cuentas','Cuentas'],['caja','Caja'],['ventas','Ventas'],['configuracion','Configuración'],['usuarios','Usuarios y roles']];
+var CAT_MODULOS=[['tableros','Tableros'],['reportes','Reportes'],['productos','Productos'],['clientes','Clientes y Listas'],['stock','Stock'],['compras','Compras'],['remitos','Remitos'],['cuentas','Cuentas'],['caja','Caja'],['ventas','Ventas'],['configuracion','Configuración'],['usuarios','Usuarios y roles']];
 var CAT_ACCIONES=[['ventas.descuento','Hacer descuentos'],['ventas.anular','Anular venta'],['ventas.anular_dia_anterior','Anular venta de día anterior'],['productos.editar_precio','Editar precios'],['productos.editar_costo','Editar costos'],['stock.ajustar','Ajustar stock'],['stock.importar','Importar stock'],['cuentas.pago','Registrar pagos de cuenta']];
 function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
 

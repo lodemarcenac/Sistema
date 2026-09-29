@@ -99,6 +99,7 @@
         <div class="scan">
           <input id="scan" placeholder="Escaneá o buscá por código / nombre…" autocomplete="off">
           <button class="btn" onclick="onScan()">Agregar</button>
+          <button class="btn-sec" onclick="abrirCombos()" title="Agregar un combo">🎁 Combos</button>
           <div id="scan-sug" class="ac" hidden></div>
         </div>
         <div class="card p0">
@@ -138,6 +139,14 @@
       </div>
     </div>
   </main>
+</div>
+
+<div class="ov" id="ov-combos" hidden>
+  <div class="box">
+    <h3>🎁 Combos</h3>
+    <div id="combos-list" style="max-height:50vh;overflow:auto;"></div>
+    <div class="acts" style="margin-top:12px;"><button class="btn-sec" onclick="document.getElementById('ov-combos').hidden=true">Cerrar</button></div>
+  </div>
 </div>
 
 <div class="toast-c" id="toast-c"></div>
@@ -187,7 +196,8 @@ var sb = window.sbClient;
 var PRODS={}, LISTAS=[], LDEF={}, baseName='Minorista';
 var CLIENTES=[], SUCS=[], SIGLAS={}, BALANZAS={}, SUCINFO={};
 var ofertasVigentes={}, ofertasFijas={};
-var COMBOS=[], COMBO_UNIT={};   // combos vigentes + precio promo efectivo por código
+var COMBOS=[], COMBO_UNIT={};   // combos PROMO vigentes + precio promo efectivo por código
+var COMBOS_CERR=[];             // combos a precio cerrado vigentes
 var PROMO_FORMA_OK={};          // cod -> true si su promo por forma de pago quedó habilitada
 var cajaOK=false;               // solo se puede vender con caja del día abierta
 var carrito=[];      // {cod,nombre,tipo,categoria,marca,peso,cantidad,descPct}
@@ -317,7 +327,7 @@ function evaluarPromosForma(){
   });
 }
 // Combos: se activan cuando el carrito tiene TODOS los productos del combo y cada uno llega a su mínimo.
-function cargarCombos(arr){ COMBOS=(arr||[]).filter(function(c){ return localAplica(c.locales); }); }
+function cargarCombos(arr){ var vis=(arr||[]).filter(function(c){ return localAplica(c.locales); }); COMBOS=vis.filter(function(c){ return c.tipo!=='cerrado'; }); COMBOS_CERR=vis.filter(function(c){ return c.tipo==='cerrado'; }); }
 function evaluarCombos(){
   COMBO_UNIT={};
   var sum={}; carrito.forEach(function(it){ var q=(it.tipo==='pesable')?(Number(it.peso)||0):(Number(it.cantidad)||0); sum[it.cod]=(sum[it.cod]||0)+q; });
@@ -339,6 +349,7 @@ function precioBase(cod){
 }
 // Reevalúa el renglón con peso/cantidad y descuento ACTUALES. {precio,unit,oferta,paqueteFijo,precioLista,brutoLinea}
 function calcLinea(it){
+  if(it.esCombo){ var dc=Number(it.descPct)||0; var brc=+(Number(it.precio)||0).toFixed(2); return { unit:brc, bruto:brc, precio:+(brc*(1-dc/100)).toFixed(2), oferta:'combo', paqueteFijo:false, precioLista:brc }; }
   var p=PRODS[it.cod]||{}; var base=precioBase(it.cod); var d=Number(it.descPct)||0; var out;
   if((p.tipo||'pesable')==='pesable'){
     var peso=Number(it.peso)||0;
@@ -428,7 +439,23 @@ function agregar(cod,opts){
   carrito.push({ cod:cod, nombre:p.nombre||cod, tipo:(p.tipo||'pesable'), categoria:p.categoria||'', marca:p.marca||'', peso:(opts.peso!=null?+Number(opts.peso).toFixed(3):null), cantidad:(opts.cantidad!=null?Number(opts.cantidad):(p.tipo==='unidad'?1:null)), descPct:0 });
   render();
 }
-function editarCant(i,val){ var it=carrito[i]; if(!it) return; if(it.tipo==='pesable'){ it.peso=(val===''?0:+Number(val).toFixed(3)); } else { it.cantidad=(val===''?1:Number(val)); } render(); }
+function editarCant(i,val){ var it=carrito[i]; if(!it || it.esCombo) return; if(it.tipo==='pesable'){ it.peso=(val===''?0:+Number(val).toFixed(3)); } else { it.cantidad=(val===''?1:Number(val)); } render(); }
+function abrirCombos(){
+  var cont=document.getElementById('combos-list');
+  cont.innerHTML = COMBOS_CERR.length ? COMBOS_CERR.map(function(c){
+    var comps=(c.componentes||[]).map(function(k){ return (k.nombreProd||k.codigo)+' x'+k.minimo; }).join(', ');
+    return '<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;">'+
+      '<div><b>'+c.nombre+'</b> <span style="color:var(--brand);font-weight:700;">'+fmt$(c.precioCerrado)+'</span><br><span class="cod" style="font-size:.8rem;">'+comps+'</span></div>'+
+      '<button class="btn" onclick="agregarCombo('+c.id+')">Agregar</button></div>';
+  }).join('') : '<p class="muted">No hay combos a precio cerrado. Cargalos en Productos → Promos.</p>';
+  document.getElementById('ov-combos').hidden=false;
+}
+function agregarCombo(id){
+  var c=COMBOS_CERR.find(function(x){ return x.id===id; }); if(!c) return;
+  var componentes=(c.componentes||[]).map(function(k){ return { codigo:k.codigo, tipo:(k.tipoProd||'pesable'), cantidad:Number(k.minimo)||0, peso_unit:(k.pesoUnitario===''||k.pesoUnitario==null?0:Number(k.pesoUnitario)) }; });
+  carrito.push({ esCombo:true, comboId:id, nombre:c.nombre, precio:Number(c.precioCerrado)||0, descPct:0, componentes:componentes });
+  document.getElementById('ov-combos').hidden=true; render(); toast('Combo agregado'); document.getElementById('scan').focus();
+}
 function editarDesc(i,val){ if(window.PERM && window.PERM.cargado && !window.PERM.puede('ventas.descuento')){ toast('No tenés permiso para hacer descuentos','error'); render(); return; } var it=carrito[i]; if(!it) return; var d=Number(val)||0; if(d<0)d=0; if(d>100)d=100; it.descPct=d; render(); }
 document.addEventListener('perm-listo', function(){
   if(window.PERM && !window.PERM.puede('ventas.descuento')){ var d=document.getElementById('desc'); if(d){ d.value=0; d.readOnly=true; d.title='Sin permiso para descuentos'; } render(); }
@@ -442,6 +469,14 @@ function render(){
   else {
     tb.innerHTML=carrito.map(function(it,i){
       var c=calcLinea(it);
+      if(it.esCombo){
+        return '<tr><td>🎁 '+it.nombre+' <span class="badge-of" style="background:#f0e8fb;color:var(--purple)">combo</span></td>'+
+          '<td class="muted">1 set</td>'+
+          '<td class="num">'+fmt$(c.unit)+'</td>'+
+          '<td class="num"><input class="d" type="number" step="1" min="0" max="100" value="'+(it.descPct||0)+'" onchange="editarDesc('+i+',this.value)"></td>'+
+          '<td class="num">'+fmt$(c.precio)+'</td>'+
+          '<td><button class="x" onclick="quitar('+i+')">✕</button></td></tr>';
+      }
       var qcell = it.tipo==='pesable'
         ? '<input class="q" type="number" step="0.001" value="'+(it.peso||0)+'" onchange="editarCant('+i+',this.value)"> kg'
         : '<input class="q" type="number" step="1" value="'+(it.cantidad||1)+'" onchange="editarCant('+i+',this.value)"> u';
@@ -559,11 +594,14 @@ async function cobrar(){
   var bruto=carrito.reduce(function(s,it){ return s+calcLinea(it).precio; },0);
   var descPct=Number(document.getElementById('desc').value)||0;
   var pesoTotal=carrito.reduce(function(s,it){ return s+(Number(it.peso)||0); },0);
-  var items=carrito.map(function(it){ var c=calcLinea(it); return {
+  var items=carrito.filter(function(it){ return !it.esCombo; }).map(function(it){ var c=calcLinea(it); return {
     codigo:it.cod, nombre:it.nombre, categoria:it.categoria, marca:it.marca, tipo:it.tipo,
     peso:(it.tipo==='pesable'?(Number(it.peso)||0):null), precio_kg:(it.tipo==='pesable'?c.unit:null),
     precio:c.precio, cantidad:(it.tipo==='unidad'?(Number(it.cantidad)||1):1),
     precio_lista:c.precioLista, descuento_pct:(Number(it.descPct)||0)
+  }; });
+  var combos=carrito.filter(function(it){ return it.esCombo; }).map(function(it){ var c=calcLinea(it); return {
+    nombre:it.nombre, codigo:('COMBO:'+it.comboId), precio:c.precio, componentes:it.componentes||[]
   }; });
 
   var venta={
@@ -574,7 +612,7 @@ async function cobrar(){
     es_cta:hayCta,
     total_bruto:+bruto.toFixed(2), descuento_pct:descPct, descuento_monto:+(bruto*descPct/100).toFixed(2),
     total:total, peso_total:+pesoTotal.toFixed(3), cant_items:carrito.length,
-    items:items, pagos:pagosLimpios
+    items:items, combos:combos, pagos:pagosLimpios
   };
   var btn=document.getElementById('btn-cobrar'); btn.disabled=true; btn.textContent='Procesando…';
   var r=await window.sp('registrarVenta',{venta:venta});
@@ -605,6 +643,7 @@ function armarTicket(r,venta,pagosLimpios){
     L.push(it.nombre);
     L.push(linea('  '+q+(it.descuento_pct>0?(' (-'+it.descuento_pct+'%)'):''), fmt$(it.precio)));
   });
+  (venta.combos||[]).forEach(function(cb){ L.push('Combo: '+cb.nombre); L.push(linea('  1 set', fmt$(cb.precio))); });
   L.push('----------------------------------------');
   if(venta.descuento_pct>0){ L.push(linea('Bruto:',fmt$(venta.total_bruto))); L.push(linea('Descuento ('+venta.descuento_pct+'%):','-'+fmt$(venta.descuento_monto))); }
   L.push(linea('TOTAL:', fmt$(venta.total)));
