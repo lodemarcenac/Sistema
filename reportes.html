@@ -82,9 +82,6 @@
 
     <!-- ======================= TABLERO DEL DÍA ======================= -->
     <div id="t-dia">
-      <div class="filtros" style="margin-bottom:6px;">
-        <div class="field" style="flex:1 1 100%;"><label>Local</label><div id="dia-suc" class="chips"></div></div>
-      </div>
       <div class="filtros">
         <div class="field"><label>Fecha</label><input type="date" id="td-fecha" onchange="renderTablero()"></div>
         <div class="chips" style="padding-bottom:2px;">
@@ -188,15 +185,6 @@ function fmtN(n){ return (Number(n)||0).toLocaleString('es-AR'); }
 function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
 function sucSel(){ var v=document.getElementById('selSuc').value; return v?Number(v):null; }
 function sucNombre(){ var v=document.getElementById('selSuc').value; return v?(SUCID[Number(v)]||''):'Todos los locales'; }
-// Chips de local para el Tablero del día (reflejan/controlan el selector del header)
-function pintarChipsSuc(){
-  var cont=document.getElementById('dia-suc'); if(!cont) return;
-  var sel=document.getElementById('selSuc'); var cur=sel.value;
-  cont.innerHTML=Array.prototype.map.call(sel.options,function(o){
-    return '<span class="chip'+(o.value===cur?' active':'')+'" data-v="'+o.value+'">'+o.textContent+'</span>';
-  }).join('');
-  cont.querySelectorAll('.chip').forEach(function(ch){ ch.addEventListener('click',function(){ sel.value=this.getAttribute('data-v'); renderTablero(); }); });
-}
 
 // ---- Login / sesión ----
 document.getElementById('login-form').addEventListener('submit', async function(e){
@@ -257,7 +245,6 @@ function barList(items, money){
 async function renderTablero(){
   var f=document.getElementById('td-fecha').value || hoyISO();
   var suc=sucSel();
-  pintarChipsSuc();
   var body=document.getElementById('dia-body'); body.innerHTML='<div class="vacio">Cargando…</div>';
   var r=await sb.rpc('reporte_dia',{ p_desde:f, p_hasta:f, p_suc:suc });
   if(r.error){ body.innerHTML='<div class="vacio">No se pudo cargar.<br><small>'+r.error.message+'</small></div>'; return; }
@@ -278,8 +265,8 @@ async function renderTablero(){
 
   body.innerHTML=
     '<div class="kpis">'+
-      kpi('Ventas del día', fmt$(ventas), fmtKg(d.kg)+' kg', '')+
-      kpi('Tickets', fmtN(tickets), 'Ticket prom. '+fmt$(tprom), '')+
+      kpi('Ventas del día', fmt$(ventas), fmtN(tickets)+' personas', '')+
+      kpi('Personas', fmtN(tickets), 'entraron al local · ticket prom. '+fmt$(tprom), '')+
       kpi('Margen bruto', fmt$(margen), mpct.toFixed(1)+'% · costo '+fmt$(cmv), 'good')+
       kpi('Estado de caja', cajaTxt, sucNombre(), cajaCls)+
     '</div>'+
@@ -319,18 +306,18 @@ async function renderSemana(){
     rows.push({lbl:DOWL[i]+' '+ddmm(d), v:v, kg:kg, t:t});
   }
   var filas=rows.map(function(r){ var w=Math.max(2,Math.round(r.v/maxV*100));
-    return '<tr><td>'+r.lbl+'</td><td style="width:38%"><span class="sem-bar"><span style="width:'+w+'%"></span></span></td>'+
-      '<td class="num">'+fmt$(r.v)+'</td><td class="num">'+fmtKg(r.kg)+'</td><td class="num">'+fmtN(r.t)+'</td></tr>';
+    return '<tr><td>'+r.lbl+'</td><td style="width:42%"><span class="sem-bar"><span style="width:'+w+'%"></span></span></td>'+
+      '<td class="num">'+fmt$(r.v)+'</td><td class="num">'+fmtN(r.t)+'</td></tr>';
   }).join('');
   body.innerHTML=
     '<div class="kpis" style="margin-bottom:12px;">'+
-      kpi('Ventas de la semana', fmt$(totV), fmtKg(totK)+' kg', '')+
-      kpi('Tickets', fmtN(totT), 'Ticket prom. '+fmt$(totT>0?totV/totT:0), '')+
+      kpi('Ventas de la semana', fmt$(totV), fmtN(totT)+' personas', '')+
+      kpi('Personas', fmtN(totT), 'entraron al local · ticket prom. '+fmt$(totT>0?totV/totT:0), '')+
       kpi('Promedio diario', fmt$(totV/7), 'sobre 7 días', '')+
     '</div>'+
-    '<div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Día</th><th></th><th class="num">Ventas</th><th class="num">Kg</th><th class="num">Tickets</th></tr></thead>'+
+    '<div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Día</th><th></th><th class="num">Ventas</th><th class="num">Personas</th></tr></thead>'+
     '<tbody>'+filas+'</tbody>'+
-    '<tfoot><tr><td>TOTAL</td><td></td><td class="num">'+fmt$(totV)+'</td><td class="num">'+fmtKg(totK)+'</td><td class="num">'+fmtN(totT)+'</td></tr></tfoot>'+
+    '<tfoot><tr><td>TOTAL</td><td></td><td class="num">'+fmt$(totV)+'</td><td class="num">'+fmtN(totT)+'</td></tr></tfoot>'+
     '</table></div></div>'+
     '<div class="nota">'+sucNombre()+'.</div>';
 }
