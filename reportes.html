@@ -6,6 +6,8 @@
 <title>Reportes — Carnicería</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="estilos.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/themes/base/jquery-ui.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.css">
 <style>
   header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
   header .ttl{font-size:var(--fs-xl);font-weight:700;}
@@ -35,6 +37,15 @@
   .pos{color:var(--good);} .neg{color:var(--bad);}
   .card-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
   .nota{font-size:var(--fs-xs);color:var(--muted);margin-top:10px;}
+  /* Explorador (PivotTable.js) */
+  #pivot{overflow:auto;font-size:var(--fs-sm);}
+  #pivot .pvtUi{color:var(--ink);font-family:var(--font);}
+  #pivot .pvtUi select{font-family:inherit;font-size:var(--fs-xs);}
+  #pivot .pvtAxisContainer li span.pvtAttr{background:var(--surface-3);border-color:#d7dded;border-radius:5px;}
+  #pivot .pvtRenderers,#pivot .pvtAxisContainer,#pivot .pvtVals{background:var(--surface-2);}
+  #pivot td.pvtTotal,#pivot td.pvtGrandTotal,#pivot th{font-variant-numeric:tabular-nums;}
+  .sem-bar{display:inline-block;width:100%;height:14px;background:var(--surface-3);border-radius:5px;overflow:hidden;vertical-align:middle;}
+  .sem-bar span{display:block;height:100%;background:linear-gradient(90deg,var(--brand),var(--brand-2));}
 </style>
 </head>
 <body>
@@ -66,6 +77,7 @@
       <button class="tab on" data-t="dia" onclick="switchTab('dia')">📅 Tablero del día</button>
       <button class="tab" data-t="pnl" onclick="switchTab('pnl')">💰 P&amp;L por local</button>
       <button class="tab" data-t="rank" onclick="switchTab('rank')">🏆 Rankings</button>
+      <button class="tab" data-t="pivot" onclick="switchTab('pivot')">🧊 Explorador</button>
     </div>
 
     <!-- ======================= TABLERO DEL DÍA ======================= -->
@@ -78,6 +90,15 @@
         </div>
       </div>
       <div id="dia-body"><div class="vacio">Cargando…</div></div>
+
+      <div class="seccion" style="margin-top:24px;">📆 Semana (Lunes a Domingo)</div>
+      <div class="filtros" style="align-items:center;">
+        <button class="btn-sec" onclick="cambiarSemana(-1)">‹ Semana anterior</button>
+        <span id="sem-rango" style="font-weight:700;min-width:200px;text-align:center;"></span>
+        <button class="btn-sec" onclick="cambiarSemana(1)">Semana siguiente ›</button>
+        <button class="btn-sec" onclick="cambiarSemana(0)">Esta semana</button>
+      </div>
+      <div id="sem-body"><div class="vacio">Cargando…</div></div>
     </div>
 
     <!-- ======================= P&L POR LOCAL ======================= -->
@@ -113,6 +134,24 @@
       </div>
       <div id="rank-body"><div class="vacio">Elegí un período y tocá “Ver”.</div></div>
     </div>
+
+    <!-- ======================= EXPLORADOR (PIVOT) ======================= -->
+    <div id="t-pivot" hidden>
+      <div class="filtros">
+        <div class="field"><label>Desde</label><input type="date" id="pv-desde"></div>
+        <div class="field"><label>Hasta</label><input type="date" id="pv-hasta"></div>
+        <button class="btn" onclick="renderPivot()">Ver</button>
+        <div class="chips" style="padding-bottom:2px;">
+          <span class="chip mini" onclick="periodo('pv','mes')">Este mes</span>
+          <span class="chip mini" onclick="periodo('pv','mesant')">Mes anterior</span>
+          <span class="chip mini" onclick="periodo('pv','anio')">Año</span>
+        </div>
+      </div>
+      <div class="card">
+        <p class="muted" style="margin-bottom:12px;">Arrastrá los campos (<b>Producto, Categoría, Local, Año, Mes, Día semana</b>) a las <b>filas</b> y <b>columnas</b>. Cambiá el <b>valor</b> (Importe o Kg) y el tipo de vista (Tabla, Barras, Mapa de calor) desde los selectores de arriba a la izquierda.</p>
+        <div id="pivot-body"><div class="vacio">Elegí un período y tocá “Ver”.</div></div>
+      </div>
+    </div>
   </main>
 </div>
 
@@ -120,6 +159,10 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.es.min.js"></script>
 <script src="sb-api.js"></script>
 <script src="auth-guard.js"></script>
 <script src="nav.js"></script>
@@ -127,6 +170,11 @@
 var sb=window.sbClient;
 var SUCS=[], SUCID={}, TAB='dia';
 var PNL_ROWS=[], RANK_ROWS=[];
+var WEEK_START=null;
+var MESN=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+var DOWL=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];  // índice = (getDay()+6)%7
+function ddmm(d){ return p2(d.getDate())+'/'+p2(d.getMonth()+1); }
+function lunes(d){ var x=new Date(d); var g=(x.getDay()+6)%7; x.setDate(x.getDate()-g); x.setHours(0,0,0,0); return x; }
 
 function p2(n){ return (n<10?'0':'')+n; }
 function iso(d){ return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate()); }
@@ -155,7 +203,8 @@ async function iniciar(){
   sel.innerHTML='<option value="">Todos los locales</option>'+suc.map(function(s){ return '<option value="'+s.id+'">'+s.nombre+'</option>'; }).join('');
   // defaults de fechas
   document.getElementById('td-fecha').value=hoyISO();
-  periodo('pl','mes',true); periodo('rk','mes',true);
+  WEEK_START=lunes(new Date());
+  periodo('pl','mes',true); periodo('rk','mes',true); periodo('pv','mes',true);
   document.getElementById('sub').textContent='Costeo por último costo · '+new Date().toLocaleDateString('es-AR');
   renderTablero();
 }
@@ -163,10 +212,10 @@ async function iniciar(){
 function switchTab(name){
   TAB=name;
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); });
-  ['dia','pnl','rank'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); });
+  ['dia','pnl','rank','pivot'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); });
   renderActual();
 }
-function renderActual(){ if(TAB==='dia') renderTablero(); else if(TAB==='pnl') renderPnl(); else renderRank(); }
+function renderActual(){ if(TAB==='dia') renderTablero(); else if(TAB==='pnl') renderPnl(); else if(TAB==='rank') renderRank(); else if(TAB==='pivot') renderPivot(); }
 
 // ---- Períodos ----
 function fechaRapida(k){ var d=new Date(); if(k==='ayer') d.setDate(d.getDate()-1); document.getElementById('td-fecha').value=iso(d); renderTablero(); }
@@ -177,7 +226,7 @@ function periodo(pref, k, soloSet){
   else if(k==='anio'){ desde=new Date(hoy.getFullYear(),0,1); hasta=hoy; }
   document.getElementById(pref+'-desde').value=iso(desde);
   document.getElementById(pref+'-hasta').value=iso(hasta);
-  if(!soloSet){ if(pref==='pl') renderPnl(); else renderRank(); }
+  if(!soloSet){ if(pref==='pl') renderPnl(); else if(pref==='rk') renderRank(); else if(pref==='pv') renderPivot(); }
 }
 
 // ---- Barras horizontales ----
@@ -230,8 +279,48 @@ async function renderTablero(){
     '<div class="seccion">💳 Ventas por forma de pago</div>'+
     '<div class="card">'+barList(itemsF, true)+'</div>'+
     '<div class="nota">Fecha: '+f+' · '+sucNombre()+'. «A cobrar / A pagar» son saldos actuales (no del día). Margen = ventas − costo (último costo).</div>';
+  renderSemana();
 }
 function kpi(lbl,val,sub,cls){ return '<div class="kpi'+(cls?' '+cls:'')+'"><div class="k-lbl">'+lbl+'</div><div class="k-val">'+val+'</div><div class="k-sub">'+sub+'</div></div>'; }
+
+// ---- Resumen semanal (Lun–Dom) ----
+function cambiarSemana(delta){
+  if(delta===0){ WEEK_START=lunes(new Date()); }
+  else { var x=new Date(WEEK_START); x.setDate(x.getDate()+delta*7); WEEK_START=x; }
+  renderSemana();
+}
+async function renderSemana(){
+  if(!WEEK_START) WEEK_START=lunes(new Date());
+  var end=new Date(WEEK_START); end.setDate(end.getDate()+6);
+  var desde=iso(WEEK_START), hasta=iso(end), suc=sucSel();
+  document.getElementById('sem-rango').textContent='Lun '+ddmm(WEEK_START)+' – Dom '+ddmm(end);
+  var body=document.getElementById('sem-body'); body.innerHTML='<div class="vacio">Cargando…</div>';
+  var r=await sb.rpc('reporte_diario',{ p_desde:desde, p_hasta:hasta, p_suc:suc });
+  if(r.error){ body.innerHTML='<div class="vacio">No se pudo cargar.<br><small>'+r.error.message+'</small></div>'; return; }
+  var byDay={}; (r.data||[]).forEach(function(x){ byDay[x.dia]=x; });
+  var totV=0,totK=0,totT=0,maxV=1, rows=[];
+  for(var i=0;i<7;i++){
+    var d=new Date(WEEK_START); d.setDate(d.getDate()+i); var x=byDay[iso(d)]||{};
+    var v=Number(x.ventas)||0, kg=Number(x.kg)||0, t=Number(x.tickets)||0;
+    if(v>maxV) maxV=v; totV+=v; totK+=kg; totT+=t;
+    rows.push({lbl:DOWL[i]+' '+ddmm(d), v:v, kg:kg, t:t});
+  }
+  var filas=rows.map(function(r){ var w=Math.max(2,Math.round(r.v/maxV*100));
+    return '<tr><td>'+r.lbl+'</td><td style="width:38%"><span class="sem-bar"><span style="width:'+w+'%"></span></span></td>'+
+      '<td class="num">'+fmt$(r.v)+'</td><td class="num">'+fmtKg(r.kg)+'</td><td class="num">'+fmtN(r.t)+'</td></tr>';
+  }).join('');
+  body.innerHTML=
+    '<div class="kpis" style="margin-bottom:12px;">'+
+      kpi('Ventas de la semana', fmt$(totV), fmtKg(totK)+' kg', '')+
+      kpi('Tickets', fmtN(totT), 'Ticket prom. '+fmt$(totT>0?totV/totT:0), '')+
+      kpi('Promedio diario', fmt$(totV/7), 'sobre 7 días', '')+
+    '</div>'+
+    '<div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Día</th><th></th><th class="num">Ventas</th><th class="num">Kg</th><th class="num">Tickets</th></tr></thead>'+
+    '<tbody>'+filas+'</tbody>'+
+    '<tfoot><tr><td>TOTAL</td><td></td><td class="num">'+fmt$(totV)+'</td><td class="num">'+fmtKg(totK)+'</td><td class="num">'+fmtN(totT)+'</td></tr></tfoot>'+
+    '</table></div></div>'+
+    '<div class="nota">'+sucNombre()+'.</div>';
+}
 
 // ============================ P&L POR LOCAL ============================
 async function renderPnl(){
@@ -294,6 +383,36 @@ async function renderRank(){
     '<div class="seccion">🥩 Mix por categoría ('+(metric==='kg'?'por kg':'por $')+')</div>'+
     '<div class="card">'+barList(itemsCat, metric!=='kg')+'</div>'+
     '<div class="nota">Período '+desde+' → '+hasta+' · '+sucNombre()+'.</div>';
+}
+
+// ============================ EXPLORADOR (PIVOT) ============================
+async function renderPivot(){
+  var desde=document.getElementById('pv-desde').value, hasta=document.getElementById('pv-hasta').value, suc=sucSel();
+  var body=document.getElementById('pivot-body'); body.innerHTML='<div class="vacio">Cargando…</div>';
+  var $=window.jQuery;
+  if(!$ || !$.fn || !$.fn.pivotUI){ body.innerHTML='<div class="vacio">No se pudo cargar el explorador (librería no disponible). Revisá la conexión y recargá.</div>'; return; }
+  var r=await sb.rpc('reporte_pivot',{ p_desde:desde, p_hasta:hasta, p_suc:suc });
+  if(r.error){ body.innerHTML='<div class="vacio">No se pudo cargar.<br><small>'+r.error.message+'</small></div>'; return; }
+  var arr=r.data||[];
+  if(!arr.length){ body.innerHTML='<div class="vacio">Sin ventas en el período.</div>'; return; }
+  var recs=arr.map(function(x){
+    var f=new Date(x.fecha+'T00:00:00');
+    return { 'Local':x.local, 'Año':String(f.getFullYear()), 'Mes':p2(f.getMonth()+1)+' '+MESN[f.getMonth()],
+             'Día semana':DOWL[(f.getDay()+6)%7], 'Categoría':x.categoria, 'Producto':x.producto,
+             'Importe':Math.round(Number(x.importe)||0), 'Kg':Math.round((Number(x.kg)||0)*100)/100 };
+  });
+  body.innerHTML='<div id="pivot"></div>';
+  // Español si el locale trae el agregador "Suma"; si no, inglés (siempre funciona).
+  var loc = ($.pivotUtilities && $.pivotUtilities.locales && $.pivotUtilities.locales.es) ? $.pivotUtilities.locales.es : null;
+  var useEs = !!(loc && loc.aggregators && loc.aggregators['Suma']);
+  var opts = useEs
+    ? { rows:['Categoría'], cols:['Local'], vals:['Importe'], aggregatorName:'Suma', rendererName:'Tabla' }
+    : { rows:['Categoría'], cols:['Local'], vals:['Importe'], aggregatorName:'Sum',  rendererName:'Table' };
+  try{ $('#pivot').pivotUI(recs, opts, true, useEs?'es':'en'); }
+  catch(e){
+    try{ $('#pivot').empty().pivotUI(recs, { rows:['Categoría'], cols:['Local'], vals:['Importe'], aggregatorName:'Sum', rendererName:'Table' }, true); }
+    catch(e2){ body.innerHTML='<div class="vacio">No se pudo dibujar el explorador.<br><small>'+(e2.message||e2)+'</small></div>'; }
+  }
 }
 
 // ============================ EXPORT EXCEL ============================
