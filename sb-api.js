@@ -567,6 +567,12 @@
       var m=await sucIdMap(); var nid=p.nuevo_destino_id||(p.nuevoDestino?m[p.nuevoDestino]:null);
       var r=await sb.rpc('redirigir_remito',{ p:{ remito_id:p.id, nuevo_destino_id:nid } }); if(r.error) throw r.error; return r.data||{ok:true};
     },
+    rechazarRemito: async function(p){
+      var r=await sb.rpc('rechazar_remito',{ p:{ remito_id:p.id, motivo:p.motivo||null } }); if(r.error) throw r.error; return r.data||{ok:true};
+    },
+    anularRemito: async function(p){
+      var r=await sb.rpc('anular_remito',{ p:{ remito_id:p.id, motivo:p.motivo||null } }); if(r.error) throw r.error; return r.data||{ok:true};
+    },
     // --- CUENTAS ---
     registrarPagoCC: async function(p){
       var m=await sucIdMap();

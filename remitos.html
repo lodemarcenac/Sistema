@@ -22,7 +22,7 @@
   .ac-pop div{padding:8px 12px;cursor:pointer;font-size:var(--fs-sm);border-bottom:1px solid var(--line-2);}
   .ac-pop div:hover{background:var(--brand-soft);}
   .pill-est{font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:20px;}
-  .pill-est.pend{background:#fdf0d5;color:var(--warn);} .pill-est.rec{background:#e8f6ee;color:var(--good);}
+  .pill-est.pend{background:#fdf0d5;color:var(--warn);} .pill-est.rec{background:#e8f6ee;color:var(--good);} .pill-est.rech{background:#fbeaea;color:var(--bad);} .pill-est.anul{background:#eceef2;color:#6b7688;}
 </style>
 </head>
 <body>
@@ -75,14 +75,14 @@
     </div>
 
     <div id="t-pend" hidden>
-      <p class="resumen" style="margin-bottom:10px;">Estos remitos ya <b>salieron del origen</b> y están <b>en tránsito</b> hasta que el destino los reciba. Se puede recibir <b>total o parcial</b> (el faltante vuelve al origen) o <b>redirigir</b> a otro local.</p>
+      <p class="resumen" style="margin-bottom:10px;">Estos remitos ya <b>salieron del origen</b> y están <b>en tránsito</b> hasta que el destino los reciba. El destino puede <b>recibir</b> (total o parcial; el faltante vuelve al origen) o <b>rechazar</b> (vuelve todo al origen, sin deuda). <b>Origen o destino</b> pueden <b>redirigir</b> a otro local. El origen puede <b>anular</b> el envío (vuelve todo al origen).</p>
       <div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Número</th><th>Origen</th><th>Destino</th><th>Fecha</th><th class="num">Total (c/plus)</th><th></th></tr></thead><tbody id="pend-tbody"></tbody></table></div></div>
     </div>
 
     <div id="t-hist" hidden>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px;">
         <input id="h-q" placeholder="Buscar número / concepto…" oninput="renderHist()" style="flex:1;min-width:160px;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;">
-        <select id="h-estado" onchange="renderHist()" style="padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"><option value="">Todos los estados</option><option value="pendiente">🚚 En tránsito</option><option value="recibido parcial">Parcial</option><option value="recibido">Recibido</option></select>
+        <select id="h-estado" onchange="renderHist()" style="padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"><option value="">Todos los estados</option><option value="pendiente">🚚 En tránsito</option><option value="recibido parcial">Parcial</option><option value="recibido">Recibido</option><option value="rechazado">Rechazado</option><option value="anulado">Anulado</option></select>
         <select id="h-origen" onchange="renderHist()" style="padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></select>
         <select id="h-destino" onchange="renderHist()" style="padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></select>
       </div>
@@ -232,7 +232,7 @@ function poblarFiltrosHist(){
   opts('h-origen'); opts('h-destino');
 }
 function renderPend(){
-  var arr=REMITOS.filter(function(r){ return r.estado!=='recibido'; });
+  var arr=REMITOS.filter(function(r){ return r.estado!=='recibido' && r.estado!=='rechazado' && r.estado!=='anulado'; });
   document.getElementById('pend-tbody').innerHTML=arr.map(function(r){
     var f=r.emision?new Date(r.emision).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
     var puedeRecibir=(SUCID[r.destinoId]===sucActual);
@@ -240,7 +240,9 @@ function renderPend(){
     return '<tr><td>'+r.numero+'</td><td>'+(SUCID[r.origenId]||'')+'</td><td>'+(SUCID[r.destinoId]||'')+'</td><td>'+f+'</td><td class="num">'+fmt$(r.total)+'</td>'+
       '<td style="white-space:nowrap;"><button class="mini-btn" onclick="verDet('+r.id+',\''+r.numero+'\')">Ver</button>'+
       (puedeRecibir?'<button class="btn" style="padding:4px 10px;font-size:.75rem;" onclick="recibirUI('+r.id+')">Recibir</button>':'')+
-      (esOrigen?'<button class="mini-btn" onclick="redirigirUI('+r.id+')">Redirigir</button>':'')+
+      (puedeRecibir?'<button class="mini-btn" style="color:var(--bad);border-color:#f0c9c9;" onclick="rechazarUI('+r.id+',\''+r.numero+'\')">Rechazar</button>':'')+
+      ((esOrigen||puedeRecibir)?'<button class="mini-btn" onclick="redirigirUI('+r.id+')">Redirigir</button>':'')+
+      (esOrigen?'<button class="mini-btn" style="color:var(--bad);border-color:#f0c9c9;" onclick="anularUI('+r.id+',\''+r.numero+'\')">Anular</button>':'')+
       (!puedeRecibir&&!esOrigen?'<span class="muted" style="font-size:.72rem;"> (recibe '+(SUCID[r.destinoId]||'')+')</span>':'')+'</td></tr>';
   }).join('') || '<tr><td colspan="6" class="muted">No hay remitos pendientes.</td></tr>';
 }
@@ -260,7 +262,7 @@ function renderHist(){
   document.getElementById('hist-tbody').innerHTML=arr.map(function(r){
     var fe=r.emision?new Date(r.emision).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
     var fr=r.recepcion?new Date(r.recepcion).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'—';
-    var est=r.estado==='recibido'?'<span class="pill-est rec">recibido</span>':'<span class="pill-est pend">pendiente</span>';
+    var est=r.estado==='recibido'?'<span class="pill-est rec">recibido</span>':r.estado==='rechazado'?'<span class="pill-est rech">rechazado</span>':r.estado==='anulado'?'<span class="pill-est anul">anulado</span>':r.estado==='recibido parcial'?'<span class="pill-est pend">parcial</span>':'<span class="pill-est pend">pendiente</span>';
     return '<tr><td>'+r.numero+'</td><td>'+(SUCID[r.origenId]||'')+'</td><td>'+(SUCID[r.destinoId]||'')+'</td><td>'+est+'</td><td>'+fe+'</td><td>'+fr+'</td><td class="num">'+fmt$(r.total)+'</td>'+
       '<td><button class="mini-btn" onclick="verDet('+r.id+',\''+r.numero+'\')">Ver</button></td></tr>';
   }).join('') || '<tr><td colspan="8" class="muted">Sin remitos.</td></tr>';
@@ -284,6 +286,20 @@ async function confirmarRecepcion(){
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   document.getElementById('ov-rec').hidden=true;
   toast(r.parcial?'Recibido parcial — el faltante volvió al origen':'Remito recibido'); cargarRemitos();
+}
+async function rechazarUI(id, num){
+  if(!confirm('¿Rechazar el remito '+num+'? Toda la mercadería vuelve al local de origen y no se genera deuda.')) return;
+  var motivo=prompt('Motivo del rechazo (opcional):','')||'';
+  var r=await window.sp('rechazarRemito',{ id:id, motivo:motivo.trim() });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Remito rechazado — la mercadería volvió al origen'); cargarRemitos();
+}
+async function anularUI(id, num){
+  if(!confirm('¿Anular el remito '+num+'? Toda la mercadería vuelve a este local (origen) y no se genera deuda.')) return;
+  var motivo=prompt('Motivo de la anulación (opcional):','')||'';
+  var r=await window.sp('anularRemito',{ id:id, motivo:motivo.trim() });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Remito anulado — la mercadería volvió al origen'); cargarRemitos();
 }
 var redirRemitoId=null;
 function redirigirUI(id){
