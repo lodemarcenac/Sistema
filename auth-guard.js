@@ -10,7 +10,7 @@
   window.PERM = { cargado:false, esAdmin:false, permisos:[], locales:[], rol:null, puede:function(){ return true; } };
   // Evita el "parpadeo" del login al navegar: si ya hay sesión guardada, oculta el login de entrada.
   try{ for(var _i=0;_i<localStorage.length;_i++){ var _k=localStorage.key(_i)||''; if(_k.indexOf('-auth-token')>=0){ var _st=document.createElement('style'); _st.id='hide-login-flash'; _st.textContent='#login{display:none!important;}'; (document.head||document.documentElement).appendChild(_st); break; } } }catch(e){}
-  function mostrarLogin(){ var st=document.getElementById('hide-login-flash'); if(st) st.remove(); var lg=document.getElementById('login'); if(lg){ lg.hidden=false; lg.style.display=''; } }
+  function mostrarLogin(){ var st=document.getElementById('hide-login-flash'); if(st) st.remove(); var lg=document.getElementById('login'); if(lg){ lg.hidden=false; lg.style.display=''; } inyectarOlvide(); }
   var NAVMAP = { 'index.html':'tableros','reportes.html':'reportes','productos.html':'productos','clientes.html':'clientes','stock.html':'stock','compras.html':'compras','remitos.html':'remitos','cuentas.html':'cuentas','conciliacion.html':'conciliacion','caja.html':'caja','ventas.html':'ventas','configuracion.html':'configuracion','usuarios.html':'usuarios' };
   function mkPuede(esAdmin, permisos){ var set={}; (permisos||[]).forEach(function(p){ set[p]=true; }); return function(k){ return !!(esAdmin || set['*'] || set[k]); }; }
   async function applyGuard(){
@@ -20,7 +20,7 @@
       var r=await window.sf('getMiPerfil'); if(!r || !r.ok) return;
       window.PERM={ cargado:true, esAdmin:!!r.esAdmin, permisos:r.permisos||[], locales:r.locales||[], rol:r.rol, nombre:r.nombre||'', email:r.email||'', bootstrap:!!r.bootstrap, puede:mkPuede(r.esAdmin, r.permisos) };
       window.puede=function(k){ return window.PERM.puede(k); };
-      filtrarNav(); filtrarLocales();
+      filtrarNav(); filtrarLocales(); inyectarCambiarClave();
       document.dispatchEvent(new Event('perm-listo'));
     }catch(e){ /* ante cualquier error no bloqueamos el uso */ }
   }
@@ -55,7 +55,7 @@
     }
     // Si no hay sesión válida, mostrar el login (y sacar el ocultamiento anti-parpadeo)
     if(window.sbClient){
-      try{ window.sbClient.auth.getSession().then(function(s){ if(!(s.data && s.data.session)) mostrarLogin(); }); }catch(e){ mostrarLogin(); }
+      try{ window.sbClient.auth.getSession().then(function(s){ if(!(s.data && s.data.session)){ mostrarLogin(); } else { inyectarCambiarClave(); } }); }catch(e){ mostrarLogin(); }
     }
     // --- Recuperación de contraseña ---
     if(window.sbClient){
@@ -88,18 +88,50 @@
     });
   })();
 
-  function overlayReset(){
+  // Botón "🔑 Clave" para que un usuario LOGUEADO cambie su contraseña (junto a Salir).
+  function inyectarCambiarClave(){
+    var salir=document.getElementById('btn-salir'); if(!salir) return;
+    if(document.getElementById('btn-cambiar-clave')) return;
+    var b=document.createElement('button'); b.id='btn-cambiar-clave'; b.type='button';
+    b.textContent='🔑 Clave'; b.title='Cambiar mi contraseña'; b.style.marginRight='8px';
+    b.addEventListener('click', function(){ overlayReset(true); });
+    salir.parentNode.insertBefore(b, salir);
+  }
+  // Link "¿Olvidaste tu contraseña?" en la pantalla de login.
+  function inyectarOlvide(){
+    var box=document.querySelector('#login .box'); if(!box) return;
+    if(document.getElementById('link-olvide')) return;
+    var wrap=document.createElement('div'); wrap.id='link-olvide'; wrap.style.cssText='text-align:center;margin-top:14px;';
+    wrap.innerHTML='<a href="#" style="color:#1257c4;font-size:.85rem;text-decoration:underline;cursor:pointer;">¿Olvidaste tu contraseña?</a>';
+    box.appendChild(wrap);
+    wrap.querySelector('a').addEventListener('click', function(e){ e.preventDefault(); olvideClave(); });
+  }
+  async function olvideClave(){
+    var inp=document.getElementById('li-email'); var email=((inp&&inp.value)||'').trim();
+    if(!email){ email=(prompt('Escribí tu email para recibir el link de recuperación:')||'').trim(); }
+    if(!email) return;
+    var msg=document.getElementById('li-err');
+    if(msg){ msg.style.color='#7a8296'; msg.textContent='Enviando…'; }
+    var r=await window.sbClient.auth.resetPasswordForEmail(email, { redirectTo: location.origin+location.pathname });
+    if(r.error){ if(msg){ msg.style.color='#c0392b'; msg.textContent='No se pudo enviar: '+r.error.message; } else { alert('No se pudo: '+r.error.message); } return; }
+    if(msg){ msg.style.color='#2e7d4f'; msg.textContent='Te enviamos un email para cambiar la contraseña. Revisá tu correo (y el spam).'; }
+    else { alert('Te enviamos un email para cambiar la contraseña.'); }
+  }
+
+  function overlayReset(logged){
     if(document.getElementById('pw-reset')) return;
     var d=document.createElement('div'); d.id='pw-reset';
     d.style.cssText='position:fixed;inset:0;background:linear-gradient(160deg,#1257c4,#0d3f92);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;font-family:Inter,system-ui,Arial,sans-serif;';
     d.innerHTML='<div style="background:#fff;border-radius:14px;padding:30px 28px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.3);">'+
-      '<h1 style="font-size:1.35rem;color:#1257c4;margin:0 0 4px;">Nueva contraseña</h1>'+
-      '<p style="font-size:.85rem;color:#7a8296;margin:0 0 16px;">Elegí una contraseña nueva para tu usuario.</p>'+
+      '<h1 style="font-size:1.35rem;color:#1257c4;margin:0 0 4px;">'+(logged?'Cambiar contraseña':'Nueva contraseña')+'</h1>'+
+      '<p style="font-size:.85rem;color:#7a8296;margin:0 0 16px;">Elegí una contraseña nueva para tu usuario (mínimo 6 caracteres).</p>'+
       '<input id="pw-new" type="password" placeholder="Nueva contraseña" style="width:100%;padding:11px 12px;border:1px solid #c7cede;border-radius:8px;font-size:.9rem;box-sizing:border-box;">'+
       '<input id="pw-new2" type="password" placeholder="Repetir contraseña" style="width:100%;margin-top:10px;padding:11px 12px;border:1px solid #c7cede;border-radius:8px;font-size:.9rem;box-sizing:border-box;">'+
       '<button id="pw-save" style="width:100%;margin-top:16px;padding:12px;background:#1257c4;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.9rem;">Guardar contraseña</button>'+
+      (logged?'<button id="pw-cancel" style="width:100%;margin-top:8px;padding:10px;background:#fff;color:#4a5262;border:1px solid #c7cede;border-radius:8px;font-weight:600;cursor:pointer;font-size:.9rem;">Cancelar</button>':'')+
       '<div id="pw-msg" style="font-size:.82rem;margin-top:12px;min-height:1em;"></div></div>';
     document.body.appendChild(d);
+    var cancel=document.getElementById('pw-cancel'); if(cancel) cancel.addEventListener('click', function(){ d.remove(); });
     document.getElementById('pw-save').addEventListener('click', async function(){
       var p1=document.getElementById('pw-new').value, p2=document.getElementById('pw-new2').value, msg=document.getElementById('pw-msg');
       if(p1.length<6){ msg.style.color='#c0392b'; msg.textContent='La contraseña debe tener al menos 6 caracteres.'; return; }
@@ -107,8 +139,8 @@
       msg.style.color='#7a8296'; msg.textContent='Guardando…';
       var r=await window.sbClient.auth.updateUser({ password:p1 });
       if(r.error){ msg.style.color='#c0392b'; msg.textContent='Error: '+r.error.message; return; }
-      msg.style.color='#2e7d4f'; msg.textContent='✓ Contraseña actualizada. Redirigiendo…';
-      setTimeout(function(){ location.href=location.pathname; }, 1200);
+      msg.style.color='#2e7d4f'; msg.textContent='✓ Contraseña actualizada.';
+      setTimeout(function(){ d.remove(); if(!logged) location.href=location.pathname; }, 1000);
     });
   }
 })();
