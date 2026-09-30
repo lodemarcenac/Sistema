@@ -46,6 +46,8 @@ a{ color:var(--brand); }
 
 /* ---- Header / navegación ---- */
 header.app{ background:linear-gradient(90deg,var(--brand),var(--brand-2)); color:#fff; padding:12px 22px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+/* Encabezado cohesivo y sobrio en TODAS las páginas (liga con el navy del menú lateral) */
+header, header.app{ background:linear-gradient(100deg,#0e2a5c 0%,#14509f 58%,#1257c4 100%)!important; box-shadow:0 1px 0 rgba(16,24,40,.06); }
 header.app .ttl{ font-size:var(--fs-xl); font-weight:700; }
 header.app .sub{ font-size:var(--fs-xs); opacity:.9; }
 header.app nav a{ color:#dbe8ff; text-decoration:none; font-size:var(--fs-sm); font-weight:600; margin-right:14px; }
@@ -88,7 +90,7 @@ input,select,textarea{ font-family:inherit; font-size:var(--fs-base); color:var(
 /* ---- Tablas ---- */
 .tblwrap{ overflow-x:auto; }
 table.data{ width:100%; border-collapse:collapse; font-size:var(--fs-sm); }
-table.data th, table.data td{ text-align:left; padding:8px 12px; border-bottom:1px solid var(--line-2); white-space:nowrap; }
+table.data th, table.data td{ text-align:left; padding:7px 12px; border-bottom:1px solid var(--line-2); white-space:nowrap; }
 table.data th{ background:var(--surface-2); color:#6b7688; font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.04em; font-weight:700; }
 table.data tbody tr:hover{ background:#f7f9fc; }
 table.data td.num, table.data th.num{ text-align:right; font-variant-numeric:tabular-nums; }
@@ -121,7 +123,7 @@ input.cell.ro{ background:#f2f4f8; color:var(--muted); }
 .toast.error{ border-left-color:var(--bad); }
 
 /* ---- Estado vacío ---- */
-.vacio{ padding:40px 16px; text-align:center; color:var(--muted); background:var(--surface); border:1px dashed var(--border-inp); border-radius:var(--radius); }
+.vacio{ padding:38px 18px; text-align:center; color:var(--muted); font-size:var(--fs-sm); background:var(--surface-2); border:1px dashed #d5dbe6; border-radius:var(--radius); }
 
 /* ---- Login (compartido) ---- */
 #login{ position:fixed; inset:0; background:linear-gradient(160deg,var(--brand),#0d3f92); display:flex; align-items:center; justify-content:center; z-index:100; padding:20px; }

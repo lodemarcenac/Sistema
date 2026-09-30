@@ -63,6 +63,25 @@
   .ov input{width:100%;padding:12px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-xl);text-align:center;font-family:inherit;margin:8px 0 14px;}
   .ov .acts{display:flex;gap:8px;justify-content:flex-end;}
   .ticket{font-family:'Courier New',monospace;font-size:12px;white-space:pre-wrap;background:#fff;color:#000;padding:6px;}
+  /* --- Ventas a pantalla completa: siempre entra en una pantalla; solo el carrito scrollea --- */
+  #app{ display:flex; flex-direction:column; height:100vh; }
+  #app > header{ flex:0 0 auto; }
+  #app > main{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column; max-width:none; width:100%; margin:0; padding:12px 18px; overflow:hidden; }
+  #caja-banner{ flex:0 0 auto; }
+  .grid{ flex:1 1 auto; min-height:0; align-items:stretch; }
+  .col-main{ display:flex; flex-direction:column; min-height:0; }
+  .col-main .scan{ flex:0 0 auto; }
+  .col-main .card.p0{ flex:1 1 auto; min-height:0; display:flex; margin-bottom:0; }
+  .col-main .cart{ flex:1 1 auto; min-height:0; overflow:auto; width:100%; }
+  .side{ min-height:0; overflow:auto; padding-right:2px; }
+  table.cart-t thead th{ position:sticky; top:0; z-index:2; }
+  @media(max-width:820px){
+    #app{ height:auto; }
+    #app > main{ overflow:visible; }
+    .col-main, .side{ overflow:visible; }
+    .col-main .card.p0{ display:block; }
+    .col-main .cart{ overflow:visible; }
+  }
 </style>
 </head>
 <body>
@@ -95,7 +114,7 @@
   <main>
     <div id="caja-banner" hidden style="background:#fdf0d5;border:1px solid #e7c66b;color:#7a5b00;border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:var(--fs-sm);"></div>
     <div class="grid">
-      <div>
+      <div class="col-main">
         <div class="scan">
           <input id="scan" placeholder="Escaneá o buscá por código / nombre…" autocomplete="off">
           <button class="btn" onclick="onScan()">Agregar</button>
