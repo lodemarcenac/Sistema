@@ -16,6 +16,7 @@
     ['compras.html','🧾','Compras','compras'],
     ['remitos.html','🔄','Remitos','remitos'],
     ['cuentas.html','📒','Cuentas','cuentas'],
+    ['conciliacion.html','💳','Conciliación Clover','conciliacion'],
     ['configuracion.html','⚙️','Configuración','configuracion'],
     ['usuarios.html','👤','Usuarios y roles','usuarios']
   ];

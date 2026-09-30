@@ -57,6 +57,7 @@
       <button class="tab" data-s="locales" onclick="switchSec('locales')">🏬 Locales</button>
       <button class="tab" data-s="balanzas" onclick="switchSec('balanzas')">⚖️ Balanzas</button>
       <button class="tab" data-s="gastos" onclick="switchSec('gastos')">🧾 Compras y Gastos</button>
+      <button class="tab" data-s="clover" onclick="switchSec('clover')">💳 Clover</button>
     </div>
 
     <!-- FORMAS DE PAGO -->
@@ -107,6 +108,26 @@
         <div class="tblwrap"><table class="cfg" id="rep-tabla"><thead id="rep-head"></thead><tbody id="rep-tbody"></tbody></table></div>
       </div>
     </div>
+
+    <!-- CLOVER -->
+    <div id="s-clover" hidden>
+      <div class="card">
+        <h3>Terminales Clover</h3>
+        <p class="hint">Por cada local, cargá el <b>Merchant ID</b> y el <b>token</b> de su terminal Clover (Panel Clover → Configuración → API Tokens, con permisos de <b>Leer</b>). El token se guarda en el backend y <b>no vuelve a mostrarse</b> por seguridad; para cambiarlo pegá uno nuevo y Guardá.</p>
+        <div id="cv-term"></div>
+      </div>
+      <div class="card">
+        <h3>Aranceles y plazos por medio de pago</h3>
+        <p class="hint">% de descuento y días hábiles hasta el depósito, por medio. Sirve para calcular el <b>neto esperado</b> y la <b>fecha estimada de acreditación</b> en Conciliación. El «Medio» debe coincidir con el nombre de Clover (ej. «Tarjeta de crédito», «Tarjeta de débito», «QR PosNet»).</p>
+        <div class="tblwrap"><table class="cfg"><thead><tr><th>Medio</th><th>Arancel %</th><th>Días hábiles</th><th></th></tr></thead><tbody id="cv-aranc-tbody"></tbody></table></div>
+        <div class="fp-row" style="border:none;margin-top:8px;">
+          <input type="text" id="cv-na-medio" placeholder="Medio (ej. Tarjeta de crédito)">
+          <input type="number" id="cv-na-pct" placeholder="Arancel %" step="0.01" style="max-width:120px;flex:none;">
+          <input type="number" id="cv-na-dias" placeholder="Días" style="max-width:100px;flex:none;">
+          <button class="btn" onclick="addCvArancel()">Agregar</button>
+        </div>
+      </div>
+    </div>
   </main>
 </div>
 
@@ -123,6 +144,8 @@ var SUCS=[];      // {id,nombre,sigla,direccion,telefono}
 var BALS={};      // nombre -> {prefijo,dato,codlen,datolen}
 var CG=[];        // categorías de gasto {id,nombre,grupo}
 var REP={};       // reparto: catId -> { sucId: porcentaje }
+var CV_ESTADO={}, CV_ARANC=[];   // Clover: estado de cuentas (sin token) + aranceles
+function escAttr(s){ return String(s||'').replace(/"/g,'&quot;'); }
 function toast(msg,tipo){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(tipo?' '+tipo:''); e.textContent=msg; c.appendChild(e); setTimeout(function(){ e.remove(); },2600); }
 
 document.getElementById('login-form').addEventListener('submit', async function(e){
@@ -150,8 +173,75 @@ async function iniciar(){
 }
 function switchSec(name){
   document.querySelectorAll('.sec-tabs .tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-s')===name); });
-  ['pagos','locales','balanzas','gastos'].forEach(function(s){ document.getElementById('s-'+s).hidden=(s!==name); });
+  ['pagos','locales','balanzas','gastos','clover'].forEach(function(s){ document.getElementById('s-'+s).hidden=(s!==name); });
   if(name==='gastos') renderGastos();
+  if(name==='clover') cargarClover();
+}
+
+// ---- CLOVER ----
+async function cargarClover(){
+  var r1=await window.sf('getCloverCuentas'); CV_ESTADO=(r1.ok?r1.cuentas:{})||{};
+  var r2=await window.sf('getCloverAranceles'); CV_ARANC=(r2.ok?r2.aranceles:[])||[];
+  renderCvTerm(); renderCvAranc();
+}
+function renderCvTerm(){
+  var locs=SUCS.filter(function(s){return s.id;});
+  document.getElementById('cv-term').innerHTML = '<div class="tblwrap"><table class="cfg"><thead><tr><th>Local</th><th>Merchant ID</th><th>Token</th><th>Estado</th><th></th></tr></thead><tbody>'+
+    (locs.map(function(s){
+      var e=CV_ESTADO[s.id]; var ok=e&&e.merchant_id;
+      return '<tr>'+
+        '<td>'+s.nombre+'</td>'+
+        '<td><input type="text" id="cv-mid-'+s.id+'" value="'+escAttr(ok?e.merchant_id:'')+'" placeholder="Ej: R1GY55D4CQAS1"></td>'+
+        '<td><input type="password" id="cv-tok-'+s.id+'" placeholder="'+(ok?'•••••• (cargado)':'pegá el token')+'"></td>'+
+        '<td>'+(ok?'<span style="color:var(--good);font-weight:600;">✓ cargado</span>':'<span style="color:var(--muted);">—</span>')+'</td>'+
+        '<td style="white-space:nowrap;"><button class="btn" style="padding:5px 10px;" onclick="guardarCvCuenta('+s.id+')">Guardar</button>'+(ok?' <button class="x-btn" title="Quitar" onclick="quitarCvCuenta('+s.id+')">✕</button>':'')+'</td>'+
+      '</tr>';
+    }).join('') || '<tr><td colspan="5" style="color:var(--muted)">Cargá primero los locales.</td></tr>')+
+    '</tbody></table></div>';
+}
+async function guardarCvCuenta(sid){
+  var mid=(document.getElementById('cv-mid-'+sid).value||'').trim();
+  var tok=(document.getElementById('cv-tok-'+sid).value||'').trim();
+  if(!mid||!tok){ toast('Poné Merchant ID y token','error'); return; }
+  var r=await window.sp('guardarCloverCuenta',{ sucursal_id:sid, merchant_id:mid, token:tok });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Terminal guardada'); var r1=await window.sf('getCloverCuentas'); CV_ESTADO=(r1.ok?r1.cuentas:{})||{}; renderCvTerm();
+}
+async function quitarCvCuenta(sid){
+  if(!confirm('¿Quitar la cuenta Clover de este local?')) return;
+  var r=await window.sp('eliminarCloverCuenta',{ sucursal_id:sid });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Quitada'); var r1=await window.sf('getCloverCuentas'); CV_ESTADO=(r1.ok?r1.cuentas:{})||{}; renderCvTerm();
+}
+function renderCvAranc(){
+  document.getElementById('cv-aranc-tbody').innerHTML = CV_ARANC.map(function(a,i){
+    return '<tr>'+
+      '<td>'+a.medio+'</td>'+
+      '<td><input type="number" step="0.01" class="w-cod" id="cva-p-'+i+'" value="'+a.arancel_pct+'" onchange="guardarCvArancel('+i+')"></td>'+
+      '<td><input type="number" class="w-cod" id="cva-d-'+i+'" value="'+a.dias+'" onchange="guardarCvArancel('+i+')"></td>'+
+      '<td><button class="x-btn" title="Eliminar" onclick="delCvArancel('+i+')">✕</button></td>'+
+    '</tr>';
+  }).join('') || '<tr><td colspan="4" style="color:var(--muted)">Sin aranceles. Agregá abajo.</td></tr>';
+}
+async function guardarCvArancel(i){
+  var a=CV_ARANC[i];
+  var r=await window.sp('guardarCloverArancel',{ medio:a.medio, arancel_pct:document.getElementById('cva-p-'+i).value, dias:document.getElementById('cva-d-'+i).value });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  a.arancel_pct=Number(document.getElementById('cva-p-'+i).value)||0; a.dias=parseInt(document.getElementById('cva-d-'+i).value)||0;
+  toast('Arancel guardado');
+}
+async function addCvArancel(){
+  var medio=(document.getElementById('cv-na-medio').value||'').trim(); if(!medio){ toast('Poné el medio','error'); return; }
+  var r=await window.sp('guardarCloverArancel',{ medio:medio, arancel_pct:document.getElementById('cv-na-pct').value, dias:document.getElementById('cv-na-dias').value });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  document.getElementById('cv-na-medio').value=''; document.getElementById('cv-na-pct').value=''; document.getElementById('cv-na-dias').value='';
+  var r2=await window.sf('getCloverAranceles'); CV_ARANC=(r2.ok?r2.aranceles:[])||[]; renderCvAranc(); toast('Arancel agregado');
+}
+async function delCvArancel(i){
+  var a=CV_ARANC[i]; if(!confirm('¿Eliminar el arancel de "'+a.medio+'"?')) return;
+  var r=await window.sp('eliminarCloverArancel',{ medio:a.medio });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  CV_ARANC.splice(i,1); renderCvAranc(); toast('Eliminado');
 }
 
 // ---- FORMAS DE PAGO ----

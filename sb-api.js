@@ -297,6 +297,20 @@
       var out={};
       (res.data||[]).forEach(function(b){ var n=b.suc?b.suc.nombre:null; if(n) out[n]={ prefijo:String(b.prefijo||''), dato:String(b.dato||''), codlen:String(b.codlen||''), datolen:String(b.datolen||'') }; });
       return {ok:true, balanzas:out};
+    },
+
+    // --- CLOVER (conciliación) ---
+    // Estado de las cuentas (SIN el token: se lee de la vista clover_cuentas_estado).
+    getCloverCuentas: async function(){
+      var res = await sb.from('clover_cuentas_estado').select('sucursal_id,merchant_id,activo,actualizado');
+      if(res.error) throw res.error;
+      var out={}; (res.data||[]).forEach(function(c){ out[c.sucursal_id]={ merchant_id:c.merchant_id||'', activo:c.activo!==false, actualizado:c.actualizado||null }; });
+      return {ok:true, cuentas:out};
+    },
+    getCloverAranceles: async function(){
+      var res = await sb.from('clover_aranceles').select('medio,arancel_pct,dias_acreditacion,nota').order('medio');
+      if(res.error) throw res.error;
+      return {ok:true, aranceles:(res.data||[]).map(function(a){ return { medio:a.medio, arancel_pct:Number(a.arancel_pct)||0, dias:Number(a.dias_acreditacion)||0, nota:a.nota||'' }; })};
     }
   };
 
@@ -681,6 +695,29 @@
       var r=await sb.rpc('anular_venta', { p_venta_id:p.id, p_autorizado:!!p.autorizado });
       if(r.error) throw r.error;
       return r.data || {ok:true};
+    },
+
+    // --- CLOVER (conciliación) ---
+    // Guarda merchant_id+token por local. NO usa .select() → el token nunca vuelve al navegador.
+    guardarCloverCuenta: async function(p){
+      var sid=p.sucursal_id; if(!sid && p.sucursal){ var m=await sucIdMap(); sid=m[p.sucursal]; }
+      if(!sid) throw new Error('Local no encontrado');
+      if(!p.merchant_id || !p.token) throw new Error('Faltan Merchant ID o token');
+      var r=await sb.from('clover_cuentas').upsert({ sucursal_id:sid, merchant_id:String(p.merchant_id).trim(), token:String(p.token).trim(), activo:true, actualizado:new Date().toISOString() }, { onConflict:'sucursal_id' });
+      if(r.error) throw r.error; return {ok:true};
+    },
+    eliminarCloverCuenta: async function(p){
+      var sid=p.sucursal_id; if(!sid && p.sucursal){ var m=await sucIdMap(); sid=m[p.sucursal]; }
+      if(!sid) throw new Error('Local no encontrado');
+      var r=await sb.from('clover_cuentas').delete().eq('sucursal_id',sid); if(r.error) throw r.error; return {ok:true};
+    },
+    guardarCloverArancel: async function(p){
+      if(!p.medio) throw new Error('Falta el medio');
+      var r=await sb.from('clover_aranceles').upsert({ medio:String(p.medio).trim(), arancel_pct:Number(p.arancel_pct)||0, dias_acreditacion:parseInt(p.dias)||0, nota:p.nota||null }, { onConflict:'medio' });
+      if(r.error) throw r.error; return {ok:true};
+    },
+    eliminarCloverArancel: async function(p){
+      var r=await sb.from('clover_aranceles').delete().eq('medio',p.medio); if(r.error) throw r.error; return {ok:true};
     }
   };
 

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conciliación Clover — Carnicería</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css">
+<style>
+  header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  header .ttl{font-size:var(--fs-xl);font-weight:700;}
+  header .sub{font-size:var(--fs-xs);opacity:.9;}
+  header nav a{color:#dbe8ff;text-decoration:none;font-size:var(--fs-sm);font-weight:600;margin-right:14px;}
+  header nav a.on,header nav a:hover{color:#fff;}
+  header .suc select{padding:5px 8px;border-radius:var(--radius-sm);border:none;font-family:inherit;font-size:var(--fs-sm);}
+  header button{background:#fff;color:var(--brand);border:none;padding:7px 13px;border-radius:var(--radius-sm);font-weight:600;cursor:pointer;font-size:var(--fs-sm);}
+  main{max-width:1150px;}
+  .filtros{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;}
+  .filtros .field{display:flex;flex-direction:column;}
+  .filtros label{font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;text-transform:uppercase;letter-spacing:.03em;}
+  .filtros input{padding:7px 10px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;background:#fff;}
+  .chips{display:flex;gap:5px;flex-wrap:wrap;}
+  .seccion{font-weight:700;font-size:.9rem;padding:8px 13px;border-radius:8px;margin:18px 0 12px;background:var(--brand-soft);color:var(--brand);}
+  table.data td small{color:var(--muted);}
+  table.data tfoot td{font-weight:700;background:var(--surface-2);border-top:2px solid var(--line);}
+  .nota{font-size:var(--fs-xs);color:var(--muted);margin-top:10px;}
+  .pill{font-size:.68rem;font-weight:600;padding:2px 8px;border-radius:20px;}
+  .pill.cred{background:#f0e8fb;color:var(--purple);} .pill.deb{background:#e7f0fe;color:var(--brand);}
+  .pill.qr{background:#fdf5da;color:var(--warn);} .pill.otro{background:var(--surface-3);color:var(--ink-soft);}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>🥩 Carnicería</h1><p>Ingresá con tu usuario.</p>
+    <form id="login-form">
+      <label>Email</label><input type="email" id="li-email" autocomplete="username" required>
+      <label>Contraseña</label><input type="password" id="li-pass" autocomplete="current-password" required>
+      <button type="submit" id="li-btn">Entrar</button><div class="err" id="li-err"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div><div class="ttl">💳 Conciliación Clover</div><div class="sub" id="sub">Transacciones de la terminal</div></div>
+      <nav><a href="index.html">📊 Tablero</a><a href="reportes.html">📈 Reportes</a><a href="ventas.html">🛒 Ventas</a><a href="caja.html">💵 Caja</a></nav>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div class="suc">📍 <select id="selSuc" onchange="cargar()"></select></div>
+      <button id="btn-salir">Salir</button>
+    </div>
+  </header>
+  <main>
+    <div class="filtros">
+      <div class="field"><label>Desde</label><input type="date" id="f-desde"></div>
+      <div class="field"><label>Hasta</label><input type="date" id="f-hasta"></div>
+      <button class="btn" onclick="cargar()">Ver</button>
+      <div class="chips" style="padding-bottom:2px;">
+        <span class="chip mini" onclick="periodo('hoy')">Hoy</span>
+        <span class="chip mini" onclick="periodo('semana')">7 días</span>
+        <span class="chip mini" onclick="periodo('mes')">Este mes</span>
+      </div>
+      <button class="btn-sec" onclick="exportar()" style="margin-left:auto;">⬇ Excel</button>
+    </div>
+    <div id="resumen"></div>
+    <div id="body"><div class="vacio">Elegí un local y un período, y tocá “Ver”.<br><small>Las terminales (Merchant ID + token) y los aranceles se cargan en <b>Configuración → 💳 Clover</b>.</small></div></div>
+  </main>
+</div>
+
+<div class="toast-c" id="toast-c"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="sb-api.js"></script>
+<script src="auth-guard.js"></script>
+<script src="nav.js"></script>
+<script>
+var sb=window.sbClient;
+var SUCS=[], SUCID={}, ARANCELES={}, TX=[];
+
+function p2(n){ return (n<10?'0':'')+n; }
+function iso(d){ return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate()); }
+function fmt$(n){ return '$'+(Math.round((Number(n)||0)*100)/100).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtN(n){ return (Number(n)||0).toLocaleString('es-AR'); }
+function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2800); }
+function sucSel(){ var v=document.getElementById('selSuc').value; return v?Number(v):null; }
+function sucNombre(){ var v=document.getElementById('selSuc').value; return v?(SUCID[Number(v)]||''):''; }
+function kpi(lbl,val,sub){ return '<div class="kpi"><div class="k-lbl">'+lbl+'</div><div class="k-val">'+val+'</div><div class="k-sub" style="font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-top:2px;">'+(sub||'')+'</div></div>'; }
+
+document.getElementById('login-form').addEventListener('submit', async function(e){
+  e.preventDefault(); var btn=document.getElementById('li-btn'), err=document.getElementById('li-err'); err.textContent=''; btn.disabled=true; btn.textContent='Entrando…';
+  var r=await sb.auth.signInWithPassword({ email:document.getElementById('li-email').value.trim(), password:document.getElementById('li-pass').value });
+  btn.disabled=false; btn.textContent='Entrar'; if(r.error){ err.textContent='No se pudo entrar: '+r.error.message; return; } iniciar();
+});
+document.getElementById('btn-salir').addEventListener('click', async function(){ await sb.auth.signOut(); location.reload(); });
+(async function(){ var s=await sb.auth.getSession(); if(s.data && s.data.session) iniciar(); })();
+
+async function iniciar(){
+  document.getElementById('login').hidden=true; document.getElementById('app').hidden=false;
+  var rs=await window.sf('getSucursales'); var suc=(rs.ok?(rs.sucursales||[]):[]);
+  SUCS=suc; SUCID={}; suc.forEach(function(s){ SUCID[s.id]=s.nombre; });
+  document.getElementById('selSuc').innerHTML=suc.map(function(s){ return '<option value="'+s.id+'">'+s.nombre+'</option>'; }).join('');
+  await recargarAranceles();
+  periodo('semana', true);
+  cargar();
+}
+async function recargarAranceles(){
+  var r=await window.sf('getCloverAranceles'); var list=(r.ok?r.aranceles:[])||[];
+  ARANCELES={}; list.forEach(function(a){ ARANCELES[a.medio]={pct:a.arancel_pct, dias:a.dias}; });
+}
+
+function periodo(k, soloSet){
+  var hoy=new Date(), desde, hasta=hoy;
+  if(k==='hoy'){ desde=hoy; }
+  else if(k==='semana'){ desde=new Date(hoy.getTime()-6*864e5); }
+  else if(k==='mes'){ desde=new Date(hoy.getFullYear(),hoy.getMonth(),1); }
+  document.getElementById('f-desde').value=iso(desde);
+  document.getElementById('f-hasta').value=iso(hasta);
+  if(!soloSet) cargar();
+}
+
+function medioPill(m){
+  var t=(m||'').toLowerCase(), c='otro';
+  if(t.indexOf('créd')>=0||t.indexOf('cred')>=0) c='cred';
+  else if(t.indexOf('déb')>=0||t.indexOf('deb')>=0) c='deb';
+  else if(t.indexOf('qr')>=0) c='qr';
+  return '<span class="pill '+c+'">'+m+'</span>';
+}
+function sumarHabiles(ms, dias){ var d=new Date(ms); var add=0; while(add<dias){ d.setDate(d.getDate()+1); var w=d.getDay(); if(w!==0&&w!==6) add++; } return d; }
+function netoEsperado(t){ var a=ARANCELES[t.medio]; if(!a) return null; return { neto:t.monto*(1-a.pct/100), fecha:sumarHabiles(t.fecha, a.dias), pct:a.pct }; }
+
+async function cargar(){
+  var suc=sucSel(); if(!suc){ return; }
+  var desde=document.getElementById('f-desde').value, hasta=document.getElementById('f-hasta').value;
+  var body=document.getElementById('body'); var res=document.getElementById('resumen');
+  res.innerHTML=''; body.innerHTML='<div class="vacio">Consultando Clover…</div>';
+  var r;
+  try{ r=await sb.functions.invoke('clover-tx', { body:{ sucursal_id:suc, desde:desde, hasta:hasta } }); }
+  catch(e){ body.innerHTML='<div class="vacio">No se pudo consultar.<br><small>'+(e.message||e)+'</small></div>'; return; }
+  if(r.error){ body.innerHTML='<div class="vacio">No se pudo consultar.<br><small>'+(r.error.message||r.error)+'</small></div>'; return; }
+  var d=r.data||{};
+  if(d.error){ body.innerHTML='<div class="vacio">'+d.error+'</div>'; return; }
+  TX=d.tx||[];
+  document.getElementById('sub').textContent='Merchant '+(d.merchant||'—')+' · '+sucNombre();
+  if(!TX.length){ body.innerHTML='<div class="vacio">Sin transacciones en el período.</div>'; return; }
+
+  // Resumen por medio
+  var porMedio={}, totBruto=0, totNeto=0, hayAranceles=Object.keys(ARANCELES).length>0;
+  TX.forEach(function(t){
+    totBruto+=t.monto;
+    if(!porMedio[t.medio]) porMedio[t.medio]={cant:0,bruto:0,neto:0};
+    porMedio[t.medio].cant++; porMedio[t.medio].bruto+=t.monto;
+    var ne=netoEsperado(t); if(ne){ porMedio[t.medio].neto+=ne.neto; totNeto+=ne.neto; }
+  });
+  var kpis='<div class="kpis" style="margin-bottom:6px;">'+
+    kpi('Transacciones', fmtN(TX.length), sucNombre())+
+    kpi('Bruto', fmt$(totBruto), 'suma de la terminal')+
+    (hayAranceles?kpi('Neto estimado', fmt$(totNeto), 'ya con descuentos'):kpi('Neto estimado', '—', 'cargá los aranceles'))+
+  '</div>';
+  var filasMedio=Object.keys(porMedio).sort().map(function(m){ var x=porMedio[m];
+    return '<tr><td>'+medioPill(m)+'</td><td class="num">'+fmtN(x.cant)+'</td><td class="num">'+fmt$(x.bruto)+'</td><td class="num">'+(hayAranceles?fmt$(x.neto):'—')+'</td></tr>';
+  }).join('');
+  res.innerHTML=kpis+
+    '<div class="card p0" style="margin-bottom:6px;"><div class="tblwrap"><table class="data"><thead><tr><th>Medio</th><th class="num">Cant.</th><th class="num">Bruto</th><th class="num">Neto est.</th></tr></thead><tbody>'+filasMedio+'</tbody></table></div></div>';
+
+  // Detalle
+  var filas=TX.map(function(t){
+    var ne=netoEsperado(t);
+    var tarj=(t.cardType&&t.cardType!=='OTHER'?t.cardType:'')+(t.last4?(' ••'+t.last4):'');
+    return '<tr>'+
+      '<td>'+new Date(t.fecha).toLocaleString('es-AR')+'</td>'+
+      '<td>'+medioPill(t.medio)+'</td>'+
+      '<td class="num">'+fmt$(t.monto)+'</td>'+
+      '<td class="num">'+(t.cuotas||'')+'</td>'+
+      '<td>'+(tarj||'<small>—</small>')+'</td>'+
+      '<td>'+(t.autorizacion||'<small>—</small>')+(t.lote?(' <small>L'+t.lote+(t.cupon?('/C'+t.cupon):'')+'</small>'):'')+'</td>'+
+      '<td class="num">'+(ne?fmt$(ne.neto):'<small>—</small>')+'</td>'+
+      '<td>'+(ne?('~'+iso(ne.fecha)):'<small>—</small>')+'</td>'+
+      '</tr>';
+  }).join('');
+  body.innerHTML=
+    '<div class="seccion">🧾 Detalle de transacciones</div>'+
+    '<div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Fecha / hora</th><th>Medio</th><th class="num">Bruto</th><th class="num">Cuotas</th><th>Tarjeta</th><th>Autorización</th><th class="num">Neto est.</th><th>Acredita ~</th></tr></thead><tbody>'+filas+'</tbody></table></div></div>'+
+    '<div class="nota">Datos en vivo de la terminal Clover (bruto). «Neto est.» y «Acredita ~» se calculan con los aranceles/plazos cargados (tabla clover_aranceles) — son estimados. El depósito REAL (ya acreditado) se confirma con la liquidación de Fiserv o el banco.</div>';
+}
+
+function exportar(){
+  if(!TX.length){ toast('Primero generá la consulta','error'); return; }
+  var aoa=[['Fecha','Medio','Bruto','Cuotas','Tarjeta','Ult4','Autorización','Lote','Cupón','Neto estimado','Acreditación estimada','Resultado']];
+  TX.forEach(function(t){ var ne=netoEsperado(t);
+    aoa.push([ new Date(t.fecha).toLocaleString('es-AR'), t.medio, t.monto, t.cuotas||'', (t.cardType||''), (t.last4||''), (t.autorizacion||''), (t.lote||''), (t.cupon||''), ne?Math.round(ne.neto*100)/100:'', ne?iso(ne.fecha):'', t.result||'' ]);
+  });
+  var ws=XLSX.utils.aoa_to_sheet(aoa); var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Clover');
+  XLSX.writeFile(wb, 'Clover_'+sucNombre()+'_'+document.getElementById('f-desde').value+'_'+document.getElementById('f-hasta').value+'.xlsx');
+}
+</script>
+</body>
+</html>
