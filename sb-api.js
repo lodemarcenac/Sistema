@@ -311,6 +311,20 @@
       var res = await sb.from('clover_aranceles').select('medio,arancel_pct,dias_acreditacion,nota').order('medio');
       if(res.error) throw res.error;
       return {ok:true, aranceles:(res.data||[]).map(function(a){ return { medio:a.medio, arancel_pct:Number(a.arancel_pct)||0, dias:Number(a.dias_acreditacion)||0, nota:a.nota||'' }; })};
+    },
+
+    // --- COMPRAS EN DOS ETAPAS (borradores) ---
+    getComprasBorradores: async function(params){
+      var m=await sucIdMap(); var sid=params&&params.sucursal?m[params.sucursal]:null;
+      var q=sb.from('compras').select('id,comprobante,total,fecha,proveedor:proveedores(nombre),detalle:compras_detalle(id)').eq('estado','borrador');
+      if(sid) q=q.eq('sucursal_id',sid);
+      var r=await q.order('fecha',{ascending:false}); if(r.error) throw r.error;
+      return {ok:true, borradores:(r.data||[]).map(function(c){ return { id:c.id, comprobante:c.comprobante||'', total:Number(c.total)||0, fecha:c.fecha, proveedor:(c.proveedor?c.proveedor.nombre:''), items:(c.detalle?c.detalle.length:0) }; })};
+    },
+    getCompraDetalle: async function(params){
+      var r=await sb.from('compras_detalle').select('id,cantidad,costo_unit,costo,producto:productos(codigo_interno,nombre)').eq('compra_id', params.id).order('id');
+      if(r.error) throw r.error;
+      return {ok:true, detalle:(r.data||[]).map(function(d){ return { id:d.id, codigo:(d.producto?d.producto.codigo_interno:''), nombre:(d.producto?d.producto.nombre:''), cantidad:Number(d.cantidad)||0, costo_unit:Number(d.costo_unit)||0, costo:Number(d.costo)||0 }; })};
     }
   };
 
@@ -325,6 +339,10 @@
   async function provIdMap(){ if(_provId) return _provId; var r=await sb.from('proveedores').select('id,nombre'); _provId={}; (r.data||[]).forEach(function(p){ _provId[p.nombre]=p.id; }); return _provId; }
   async function prodIdPorCod(cod){ var r=await sb.from('productos').select('id').eq('codigo_interno',String(cod)).maybeSingle(); return (r.data&&r.data.id)||null; }
   async function catIdOrCreate(nombre){ if(!nombre) return null; var m=await catIdMap(); if(m[nombre]) return m[nombre]; var ins=await sb.from('categorias').insert({nombre:nombre}).select('id').single(); if(ins.error) throw ins.error; _catId[nombre]=ins.data.id; return ins.data.id; }
+
+  // Deriva el "fondo" de efectivo a partir de la forma de pago elegida en compras/gastos.
+  //   "Caja guardada"/"...guardado" -> reserva ; "Caja del día" -> caja ; otras (tarjeta/virtual) -> null
+  function fondoDeForma(f){ var s=String(f||'').toLowerCase(); if(s.indexOf('guard')>=0) return 'reserva'; if(s.indexOf('caja del')>=0) return 'caja'; return null; }
 
   var writers = {
     // --- PRODUCTOS ---
@@ -540,7 +558,7 @@
     // --- GASTOS ---
     guardarGasto: async function(p){
       var m=await sucIdMap();
-      var pay={ sucursal_id:(p.sucursal?m[p.sucursal]:(p.sucursalId||null)), destinatario_id:(p.destinatario?m[p.destinatario]:(p.destinatarioId||null)), categoria_gasto_id:(p.categoriaId||null), proveedor_id:(p.proveedorId||null), monto:(p.monto===''||p.monto==null?0:Number(p.monto)), forma_pago:(p.formaPago||null), fondo:(p.fondo||null), comprobante:(p.comprobante||null), descripcion:(p.descripcion||null) };
+      var pay={ sucursal_id:(p.sucursal?m[p.sucursal]:(p.sucursalId||null)), destinatario_id:(p.destinatario?m[p.destinatario]:(p.destinatarioId||null)), categoria_gasto_id:(p.categoriaId||null), proveedor_id:(p.proveedorId||null), monto:(p.monto===''||p.monto==null?0:Number(p.monto)), forma_pago:(p.formaPago||null), fondo:fondoDeForma(p.formaPago), comprobante:(p.comprobante||null), descripcion:(p.descripcion||null) };
       if(p.fecha) pay.fecha=p.fecha;
       if(p.id){ var r=await sb.from('gastos').update(pay).eq('id',p.id); if(r.error) throw r.error; return {ok:true,id:p.id}; }
       var ins=await sb.from('gastos').insert(pay).select('id').single(); if(ins.error) throw ins.error; return {ok:true,id:ins.data.id};
@@ -604,8 +622,14 @@
     },
     registrarPagoProveedor: async function(p){
       var m=await sucIdMap();
-      var pay={ proveedor_id:(p.proveedorId||null), cuenta_id:(p.cuentaId||null), sucursal_id:(p.sucursal?m[p.sucursal]:null), tipo:(p.tipo||'pago'), monto:Number(p.monto)||0, forma_pago:(p.formaPago||null), fondo:(p.fondo||null), descripcion:(p.descripcion||(p.tipo==='cargo'?'Cargo':'Pago')) };
-      var r=await sb.from('deuda_proveedores').insert(pay); if(r.error) throw r.error; return {ok:true};
+      var fondo=fondoDeForma(p.formaPago);
+      var pay={ proveedor_id:(p.proveedorId||null), cuenta_id:(p.cuentaId||null), sucursal_id:(p.sucursal?m[p.sucursal]:null), tipo:(p.tipo||'pago'), monto:Number(p.monto)||0, forma_pago:(p.formaPago||null), fondo:fondo, descripcion:(p.descripcion||(p.tipo==='cargo'?'Cargo':'Pago')) };
+      var r=await sb.from('deuda_proveedores').insert(pay); if(r.error) throw r.error;
+      // Si se paga desde la Caja guardada (reserva), descontar la reserva del local.
+      if((p.tipo||'pago')==='pago' && fondo==='reserva' && pay.sucursal_id && (Number(p.monto)||0)>0){
+        await sb.from('efectivo_reserva_mov').insert({ sucursal_id:pay.sucursal_id, tipo:'egreso', monto:Number(p.monto)||0, concepto:'Pago a proveedor' });
+      }
+      return {ok:true};
     },
     guardarCuentaProveedor: async function(p){
       var m=await sucIdMap(); var payload={ proveedor_id:p.proveedorId, nombre:(p.nombre||null) }; var cid=p.id;
@@ -724,6 +748,30 @@
     },
     eliminarCloverArancel: async function(p){
       var r=await sb.from('clover_aranceles').delete().eq('medio',p.medio); if(r.error) throw r.error; return {ok:true};
+    },
+
+    // --- COMPRAS EN DOS ETAPAS (borradores) ---
+    crearCompra: async function(p){
+      var c=p.compra||p; var m=await sucIdMap(); var sid=c.sucursal_id||(c.sucursal?m[c.sucursal]:null);
+      var r=await sb.rpc('compra_crear',{p:{ sucursal_id:sid, proveedor_id:c.proveedor_id||null, cuenta_id:c.cuenta_id||null, comprobante:c.comprobante||null, total:c.total||0, pago_monto:c.pago_monto||0, forma_pago:c.forma_pago||null }});
+      if(r.error) throw r.error; return r.data||{ok:true};
+    },
+    editarCompra: async function(p){
+      var r=await sb.rpc('compra_editar',{p:{ compra_id:p.id, comprobante:p.comprobante, total:p.total, cuenta_id:p.cuenta_id, pago_monto:p.pago_monto, forma_pago:p.forma_pago }});
+      if(r.error) throw r.error; return r.data||{ok:true};
+    },
+    agregarItemCompra: async function(p){
+      var r=await sb.rpc('compra_item_agregar',{p:{ compra_id:p.compra_id, codigo:p.codigo||null, producto_id:p.producto_id||null, cantidad:p.cantidad, costo_unit:p.costo_unit }});
+      if(r.error) throw r.error; return r.data||{ok:true};
+    },
+    quitarItemCompra: async function(p){
+      var r=await sb.rpc('compra_item_quitar',{p:{ detalle_id:p.detalle_id }}); if(r.error) throw r.error; return r.data||{ok:true};
+    },
+    confirmarCompra: async function(p){
+      var r=await sb.rpc('compra_confirmar',{p:{ compra_id:p.id }}); if(r.error) throw r.error; return r.data||{ok:true};
+    },
+    descartarCompra: async function(p){
+      var r=await sb.rpc('compra_descartar',{p:{ compra_id:p.id }}); if(r.error) throw r.error; return r.data||{ok:true};
     }
   };
 

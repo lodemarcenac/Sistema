@@ -58,25 +58,52 @@
       <button class="tab" data-t="prov" onclick="switchTab('prov')">Proveedores</button>
     </div>
 
-    <!-- NUEVA COMPRA -->
+    <!-- NUEVA COMPRA (en 2 etapas: cabecera -> productos) -->
     <div id="t-compra">
-      <div class="card">
-        <h3>Nueva compra</h3>
-        <div class="abm-nueva" style="margin-bottom:12px;">
+
+      <!-- Compras empezadas y sin confirmar -->
+      <div class="card" id="borr-card" style="margin-bottom:14px;" hidden>
+        <h3>Compras en carga</h3>
+        <p class="hint muted">Compras empezadas y todavía sin confirmar. Retomalas para seguir cargando productos (por ejemplo, si te interrumpió una venta).</p>
+        <div id="borr-list"></div>
+      </div>
+
+      <!-- ETAPA 1: cabecera -->
+      <div class="card" id="c-cab">
+        <h3>Nueva compra · paso 1: la factura / remito</h3>
+        <p class="hint muted">Cargá primero el <b>total</b> de la factura o remito y el pago. En el paso 2 agregás los productos (la suma de productos puede no coincidir con el total, y está bien).</p>
+        <div class="abm-nueva">
           <div><label>Proveedor / Cuenta</label><select id="c-cuenta"></select></div>
           <div><label>Comprobante (opc)</label><input id="c-comp" placeholder="N° factura / remito"></div>
+          <div><label>Total de la factura $</label><input id="c-total-fc" type="number" step="0.01" placeholder="0"></div>
+          <div><label>Pago ahora (opc)</label><input id="c-pago" type="number" step="0.01" placeholder="0 = queda a cuenta"></div>
+          <div><label>Forma de pago</label><select id="c-fp"></select></div>
         </div>
-        <div id="c-lineas"></div>
-        <button class="mini-btn" onclick="addLineaCompra()">+ Agregar producto</button>
-        <div class="form-row sep" style="justify-content:space-between;align-items:center;margin-top:14px;">
-          <div class="abm-nueva" style="flex:1;">
-            <div><label>Pago ahora (opc)</label><input id="c-pago" type="number" step="0.01" placeholder="0 = queda a cuenta"></div>
-            <div><label>Forma de pago</label><select id="c-fp"></select></div>
-            <div><label>Fondo (si efectivo)</label><select id="c-fondo"><option value="caja">Caja del día</option><option value="reserva">Efectivo guardado</option></select></div>
-          </div>
-          <div style="text-align:right;"><div class="muted">Total compra</div><div class="tot" id="c-total">$0</div></div>
+        <div style="margin-top:12px;"><button class="btn" onclick="crearCompraUI()">Empezar compra →</button></div>
+      </div>
+
+      <!-- ETAPA 2: productos -->
+      <div class="card" id="c-prod" hidden>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+          <h3 id="c-prod-tit" style="margin:0;">Cargando compra · paso 2: productos</h3>
+          <button class="btn-sec" onclick="salirAEtapa1()">Guardar y salir</button>
         </div>
-        <div style="margin-top:12px;"><button class="btn" onclick="registrarCompraUI()">Registrar compra</button></div>
+        <p class="hint muted" id="c-prod-sub"></p>
+        <div class="abm-nueva" style="align-items:end;">
+          <div style="grid-column:span 2;"><label>Producto</label><input id="ci-cod" class="prod-ac" autocomplete="off" placeholder="código o nombre" onchange="ciProd(this)"></div>
+          <div><label>Cantidad</label><input id="ci-cant" type="number" step="0.001"></div>
+          <div><label>Costo unit.</label><input id="ci-cu" type="number" step="0.01"></div>
+          <button class="btn" onclick="agregarItemUI()">+ Agregar</button>
+        </div>
+        <div class="tblwrap" style="margin-top:12px;"><table class="data"><thead><tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Costo unit.</th><th class="num">Subtotal</th><th></th></tr></thead><tbody id="ci-tbody"></tbody></table></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;flex-wrap:wrap;gap:8px;">
+          <div class="muted" id="c-dif"></div>
+          <div style="text-align:right;"><div class="muted">Suma de productos</div><div class="tot" id="c-total">$0</div></div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn" onclick="confirmarCompraUI()">✓ Confirmar compra</button>
+          <button class="btn-sec" onclick="descartarCompraUI()" style="color:var(--bad);border-color:#f0c9c9;">Descartar</button>
+        </div>
       </div>
     </div>
 
@@ -86,12 +113,19 @@
         <h3 id="g-titulo">Nuevo gasto</h3>
         <div class="abm-nueva">
           <div><label>Fecha</label><input id="g-fecha" type="date"></div>
-          <div><label>Imputado a (local)</label><select id="g-local"></select></div>
+          <div style="grid-column:1/-1;">
+            <label>Imputar a locales</label>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:4px 0 8px;">
+              <label style="display:inline-flex;align-items:center;gap:5px;font-size:var(--fs-sm);font-weight:600;"><input type="checkbox" id="g-todos" onchange="gToggleTodos()"> Todos</label>
+              <span class="muted" style="font-size:var(--fs-xs);">Reparto:</span>
+              <select id="g-reparto" onchange="renderGLocs()" style="padding:5px 8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"><option value="igual">Igual entre los elegidos</option><option value="prop">Proporcional (por peso)</option></select>
+            </div>
+            <div id="g-locs"></div>
+          </div>
           <div><label>Categoría</label><select id="g-cat"></select></div>
           <div><label>Proveedor (opc)</label><select id="g-prov"></select></div>
           <div><label>Monto</label><input id="g-monto" type="number" step="0.01"></div>
           <div><label>Forma de pago</label><select id="g-fp"></select></div>
-          <div><label>Fondo (si es efectivo)</label><select id="g-fondo"><option value="caja">Caja del día</option><option value="reserva">Efectivo guardado</option></select></div>
           <div><label>Comprobante (opc)</label><input id="g-comp"></div>
           <div style="grid-column:1/-1;"><label>Descripción</label><input id="g-desc" placeholder="Detalle del gasto"></div>
         </div>
@@ -180,26 +214,30 @@ async function iniciar(){
   var rc=await window.sf('getConfigGeneral'); if(rc.ok && rc.config && rc.config.formas_pago){ try{ var a=JSON.parse(rc.config.formas_pago); if(a.length) FORMAS=a.map(function(f){return f.nombre||f;}); }catch(e){} }
   poblarSuc(); poblarSelects(); await cargarCuentasLocal();
   document.getElementById('g-fecha').value=new Date().toLocaleDateString('en-CA');
-  addLineaCompra(); addLineaCompra(); addLineaElab('e-insumos'); addLineaElab('e-salidas');
+  addLineaElab('e-insumos'); addLineaElab('e-salidas');
+  cargarBorradores();
   renderProv();
 }
 function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; }
-function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarCuentasLocal(); }
+function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarCuentasLocal(); if(!COMPRA_ID) cargarBorradores(); }
 async function cargarCuentasLocal(){
   var r=await window.sf('getCuentasDeLocal&sucursal='+encodeURIComponent(sucActual)); CUENTAS_LOCAL=(r.ok?r.cuentas:[])||[];
   var sel=document.getElementById('c-cuenta');
   sel.innerHTML = CUENTAS_LOCAL.length ? ('<option value="">(elegir proveedor / cuenta)</option>'+CUENTAS_LOCAL.map(function(c){ return '<option value="'+c.id+'">'+c.proveedor+(c.nombre?(' — '+c.nombre):'')+'</option>'; }).join('')) : '<option value="">(este local no tiene cuentas — cargalas en Proveedores)</option>';
 }
 function poblarSelects(){
-  var fp=FORMAS.map(function(f){return '<option>'+f+'</option>';}).join('');
+  // En compras/gastos el efectivo se parte en dos formas: "Caja del día" y "Caja guardada".
+  var pagoOpts=['Caja del día','Caja guardada'].concat(FORMAS.filter(function(f){ return !/efectivo|cuenta/i.test(f); }));
+  var fp=pagoOpts.map(function(f){return '<option>'+f+'</option>';}).join('');
   document.getElementById('c-fp').innerHTML=fp; document.getElementById('g-fp').innerHTML=fp;
   document.getElementById('g-prov').innerHTML='<option value="">(sin proveedor)</option>'+PROVS.map(function(p){return '<option value="'+p.id+'">'+p.nombre+'</option>';}).join('');
-  document.getElementById('g-local').innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join('');
+  renderGLocs();
   document.getElementById('g-cat').innerHTML='<option value="">(elegir categoría)</option>'+CG.map(function(c){return '<option value="'+c.id+'">'+c.nombre+(c.grupo?(' — '+c.grupo):'')+'</option>';}).join('');
 }
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); });
   ['compra','gastos','elab','prov'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); });
+  if(name==='compra') cargarBorradores();
   if(name==='gastos') cargarGastos();
   if(name==='prov') renderProv();
 }
@@ -212,36 +250,94 @@ function acPick(ev,i){ if(ev) ev.preventDefault(); var c=acM[i]; if(acInput&&c){
 document.addEventListener('input', function(e){ if(e.target.classList&&e.target.classList.contains('prod-ac')) acShow(e.target); });
 document.addEventListener('click', function(e){ var p=document.getElementById('ac-pop'); if(p&&!p.hidden&&e.target!==acInput&&!p.contains(e.target)&&!(e.target.classList&&e.target.classList.contains('prod-ac'))) p.hidden=true; });
 
-// ---- NUEVA COMPRA ----
-function addLineaCompra(){
-  var d=document.createElement('div'); d.className='linea';
-  d.innerHTML='<div><label>Producto</label><input class="c-cod prod-ac" autocomplete="off" placeholder="código o nombre" onchange="totalCompra()"></div>'+
-    '<div><label>Cantidad</label><input class="c-cant" type="number" step="0.001" oninput="totalCompra()"></div>'+
-    '<div><label>Costo unit.</label><input class="c-cu" type="number" step="0.01" oninput="totalCompra()"></div>'+
-    '<div><label>Subtotal</label><input class="c-sub" readonly style="background:#f2f4f8;"></div>'+
-    '<button class="x-btn" title="Quitar" onclick="this.parentNode.remove();totalCompra()">✕</button>';
-  document.getElementById('c-lineas').appendChild(d);
-}
-function totalCompra(){
-  var tot=0;
-  document.querySelectorAll('#c-lineas .linea').forEach(function(l){ var cant=Number(l.querySelector('.c-cant').value)||0; var cu=Number(l.querySelector('.c-cu').value)||0; var sub=+(cant*cu).toFixed(2); l.querySelector('.c-sub').value=sub?fmt$(sub):''; tot+=sub; });
-  document.getElementById('c-total').textContent=fmt$(tot);
-  return tot;
-}
-async function registrarCompraUI(){
+// ---- NUEVA COMPRA (2 etapas: cabecera -> productos, con borrador que se guarda solo) ----
+var COMPRA_ID=null, COMPRA_TOTAL_FC=0;
+
+// Solo quien tenga el permiso "Editar costos" (productos.editar_costo) puede cambiar el costo.
+function puedeCosto(){ return !(window.PERM && window.PERM.cargado) || window.PERM.puede('productos.editar_costo'); }
+function aplicarPermCosto(){ var cu=document.getElementById('ci-cu'); if(!cu) return; var ro=!puedeCosto(); cu.readOnly=ro; cu.style.background=ro?'#f2f4f8':''; cu.title=ro?'Solo un administrador (permiso «Editar costos») puede cambiar el costo':''; }
+document.addEventListener('perm-listo', aplicarPermCosto);
+// Al elegir un producto en la fila de carga, precarga su último costo conocido.
+function ciProd(input){ var cod=(input.value||'').trim(); if(PRODS[cod] && PRODS[cod].costo!=null){ document.getElementById('ci-cu').value=PRODS[cod].costo; } }
+
+// Etapa 1: crear la compra (borrador) con el total de la factura/remito
+async function crearCompraUI(){
   var cuentaId=document.getElementById('c-cuenta').value;
   var cuenta=CUENTAS_LOCAL.find(function(c){ return String(c.id)===String(cuentaId); });
   var provId=cuenta?cuenta.proveedorId:null;
-  var items=[];
-  document.querySelectorAll('#c-lineas .linea').forEach(function(l){ var cod=(l.querySelector('.c-cod').value||'').trim(); var cant=l.querySelector('.c-cant').value; var cu=l.querySelector('.c-cu').value; if(cod && Number(cant)>0){ items.push({codigo:cod, cantidad:cant, costo_unit:cu}); } });
-  if(!items.length){ toast('Cargá al menos un producto con cantidad','error'); return; }
-  var total=totalCompra();
-  var r=await window.sp('registrarCompra',{compra:{ sucursal:sucActual, proveedor_id:(provId||null), cuenta_id:(cuentaId||null), comprobante:document.getElementById('c-comp').value.trim(), total:total, pago_monto:document.getElementById('c-pago').value||0, forma_pago:document.getElementById('c-fp').value, fondo:document.getElementById('c-fondo').value, items:items }});
+  var totalFC=Number(document.getElementById('c-total-fc').value)||0;
+  if(!(totalFC>0) && !confirm('El total de la factura es 0. ¿Continuar igual?')) return;
+  var r=await window.sp('crearCompra',{compra:{ sucursal:sucActual, proveedor_id:(provId||null), cuenta_id:(cuentaId||null), comprobante:document.getElementById('c-comp').value.trim(), total:totalFC, pago_monto:document.getElementById('c-pago').value||0, forma_pago:document.getElementById('c-fp').value }});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  toast('Compra registrada — stock y costo actualizados');
-  document.getElementById('c-lineas').innerHTML=''; document.getElementById('c-comp').value=''; document.getElementById('c-pago').value=''; addLineaCompra(); addLineaCompra(); totalCompra();
-  var rp=await window.sf('getProductos'); PRODS=(rp.ok?rp.productos:{})||{};
+  var titulo=(cuenta?cuenta.proveedor:'')+(document.getElementById('c-comp').value?(' · '+document.getElementById('c-comp').value.trim()):'');
+  entrarEdicion(r.compra_id, totalFC, titulo);
 }
+function entrarEdicion(id, totalFC, titulo){
+  COMPRA_ID=id; COMPRA_TOTAL_FC=Number(totalFC)||0;
+  document.getElementById('c-cab').hidden=true; document.getElementById('borr-card').hidden=true;
+  document.getElementById('c-prod').hidden=false;
+  document.getElementById('c-prod-sub').textContent=(titulo||'Compra')+' · Total factura: '+fmt$(COMPRA_TOTAL_FC);
+  document.getElementById('ci-cod').value=''; document.getElementById('ci-cant').value=''; document.getElementById('ci-cu').value='';
+  aplicarPermCosto(); cargarItems();
+}
+async function cargarItems(){
+  var r=await window.sf('getCompraDetalle&id='+COMPRA_ID); var items=(r.ok?r.detalle:[])||[];
+  var suma=0;
+  document.getElementById('ci-tbody').innerHTML=items.map(function(d){ suma+=d.costo;
+    return '<tr><td>'+(d.nombre||d.codigo)+'</td><td class="num">'+d.cantidad+'</td><td class="num">'+fmt$(d.costo_unit)+'</td><td class="num">'+fmt$(d.costo)+'</td>'+
+      '<td><button class="x-btn" title="Quitar" onclick="quitarItemUI('+d.id+')">✕</button></td></tr>';
+  }).join('') || '<tr><td colspan="5" class="muted">Todavía sin productos. Agregá arriba.</td></tr>';
+  document.getElementById('c-total').textContent=fmt$(suma);
+  var dif=COMPRA_TOTAL_FC-suma, el=document.getElementById('c-dif');
+  if(Math.abs(dif)<0.5){ el.textContent='✓ La suma de productos coincide con el total de la factura.'; el.style.color='var(--good)'; }
+  else { el.textContent='Diferencia con la factura: '+fmt$(dif)+(dif>0?' (faltan productos o la FC incluye otros conceptos)':' (la suma supera el total de la FC)'); el.style.color=(dif>0?'var(--warn)':'var(--bad)'); }
+}
+async function agregarItemUI(){
+  if(!COMPRA_ID) return;
+  var cod=(document.getElementById('ci-cod').value||'').trim();
+  var cant=document.getElementById('ci-cant').value, cu=document.getElementById('ci-cu').value;
+  if(!cod || !(Number(cant)>0)){ toast('Poné producto y cantidad','error'); return; }
+  var r=await window.sp('agregarItemCompra',{ compra_id:COMPRA_ID, codigo:cod, cantidad:cant, costo_unit:cu });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  document.getElementById('ci-cod').value=''; document.getElementById('ci-cant').value=''; document.getElementById('ci-cu').value='';
+  document.getElementById('ci-cod').focus(); cargarItems();
+}
+async function quitarItemUI(detalleId){ var r=await window.sp('quitarItemCompra',{ detalle_id:detalleId }); if(!r.ok){ toast('Error: '+r.error,'error'); return; } cargarItems(); }
+async function confirmarCompraUI(){
+  if(!COMPRA_ID) return;
+  if(!confirm('¿Confirmar la compra? Se suma el stock, se actualiza el costo de los productos y se registra la deuda con el proveedor.')) return;
+  var idc=COMPRA_ID;
+  var r=await window.sp('confirmarCompra',{ id:idc });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  try{ window.sbClient.functions.invoke('notificar-compra',{ body:{ compra_id:idc } }); }catch(e){}  // aviso por email (no bloquea)
+  toast('Compra confirmada — stock, costo y deuda actualizados');
+  salirAEtapa1(); var rp=await window.sf('getProductos'); PRODS=(rp.ok?rp.productos:{})||{};
+}
+async function descartarCompraUI(){
+  if(!COMPRA_ID) return;
+  if(!confirm('¿Descartar esta compra? Se borra el borrador y sus productos (no impacta stock ni deuda).')) return;
+  var r=await window.sp('descartarCompra',{ id:COMPRA_ID }); if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Borrador descartado'); salirAEtapa1();
+}
+function salirAEtapa1(){
+  COMPRA_ID=null; COMPRA_TOTAL_FC=0;
+  document.getElementById('c-prod').hidden=true; document.getElementById('c-cab').hidden=false;
+  document.getElementById('c-comp').value=''; document.getElementById('c-total-fc').value=''; document.getElementById('c-pago').value='';
+  cargarBorradores();
+}
+async function cargarBorradores(){
+  if(!sucActual){ return; }
+  var r=await window.sf('getComprasBorradores&sucursal='+encodeURIComponent(sucActual));
+  var arr=(r.ok?r.borradores:[])||[], card=document.getElementById('borr-card');
+  if(!arr.length){ card.hidden=true; document.getElementById('borr-list').innerHTML=''; return; }
+  card.hidden=false;
+  document.getElementById('borr-list').innerHTML='<div class="tblwrap"><table class="data"><thead><tr><th>Proveedor</th><th>Comprobante</th><th class="num">Total FC</th><th class="num">Productos</th><th></th></tr></thead><tbody>'+
+    arr.map(function(b){ var tit=String((b.proveedor||'')+(b.comprobante?(' · '+b.comprobante):'')).replace(/'/g,"\\'");
+      return '<tr><td>'+(b.proveedor||'')+'</td><td>'+(b.comprobante||'')+'</td><td class="num">'+fmt$(b.total)+'</td><td class="num">'+b.items+'</td>'+
+      '<td style="white-space:nowrap;"><button class="btn" style="padding:4px 10px;font-size:.75rem;" onclick="entrarEdicion('+b.id+','+b.total+',\''+tit+'\')">Retomar</button> <button class="x-btn" title="Descartar" onclick="descartarBorrador('+b.id+')">✕</button></td></tr>'; }).join('')+
+    '</tbody></table></div>';
+}
+async function descartarBorrador(id){ if(!confirm('¿Descartar este borrador?')) return; var r=await window.sp('descartarCompra',{id:id}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } cargarBorradores(); }
 
 // ---- GASTOS ----
 async function cargarGastos(){ var r=await window.sf('getGastos&limit=300'); GASTOS=(r.ok?r.gastos:[])||[]; renderGastos(); }
@@ -255,12 +351,58 @@ function renderGastos(){
       '<td style="white-space:nowrap;"><button class="mini-btn" onclick="editarGasto('+g.id+')">Editar</button><button class="x-btn" title="Eliminar" onclick="borrarGasto('+g.id+')">✕</button></td></tr>';
   }).join('') || '<tr><td colspan="8" class="muted">Sin gastos.</td></tr>';
 }
+function renderGLocs(){
+  var cont=document.getElementById('g-locs'); if(!cont) return;
+  var checked={}; cont.querySelectorAll('.g-loc:checked').forEach(function(c){ checked[c.value]=true; });
+  var rep=document.getElementById('g-reparto'); var prop=rep && rep.value==='prop';
+  cont.innerHTML=SUCS.map(function(s){ var sv=String(s).replace(/"/g,'&quot;');
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'+
+      '<label style="display:inline-flex;align-items:center;gap:6px;min-width:170px;font-size:var(--fs-sm);"><input type="checkbox" class="g-loc" value="'+sv+'"'+(checked[s]?' checked':'')+'> '+s+'</label>'+
+      (prop?'<input class="g-peso" data-loc="'+sv+'" type="number" step="0.01" placeholder="peso" style="width:90px;padding:4px 6px;border:1px solid var(--border-inp);border-radius:5px;font-family:inherit;">':'')+
+      '</div>';
+  }).join('');
+}
+function gToggleTodos(){ var on=document.getElementById('g-todos').checked; document.querySelectorAll('#g-locs .g-loc').forEach(function(c){ c.checked=on; }); }
+
 async function guardarGastoUI(){
-  var monto=document.getElementById('g-monto').value; if(!(Number(monto)>0)){ toast('Poné un monto','error'); return; }
-  var payload={ id:gastoEditId, fecha:document.getElementById('g-fecha').value, destinatario:document.getElementById('g-local').value, sucursal:sucActual, categoriaId:(document.getElementById('g-cat').value||null), proveedorId:(document.getElementById('g-prov').value||null), monto:monto, formaPago:document.getElementById('g-fp').value, fondo:document.getElementById('g-fondo').value, comprobante:document.getElementById('g-comp').value.trim(), descripcion:document.getElementById('g-desc').value.trim() };
-  var r=await window.sp('guardarGasto',payload);
-  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  toast(gastoEditId?'Gasto actualizado':'Gasto guardado'); cancelarEdicionGasto(); cargarGastos();
+  var montoTotal=Number(document.getElementById('g-monto').value)||0;
+  if(!(montoTotal>0)){ toast('Poné un monto','error'); return; }
+  var forma=document.getElementById('g-fp').value, desc=document.getElementById('g-desc').value.trim();
+  var base={ fecha:document.getElementById('g-fecha').value, sucursal:sucActual, categoriaId:(document.getElementById('g-cat').value||null), proveedorId:(document.getElementById('g-prov').value||null), formaPago:forma, comprobante:document.getElementById('g-comp').value.trim(), descripcion:desc };
+
+  // EDICIÓN: un solo gasto (no se reparte)
+  if(gastoEditId){
+    var locEdit=null; document.querySelectorAll('#g-locs .g-loc:checked').forEach(function(c){ if(!locEdit) locEdit=c.value; });
+    var pe=Object.assign({}, base, { id:gastoEditId, destinatario:(locEdit||sucActual), monto:montoTotal });
+    var re=await window.sp('guardarGasto',pe);
+    if(!re.ok){ toast('Error: '+re.error,'error'); return; }
+    toast('Gasto actualizado'); cancelarEdicionGasto(); cargarGastos(); return;
+  }
+
+  // NUEVO: reparto entre los locales elegidos
+  var locs=[]; document.querySelectorAll('#g-locs .g-loc:checked').forEach(function(c){ locs.push(c.value); });
+  if(!locs.length){ toast('Elegí al menos un local','error'); return; }
+  var prop=document.getElementById('g-reparto').value==='prop';
+  var shares=[];
+  if(prop){
+    var pesos={}, sum=0;
+    document.querySelectorAll('#g-locs .g-peso').forEach(function(i){ pesos[i.getAttribute('data-loc')]=Number(i.value)||0; });
+    locs.forEach(function(l){ sum+=(pesos[l]||0); });
+    if(!(sum>0)){ toast('Poné los pesos para el reparto proporcional','error'); return; }
+    var acum=0;
+    locs.forEach(function(l,idx){ var sh=(idx===locs.length-1)?+(montoTotal-acum).toFixed(2):+(montoTotal*(pesos[l]||0)/sum).toFixed(2); acum+=sh; shares.push({local:l, monto:sh}); });
+  } else {
+    var b1=+(montoTotal/locs.length).toFixed(2), ac=0;
+    locs.forEach(function(l,idx){ var sh=(idx===locs.length-1)?+(montoTotal-ac).toFixed(2):b1; ac+=sh; shares.push({local:l, monto:sh}); });
+  }
+  for(var i=0;i<shares.length;i++){
+    var pay=Object.assign({}, base, { destinatario:shares[i].local, monto:shares[i].monto });
+    var r=await window.sp('guardarGasto',pay);
+    if(!r.ok){ toast('Error en '+shares[i].local+': '+r.error,'error'); return; }
+  }
+  // Pago desde la Caja guardada: descontar la reserva del local que paga (una vez, por el total).
+  if(/guard/i.test(forma)){ await window.sp('movReserva',{ sucursal:sucActual, tipo:'egreso', monto:montoTotal, concepto:'Gasto'+(desc?(': '+desc):'') }); }
+  toast('Gasto guardado'+(shares.length>1?(' en '+shares.length+' locales'):'')); cancelarEdicionGasto(); cargarGastos();
 }
 function editarGasto(id){
   var g=GASTOS.find(function(x){return x.id===id;}); if(!g) return;
@@ -268,9 +410,12 @@ function editarGasto(id){
   document.getElementById('g-fecha').value=g.fecha?g.fecha.slice(0,10):'';
   document.getElementById('g-cat').value=g.categoriaId||''; document.getElementById('g-prov').value=g.proveedorId||'';
   document.getElementById('g-monto').value=g.monto; document.getElementById('g-fp').value=g.formaPago||''; document.getElementById('g-comp').value=g.comprobante||''; document.getElementById('g-desc').value=g.descripcion||'';
+  renderGLocs(); document.getElementById('g-todos').checked=false;
+  var nombre=SUCID[g.destinatarioId]||'';
+  document.querySelectorAll('#g-locs .g-loc').forEach(function(c){ c.checked=(c.value===nombre); });
   window.scrollTo({top:0,behavior:'smooth'});
 }
-function cancelarEdicionGasto(){ gastoEditId=null; document.getElementById('g-titulo').textContent='Nuevo gasto'; document.getElementById('g-cancel').hidden=true; ['g-monto','g-comp','g-desc'].forEach(function(id){document.getElementById(id).value='';}); }
+function cancelarEdicionGasto(){ gastoEditId=null; document.getElementById('g-titulo').textContent='Nuevo gasto'; document.getElementById('g-cancel').hidden=true; ['g-monto','g-comp','g-desc'].forEach(function(id){document.getElementById(id).value='';}); var t=document.getElementById('g-todos'); if(t) t.checked=false; document.querySelectorAll('#g-locs .g-loc').forEach(function(c){c.checked=false;}); }
 async function borrarGasto(id){ if(!confirm('¿Eliminar este gasto?')) return; var r=await window.sp('eliminarGasto',{id:id}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } toast('Gasto eliminado'); cargarGastos(); }
 
 // ---- ELABORACIÓN ----

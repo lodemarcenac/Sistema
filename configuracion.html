@@ -69,6 +69,12 @@
         <button class="btn-sec" onclick="addFP()" style="margin-top:10px;">+ Agregar forma de pago</button>
         <div style="margin-top:16px;"><button class="btn" onclick="guardarFP()">Guardar formas de pago</button></div>
       </div>
+      <div class="card">
+        <h3>Avisos por email</h3>
+        <p class="hint">Email del administrador que recibe un aviso automático cuando se <b>confirma una compra</b>.</p>
+        <div class="abm-nueva"><div><label>Email administrador</label><input id="cfg-email-admin" type="email" placeholder="correo@ejemplo.com"></div></div>
+        <div style="margin-top:12px;"><button class="btn" onclick="guardarEmailAdmin()">Guardar email</button></div>
+      </div>
     </div>
 
     <!-- LOCALES -->
@@ -165,6 +171,7 @@ async function iniciar(){
   document.getElementById('app').hidden=false;
   var r=await window.sf('getConfigGeneral');
   if(r.ok && r.config && r.config.formas_pago){ try{ var arr=JSON.parse(r.config.formas_pago); if(Array.isArray(arr)&&arr.length) FORMAS=arr.map(function(f){ return {nombre:String(f.nombre||f), cta:!!f.cta, facturar:!!f.facturar}; }); }catch(e){} }
+  if(r.ok && r.config){ var em=document.getElementById('cfg-email-admin'); if(em) em.value=r.config.email_admin||''; }
   var rs=await window.sf('getSucursales'); if(rs.ok) SUCS=rs.sucursales||[];
   var rb=await window.sf('getBalanzas'); if(rb.ok) BALS=rb.balanzas||{};
   var rcg=await window.sf('getCategoriasGasto'); if(rcg.ok) CG=rcg.categorias||[];
@@ -265,6 +272,13 @@ async function guardarFP(){
   var r=await window.sp('guardarConfig',{ clave:'formas_pago', valor:JSON.stringify(limpio) });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   FORMAS=limpio; renderFP(); toast('Formas de pago guardadas');
+}
+
+async function guardarEmailAdmin(){
+  var v=(document.getElementById('cfg-email-admin').value||'').trim();
+  var r=await window.sp('guardarConfig',{ clave:'email_admin', valor:v });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Email guardado');
 }
 
 // ---- LOCALES ---- (guardado automático al salir del campo)

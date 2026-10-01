@@ -66,7 +66,6 @@
         <div class="abm-nueva">
           <div><label>Monto $</label><input id="pv-monto" type="number" step="0.01"></div>
           <div><label>Forma</label><select id="pv-fp"></select></div>
-          <div><label>Fondo (si efectivo)</label><select id="pv-fondo"><option value="caja">Caja del día</option><option value="reserva">Efectivo guardado</option></select></div>
           <div><label>Tipo</label><select id="pv-tipo"><option value="pago">Pago</option><option value="cargo">Cargo manual</option></select></div>
           <button class="btn" onclick="movProv()">Registrar</button>
           <button class="btn-sec" onclick="cerrarPagoProv()">Cancelar</button>
@@ -111,7 +110,8 @@ async function iniciar(){
   var rs=await window.sf('getSucursales'); var suc=(rs.ok?(rs.sucursales||[]):[]); SUCS=suc.map(function(s){return s.nombre;}); SUCID={}; suc.forEach(function(s){ SUCID[s.id]=s.nombre; });
   var rcfg=await window.sf('getConfigGeneral'); if(rcfg.ok && rcfg.config && rcfg.config.formas_pago){ try{ var a=JSON.parse(rcfg.config.formas_pago); if(a.length) FORMAS=a.map(function(f){return f.nombre||f;}); }catch(e){} }
   poblarSuc();
-  document.getElementById('pv-fp').innerHTML=FORMAS.map(function(f){return '<option>'+f+'</option>';}).join('');
+  var pagoOpts=['Caja del día','Caja guardada'].concat(FORMAS.filter(function(f){ return !/efectivo|cuenta/i.test(f); }));
+  document.getElementById('pv-fp').innerHTML=pagoOpts.map(function(f){return '<option>'+f+'</option>';}).join('');
   await cargarCuentasProv();
 }
 function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; }
@@ -183,7 +183,7 @@ function cerrarPagoProv(){ pvCuentaSel=null; var c=document.getElementById('pv-p
 async function movProv(){
   var id=pvCuentaSel; var monto=document.getElementById('pv-monto').value;
   if(!id){ toast('Elegí una cuenta (botón Pagar)','error'); return; } if(!(Number(monto)>0)){ toast('Poné un monto','error'); return; }
-  var r=await window.sp('registrarPagoProveedor',{cuentaId:id, sucursal:sucActual, tipo:document.getElementById('pv-tipo').value, monto:monto, formaPago:document.getElementById('pv-fp').value, fondo:document.getElementById('pv-fondo').value, descripcion:(document.getElementById('pv-tipo').value==='cargo'?'Cargo manual':'Pago a proveedor')});
+  var r=await window.sp('registrarPagoProveedor',{cuentaId:id, sucursal:sucActual, tipo:document.getElementById('pv-tipo').value, monto:monto, formaPago:document.getElementById('pv-fp').value, descripcion:(document.getElementById('pv-tipo').value==='cargo'?'Cargo manual':'Pago a proveedor')});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   document.getElementById('pv-monto').value=''; toast('Registrado'); cerrarPagoProv(); renderDeudas();
 }
