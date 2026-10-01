@@ -67,7 +67,11 @@
   #app{ display:flex; flex-direction:column; height:100vh; }
   #app > header{ flex:0 0 auto; }
   #app > main{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column; max-width:none; width:100%; margin:0; padding:12px 18px; overflow:hidden; }
-  #caja-banner{ flex:0 0 auto; }
+  #caja-banner, #off-banner{ flex:0 0 auto; }
+  /* Modo offline: fondo bien visible + encabezado en alerta */
+  body.offline{ background:#c2410c; }
+  body.offline #app > header{ background:linear-gradient(100deg,#7c2d12,#c2410c)!important; }
+  body.offline #app > main{ background:#c2410c; }
   .grid{ flex:1 1 auto; min-height:0; align-items:stretch; }
   .col-main{ display:flex; flex-direction:column; min-height:0; }
   .col-main .scan{ flex:0 0 auto; }
@@ -112,6 +116,7 @@
     </div>
   </header>
   <main>
+    <div id="off-banner" hidden style="background:#c2410c;color:#fff;border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-weight:700;font-size:var(--fs-sm);text-align:center;letter-spacing:.02em;"></div>
     <div id="caja-banner" hidden style="background:#fdf0d5;border:1px solid #e7c66b;color:#7a5b00;border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:var(--fs-sm);"></div>
     <div class="grid">
       <div class="col-main">
@@ -261,6 +266,7 @@ async function iniciar(){
   var rco=await window.sf('getCombos'); if(rco.ok) cargarCombos(rco.combos||[]);
   resetPagos(); renderCliente(); render();
   await verificarCaja();
+  actualizarOffUI(); if(navigator.onLine) syncCola();
   document.getElementById('scan').focus();
 }
 async function verificarCaja(){
@@ -631,12 +637,17 @@ async function cobrar(){
     es_cta:hayCta,
     total_bruto:+bruto.toFixed(2), descuento_pct:descPct, descuento_monto:+(bruto*descPct/100).toFixed(2),
     total:total, peso_total:+pesoTotal.toFixed(3), cant_items:carrito.length,
-    items:items, combos:combos, pagos:pagosLimpios
+    items:items, combos:combos, pagos:pagosLimpios,
+    uuid:uuidGen()
   };
   var btn=document.getElementById('btn-cobrar'); btn.disabled=true; btn.textContent='Procesando…';
+  if(!navigator.onLine){ btn.disabled=false; btn.textContent='Cobrar'; cobrarOffline(venta,pagosLimpios); return; }
   var r=await window.sp('registrarVenta',{venta:venta});
   btn.disabled=false; btn.textContent='Cobrar';
-  if(!r.ok){ toast('Error al registrar: '+(r.error||'?'),'error'); return; }
+  if(!r.ok){
+    if(!navigator.onLine || /fetch|network|failed|timeout|conexi/i.test(String(r.error||''))){ cobrarOffline(venta,pagosLimpios); return; }
+    toast('Error al registrar: '+(r.error||'?'),'error'); return;
+  }
   mostrarOk(r,venta,pagosLimpios);
 }
 
@@ -654,6 +665,7 @@ function armarTicket(r,venta,pagosLimpios){
   if(info.telefono) L.push(centrar('Tel: '+info.telefono));
   L.push('');
   L.push(r.comprobante||'');
+  if(r.offline){ L.push(centrar('* PENDIENTE DE SINCRONIZAR *')); }
   L.push(new Date().toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}));
   L.push('Cliente: '+(venta.cliente_nombre||'Consumidor final'));
   L.push('----------------------------------------');
@@ -699,6 +711,47 @@ function nuevaVenta(){
   document.getElementById('cli-saldo').hidden=true;
   render(); document.getElementById('scan').focus();
 }
+
+// ================= MODO OFFLINE (vender sin conexión) =================
+function uuidGen(){ try{ return crypto.randomUUID(); }catch(e){ return 'off-'+Date.now()+'-'+Math.random().toString(16).slice(2); } }
+function colaGet(){ try{ return JSON.parse(localStorage.getItem('ventasOffline')||'[]'); }catch(e){ return []; } }
+function colaSet(a){ try{ localStorage.setItem('ventasOffline', JSON.stringify(a)); }catch(e){} }
+function offSeqNext(){ var n=(Number(localStorage.getItem('offSeq'))||0)+1; try{ localStorage.setItem('offSeq', n); }catch(e){} return n; }
+
+function cobrarOffline(venta, pagosLimpios){
+  var cola=colaGet(); cola.push(venta); colaSet(cola);
+  var rProv={ ok:true, offline:true, comprobante:'OFFLINE-'+offSeqNext() };
+  mostrarOk(rProv, venta, pagosLimpios);
+  actualizarOffUI();
+}
+
+var _sincronizando=false;
+async function syncCola(){
+  if(_sincronizando || !navigator.onLine) { actualizarOffUI(); return; }
+  var cola=colaGet(); if(!cola.length){ actualizarOffUI(); return; }
+  _sincronizando=true;
+  var quedan=cola.slice();
+  for(var i=0;i<cola.length;i++){
+    var r=await window.sp('registrarVenta',{venta:cola[i]});
+    if(r && r.ok){ quedan.shift(); }          // subida OK (o ya existía por uuid) -> sale de la cola
+    else { break; }                            // primer fallo (probable caída de red) -> se corta y se reintenta luego
+  }
+  colaSet(quedan); _sincronizando=false;
+  actualizarOffUI();
+  if(!quedan.length) toast('✓ Ventas offline sincronizadas');
+}
+
+function actualizarOffUI(){
+  var n=colaGet().length; var off=!navigator.onLine;
+  document.body.classList.toggle('offline', off);
+  var b=document.getElementById('off-banner'); if(!b) return;
+  if(off){ b.hidden=false; b.textContent='⚠ SIN CONEXIÓN — vendiendo offline'+(n?(' · '+n+' venta'+(n>1?'s':'')+' en cola'):''); }
+  else if(n>0){ b.hidden=false; b.textContent='🔄 Reconectado — sincronizando '+n+' venta'+(n>1?'s':'')+'…'; }
+  else { b.hidden=true; }
+}
+window.addEventListener('online', function(){ actualizarOffUI(); syncCola(); });
+window.addEventListener('offline', function(){ actualizarOffUI(); });
+setInterval(function(){ if(navigator.onLine && colaGet().length) syncCola(); }, 20000);
 
 // ---- HISTORIAL ----
 function abrirHistorial(){ document.getElementById('ov-hist').hidden=false; cargarHistorial(); }
