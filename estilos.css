@@ -22,6 +22,13 @@
 *,*::before,*::after{ box-sizing:border-box; margin:0; padding:0; }
 body{ background:var(--bg); color:var(--ink); font-family:var(--font); font-size:var(--fs-base); line-height:1.5; -webkit-font-smoothing:antialiased; padding-left:52px; }
 
+/* Scrollbars sutiles en todo el sistema (más prolijo y sobrio) */
+*{ scrollbar-width:thin; scrollbar-color:#c3ccdd transparent; }
+::-webkit-scrollbar{ width:10px; height:10px; }
+::-webkit-scrollbar-track{ background:transparent; }
+::-webkit-scrollbar-thumb{ background:#c3ccdd; border-radius:7px; border:2px solid transparent; background-clip:padding-box; }
+::-webkit-scrollbar-thumb:hover{ background:#9fb0cc; }
+
 /* ---- Menú lateral (finito, se expande con el mouse) ---- */
 #sidenav{ position:fixed; top:0; left:0; height:100vh; width:52px; background:#0e2a5c; color:#fff; overflow-x:hidden; overflow-y:auto; transition:width .16s ease; z-index:90; padding:4px 0 8px; scrollbar-width:thin; scrollbar-color:transparent transparent; }
 #sidenav:hover{ width:212px; box-shadow:6px 0 22px rgba(0,0,0,.22); scrollbar-color:rgba(255,255,255,.22) transparent; }
@@ -92,7 +99,9 @@ input,select,textarea{ font-family:inherit; font-size:var(--fs-base); color:var(
 table.data{ width:100%; border-collapse:collapse; font-size:var(--fs-sm); }
 table.data th, table.data td{ text-align:left; padding:7px 12px; border-bottom:1px solid var(--line-2); white-space:nowrap; }
 table.data th{ background:var(--surface-2); color:#6b7688; font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.04em; font-weight:700; }
-table.data tbody tr:hover{ background:#f7f9fc; }
+table.data tbody tr:nth-child(even){ background:#fafbfd; }
+table.data tbody tr:hover{ background:#eef3fb; }
+table.data tbody tr:last-child td{ border-bottom:none; }
 table.data td.num, table.data th.num{ text-align:right; font-variant-numeric:tabular-nums; }
 table.data tr.inactivo td{ color:#aeb4c0; font-style:italic; }
 input.cell, select.cell{ width:100px; padding:4px 6px; border:1px solid #dbe2ee; border-radius:var(--radius-xs); font-size:var(--fs-sm); font-family:inherit; text-align:right; font-variant-numeric:tabular-nums; }
@@ -113,9 +122,10 @@ input.cell.ro{ background:#f2f4f8; color:var(--muted); }
 
 /* ---- KPI tiles ---- */
 .kpis{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
-.kpi{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; box-shadow:var(--shadow); }
+.kpi{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; box-shadow:var(--shadow); transition:box-shadow .12s ease; }
+.kpi:hover{ box-shadow:var(--shadow-md); }
 .kpi .k-lbl{ font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:700; }
-.kpi .k-val{ font-size:var(--fs-2xl); font-weight:700; color:var(--brand); margin-top:4px; }
+.kpi .k-val{ font-size:var(--fs-2xl); font-weight:700; color:var(--brand); margin-top:4px; letter-spacing:-.015em; font-variant-numeric:tabular-nums; }
 
 /* ---- Toast ---- */
 .toast-c{ position:fixed; bottom:18px; right:18px; display:flex; flex-direction:column; gap:8px; z-index:200; }

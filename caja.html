@@ -91,7 +91,7 @@
           <div><label>Monto</label><input id="rv-monto" type="number" step="0.01"></div>
           <div><label>Concepto</label><input id="rv-concepto" placeholder="Detalle"></div>
         </div>
-        <div style="margin-top:8px;display:flex;gap:8px;"><button class="btn-sec" onclick="movReservaUI('ingreso')">+ Ingreso</button><button class="btn-sec" onclick="movReservaUI('egreso')">− Retiro</button></div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn-sec" onclick="movReservaUI('ingreso')">+ Sumar monto</button><button class="btn-sec" onclick="movReservaUI('egreso')">− Restar monto</button><button class="btn-sec" onclick="retirarTodoUI()" style="margin-left:auto;color:var(--bad);border-color:#f0c9c9;">Retirar todo → $0</button></div>
         <div class="tblwrap" style="margin-top:12px;max-height:220px;overflow:auto;"><table class="data"><thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Ingreso</th><th class="num">Egreso</th></tr></thead><tbody id="rv-tbody"></tbody></table></div>
       </div>
     </div>
@@ -178,9 +178,11 @@ async function cerrarCajaUI(){
   toast('Caja cerrada — diferencia '+fmt$(r.diferencia)); cargarTodo();
 }
 
+var SALDO_RESERVA=0;
 async function cargarReserva(){
   var r=await window.sf('getReserva&sucursal='+encodeURIComponent(sucActual));
-  document.getElementById('rv-saldo').textContent=fmt$(r.ok?r.saldo:0);
+  SALDO_RESERVA=(r.ok?Number(r.saldo)||0:0);
+  document.getElementById('rv-saldo').textContent=fmt$(SALDO_RESERVA);
   document.getElementById('rv-tbody').innerHTML=(r.ok?r.movimientos:[]).map(function(m){
     var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
     var ing=m.tipo==='ingreso'; return '<tr><td>'+f+'</td><td>'+(m.concepto||'')+'</td><td class="num">'+(ing?fmt$(m.monto):'')+'</td><td class="num">'+(ing?'':fmt$(m.monto))+'</td></tr>';
@@ -190,7 +192,15 @@ async function movReservaUI(tipo){
   var monto=document.getElementById('rv-monto').value; if(!(Number(monto)>0)){ toast('Poné un monto','error'); return; }
   var r=await window.sp('movReserva',{ sucursal:sucActual, tipo:tipo, monto:monto, concepto:document.getElementById('rv-concepto').value.trim() });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  document.getElementById('rv-monto').value=''; document.getElementById('rv-concepto').value=''; toast(tipo==='ingreso'?'Ingreso registrado':'Retiro registrado'); cargarReserva();
+  document.getElementById('rv-monto').value=''; document.getElementById('rv-concepto').value=''; toast(tipo==='ingreso'?'Saldo aumentado':'Saldo descontado'); cargarReserva();
+}
+async function retirarTodoUI(){
+  if(!(SALDO_RESERVA>0)){ toast('La reserva ya está en $0','error'); return; }
+  if(!confirm('¿Dejar en $0 el efectivo guardado de '+sucActual+'?\nSe descuenta todo el saldo ('+fmt$(SALDO_RESERVA)+').')) return;
+  var concepto=document.getElementById('rv-concepto').value.trim() || 'Retiro total';
+  var r=await window.sp('movReserva',{ sucursal:sucActual, tipo:'egreso', monto:SALDO_RESERVA, concepto:concepto });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  document.getElementById('rv-concepto').value=''; toast('Reserva en $0'); cargarReserva();
 }
 
 async function cargarHist(){
