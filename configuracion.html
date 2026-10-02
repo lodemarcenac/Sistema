@@ -58,6 +58,8 @@
       <button class="tab" data-s="balanzas" onclick="switchSec('balanzas')">⚖️ Balanzas</button>
       <button class="tab" data-s="gastos" onclick="switchSec('gastos')">🧾 Compras y Gastos</button>
       <button class="tab" data-s="clover" onclick="switchSec('clover')">💳 Clover</button>
+      <button class="tab" data-s="reparto" onclick="switchSec('reparto')">🧮 Reparto gastos</button>
+      <button class="tab" data-s="prov" onclick="switchSec('prov')">🏪 Proveedores</button>
     </div>
 
     <!-- FORMAS DE PAGO -->
@@ -115,6 +117,26 @@
       </div>
     </div>
 
+    <!-- PROVEEDORES POR LOCAL -->
+    <div id="s-prov" hidden>
+      <div class="card">
+        <h3>Proveedores por local</h3>
+        <p class="hint">Marcá en qué locales aparece cada proveedor (para compras y pagos). Los proveedores se crean en <b>Compras y Gastos → Proveedores</b>; al crearlos quedan asignados a los locales del usuario.</p>
+        <div id="cfg-prov-list"><p class="muted">Cargando…</p></div>
+      </div>
+    </div>
+
+    <!-- REPARTO GASTOS (por defecto, global) -->
+    <div id="s-reparto" hidden>
+      <div class="card">
+        <h3>Reparto de gastos entre locales (por defecto)</h3>
+        <p class="hint">Porcentaje de cada local que se usa cuando un gasto se reparte a <b>varios locales</b>. Idealmente suma 100%. Al cargar un gasto podés ajustar los montos y destildar locales.</p>
+        <div class="tblwrap"><table class="cfg"><thead><tr><th>Local</th><th>% por defecto</th></tr></thead><tbody id="rep-def-tbody"></tbody></table></div>
+        <div style="margin-top:8px;font-weight:600;" id="rep-def-sum"></div>
+        <div style="margin-top:12px;"><button class="btn" onclick="guardarRepartoDef()">Guardar reparto</button></div>
+      </div>
+    </div>
+
     <!-- CLOVER -->
     <div id="s-clover" hidden>
       <div class="card">
@@ -151,6 +173,7 @@ var BALS={};      // nombre -> {prefijo,dato,codlen,datolen}
 var CG=[];        // categorías de gasto {id,nombre,grupo}
 var REP={};       // reparto: catId -> { sucId: porcentaje }
 var CV_ESTADO={}, CV_ARANC=[];   // Clover: estado de cuentas (sin token) + aranceles
+var REP_DEF={};   // reparto de gastos por defecto: { localNombre: % }
 function escAttr(s){ return String(s||'').replace(/"/g,'&quot;'); }
 function toast(msg,tipo){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(tipo?' '+tipo:''); e.textContent=msg; c.appendChild(e); setTimeout(function(){ e.remove(); },2600); }
 
@@ -172,6 +195,7 @@ async function iniciar(){
   var r=await window.sf('getConfigGeneral');
   if(r.ok && r.config && r.config.formas_pago){ try{ var arr=JSON.parse(r.config.formas_pago); if(Array.isArray(arr)&&arr.length) FORMAS=arr.map(function(f){ return {nombre:String(f.nombre||f), cta:!!f.cta, facturar:!!f.facturar}; }); }catch(e){} }
   if(r.ok && r.config){ var em=document.getElementById('cfg-email-admin'); if(em) em.value=r.config.email_admin||''; }
+  if(r.ok && r.config && r.config.reparto_default){ try{ REP_DEF=JSON.parse(r.config.reparto_default)||{}; }catch(e){ REP_DEF={}; } }
   var rs=await window.sf('getSucursales'); if(rs.ok) SUCS=rs.sucursales||[];
   var rb=await window.sf('getBalanzas'); if(rb.ok) BALS=rb.balanzas||{};
   var rcg=await window.sf('getCategoriasGasto'); if(rcg.ok) CG=rcg.categorias||[];
@@ -180,9 +204,50 @@ async function iniciar(){
 }
 function switchSec(name){
   document.querySelectorAll('.sec-tabs .tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-s')===name); });
-  ['pagos','locales','balanzas','gastos','clover'].forEach(function(s){ document.getElementById('s-'+s).hidden=(s!==name); });
+  ['pagos','locales','balanzas','gastos','clover','reparto','prov'].forEach(function(s){ document.getElementById('s-'+s).hidden=(s!==name); });
   if(name==='gastos') renderGastos();
   if(name==='clover') cargarClover();
+  if(name==='reparto') renderRepDef();
+  if(name==='prov') cargarCfgProv();
+}
+// ---- PROVEEDORES POR LOCAL ----
+var CFG_PROV=[];
+async function cargarCfgProv(){
+  var r=await window.sf('getProveedoresConLocales'); CFG_PROV=(r.ok?r.proveedores:[])||[];
+  renderCfgProv();
+}
+function renderCfgProv(){
+  var locs=SUCS.filter(function(s){return s.id;});
+  document.getElementById('cfg-prov-list').innerHTML = CFG_PROV.length ? CFG_PROV.map(function(p){
+    return '<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><b>'+p.nombre+'</b><button class="mini-btn" onclick="guardarCfgProv('+p.id+')">Guardar</button></div>'+
+      '<div style="margin-top:8px;">'+locs.map(function(s){ return '<label style="margin-right:16px;font-size:var(--fs-sm);display:inline-flex;align-items:center;gap:5px;"><input type="checkbox" class="cfgp-'+p.id+'" value="'+String(s.nombre).replace(/"/g,'&quot;')+'" '+((p.locales||[]).indexOf(s.nombre)>=0?'checked':'')+'> '+s.nombre+'</label>'; }).join('')+'</div>'+
+    '</div>';
+  }).join('') : '<p class="muted">No hay proveedores todavía.</p>';
+}
+async function guardarCfgProv(id){
+  var locs=[]; document.querySelectorAll('.cfgp-'+id+':checked').forEach(function(c){ locs.push(c.value); });
+  var r=await window.sp('setProveedorLocales',{ proveedorId:id, locales:locs });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  var p=CFG_PROV.find(function(x){return x.id===id;}); if(p) p.locales=locs; toast('Guardado');
+}
+// ---- REPARTO DE GASTOS POR DEFECTO (global, % por local) ----
+function renderRepDef(){
+  document.getElementById('rep-def-tbody').innerHTML=SUCS.filter(function(s){return s.id;}).map(function(s){
+    var v=(REP_DEF[s.nombre]!=null?REP_DEF[s.nombre]:'');
+    return '<tr><td>'+s.nombre+'</td><td><input type="number" step="0.01" class="w-cod rep-def" data-loc="'+String(s.nombre).replace(/"/g,'&quot;')+'" value="'+v+'" oninput="sumRepDef()"></td></tr>';
+  }).join('') || '<tr><td colspan="2" style="color:var(--muted)">Cargá primero los locales.</td></tr>';
+  sumRepDef();
+}
+function sumRepDef(){
+  var sum=0; document.querySelectorAll('#rep-def-tbody .rep-def').forEach(function(i){ sum+=Number(i.value)||0; });
+  var el=document.getElementById('rep-def-sum'); el.textContent='Suma: '+sum.toFixed(2)+'%'; el.style.color=(Math.abs(sum-100)<0.01?'var(--good)':'var(--warn)');
+}
+async function guardarRepartoDef(){
+  REP_DEF={}; document.querySelectorAll('#rep-def-tbody .rep-def').forEach(function(i){ var v=Number(i.value)||0; if(v!==0) REP_DEF[i.getAttribute('data-loc')]=v; });
+  var r=await window.sp('guardarConfig',{ clave:'reparto_default', valor:JSON.stringify(REP_DEF) });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Reparto guardado');
 }
 
 // ---- CLOVER ----

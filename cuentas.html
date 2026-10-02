@@ -65,7 +65,8 @@
         <h3 id="pv-pago-tit" style="font-size:var(--fs-lg);">Registrar movimiento</h3>
         <div class="abm-nueva">
           <div><label>Monto $</label><input id="pv-monto" type="number" step="0.01"></div>
-          <div><label>Forma</label><select id="pv-fp"></select></div>
+          <div><label>Forma</label><select id="pv-fp" onchange="toggleCaja('pv-fp','pv-caja-wrap')"></select></div>
+          <div id="pv-caja-wrap" hidden><label>Caja</label><select id="pv-caja"><option>Caja del día</option><option>Caja guardada</option></select></div>
           <div><label>Tipo</label><select id="pv-tipo"><option value="pago">Pago</option><option value="cargo">Cargo manual</option></select></div>
           <button class="btn" onclick="movProv()">Registrar</button>
           <button class="btn-sec" onclick="cerrarPagoProv()">Cancelar</button>
@@ -94,6 +95,8 @@
 var sb=window.sbClient;
 var CLIENTES=[], PROVS=[], SUCS=[], SUCID={}, FORMAS=['Efectivo','Tarjeta','Virtual'], sucActual='';
 function fmt$(n){ return '$'+Math.round(Number(n)||0).toLocaleString('es-AR'); }
+function toggleCaja(fpId, wrapId){ var f=document.getElementById(fpId), w=document.getElementById(wrapId); if(f&&w) w.hidden=!/efectivo/i.test(f.value); }
+function efectivaForma(fpId, cajaId){ var f=document.getElementById(fpId).value; if(/efectivo/i.test(f)){ var c=document.getElementById(cajaId); return c?c.value:f; } return f; }
 function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
 
 document.getElementById('login-form').addEventListener('submit', async function(e){
@@ -110,8 +113,8 @@ async function iniciar(){
   var rs=await window.sf('getSucursales'); var suc=(rs.ok?(rs.sucursales||[]):[]); SUCS=suc.map(function(s){return s.nombre;}); SUCID={}; suc.forEach(function(s){ SUCID[s.id]=s.nombre; });
   var rcfg=await window.sf('getConfigGeneral'); if(rcfg.ok && rcfg.config && rcfg.config.formas_pago){ try{ var a=JSON.parse(rcfg.config.formas_pago); if(a.length) FORMAS=a.map(function(f){return f.nombre||f;}); }catch(e){} }
   poblarSuc();
-  var pagoOpts=['Caja del día','Caja guardada'].concat(FORMAS.filter(function(f){ return !/efectivo|cuenta/i.test(f); }));
-  document.getElementById('pv-fp').innerHTML=pagoOpts.map(function(f){return '<option>'+f+'</option>';}).join('');
+  document.getElementById('pv-fp').innerHTML=FORMAS.filter(function(f){ return !/cuenta/i.test(f); }).map(function(f){return '<option>'+f+'</option>';}).join('');
+  toggleCaja('pv-fp','pv-caja-wrap');
   await cargarCuentasProv();
 }
 function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; }
@@ -139,51 +142,50 @@ async function saldarInter(deudorId, acreedorId, monto){
 function pintarSaldo(el, s, etiquetaDebe, etiquetaFavor){ if(s>0.5){ el.className='saldo debe'; el.textContent=fmt$(s); } else if(s<-0.5){ el.className='saldo favor'; el.textContent=fmt$(-s)+' a favor'; } else { el.className='saldo cero'; el.textContent='$0'; } }
 
 // ---- PROVEEDORES (listado consolidado de deudas) ----
-var DEUDAS=[], pvCuentaSel=null;
+var DEUDAS=[], pvProvSel=null;
 async function renderDeudas(){
   var cont=document.getElementById('pv-lista'), tot=document.getElementById('pv-total');
   var r=await window.sf('getDeudasLocal&sucursal='+encodeURIComponent(sucActual)); DEUDAS=(r.ok?r.deudas:[])||[];
-  if(!DEUDAS.length){ cont.innerHTML='<p class="muted">Este local no tiene cuentas de proveedor. Cargalas en Compras → Proveedores.</p>'; tot.textContent=''; return; }
+  if(!DEUDAS.length){ cont.innerHTML='<p class="muted">Este local no tiene proveedores. Asignalos en Configuración → Proveedores.</p>'; tot.textContent=''; return; }
   DEUDAS.sort(function(a,b){ return b.saldo-a.saldo; });
   var totalDeuda=DEUDAS.reduce(function(s,d){ return s+(d.saldo>0?d.saldo:0); },0);
   tot.innerHTML='Deuda total: <b style="color:var(--bad);">'+fmt$(totalDeuda)+'</b>';
   cont.innerHTML=DEUDAS.map(function(d){
     var etq=d.saldo>0.5?('<span style="color:var(--bad);font-weight:700;">Debe '+fmt$(d.saldo)+'</span>'):(d.saldo<-0.5?('<span style="color:var(--good);font-weight:700;">A favor '+fmt$(-d.saldo)+'</span>'):'<span class="muted">al día</span>');
-    var nom=d.proveedor+(d.nombre?(' <span class="muted">— '+d.nombre+'</span>'):'');
     return '<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">'+
-        '<div style="font-weight:600;">'+nom+'</div>'+
+        '<div style="font-weight:600;">'+d.proveedor+'</div>'+
         '<div style="display:flex;align-items:center;gap:8px;">'+etq+
-          '<button class="btn-sec" onclick="toggleHist('+d.cuentaId+')">Historial</button>'+
-          '<button class="btn" style="padding:5px 11px;font-size:.78rem;" onclick="pagarProv('+d.cuentaId+',\''+String(d.proveedor).replace(/\x27/g,"\\x27")+'\')">💰 Pagar</button>'+
+          '<button class="btn-sec" onclick="toggleHist('+d.proveedorId+')">Historial</button>'+
+          '<button class="btn" style="padding:5px 11px;font-size:.78rem;" onclick="pagarProv('+d.proveedorId+',\''+String(d.proveedor).replace(/\x27/g,"\\x27")+'\')">💰 Pagar</button>'+
         '</div>'+
       '</div>'+
-      '<div id="hist-'+d.cuentaId+'" hidden style="margin-top:10px;border-top:1px solid var(--line-2);padding-top:8px;"></div>'+
+      '<div id="hist-'+d.proveedorId+'" hidden style="margin-top:10px;border-top:1px solid var(--line-2);padding-top:8px;"></div>'+
     '</div>';
   }).join('');
 }
-async function toggleHist(cuentaId){
-  var el=document.getElementById('hist-'+cuentaId); if(!el) return;
+async function toggleHist(provId){
+  var el=document.getElementById('hist-'+provId); if(!el) return;
   if(!el.hidden){ el.hidden=true; return; }
   el.hidden=false; el.innerHTML='<p class="muted">Cargando…</p>';
-  var r=await window.sf('getMovCuenta&id='+cuentaId); var movs=(r.ok?r.movimientos:[])||[];
+  var r=await window.sf('getMovProveedor&id='+provId+'&sucursal='+encodeURIComponent(sucActual)); var movs=(r.ok?r.movimientos:[])||[];
   el.innerHTML='<div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th><th>Detalle</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th></tr></thead><tbody>'+
     (movs.slice().reverse().map(function(m){ var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; var esPago=/pago/i.test(m.tipo);
-      return '<tr><td>'+f+'</td><td>'+(m.descripcion||'')+(m.local?(' <span class="muted">('+m.local+')</span>'):'')+'</td><td>'+(m.comprobante||'')+'</td><td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td></tr>';
+      return '<tr><td>'+f+'</td><td>'+(m.descripcion||'')+'</td><td>'+(m.comprobante||'')+'</td><td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td></tr>';
     }).join('') || '<tr><td colspan="6" class="muted">Sin movimientos.</td></tr>')+'</tbody></table></div>';
 }
-function pagarProv(cuentaId, prov){
-  pvCuentaSel=cuentaId;
+function pagarProv(provId, prov){
+  pvProvSel=provId;
   document.getElementById('pv-pago-tit').textContent='Registrar movimiento — '+prov;
   document.getElementById('pv-pago-card').hidden=false;
   document.getElementById('pv-monto').value='';
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
 }
-function cerrarPagoProv(){ pvCuentaSel=null; var c=document.getElementById('pv-pago-card'); if(c) c.hidden=true; }
+function cerrarPagoProv(){ pvProvSel=null; var c=document.getElementById('pv-pago-card'); if(c) c.hidden=true; }
 async function movProv(){
-  var id=pvCuentaSel; var monto=document.getElementById('pv-monto').value;
-  if(!id){ toast('Elegí una cuenta (botón Pagar)','error'); return; } if(!(Number(monto)>0)){ toast('Poné un monto','error'); return; }
-  var r=await window.sp('registrarPagoProveedor',{cuentaId:id, sucursal:sucActual, tipo:document.getElementById('pv-tipo').value, monto:monto, formaPago:document.getElementById('pv-fp').value, descripcion:(document.getElementById('pv-tipo').value==='cargo'?'Cargo manual':'Pago a proveedor')});
+  var id=pvProvSel; var monto=document.getElementById('pv-monto').value;
+  if(!id){ toast('Elegí un proveedor (botón Pagar)','error'); return; } if(!(Number(monto)>0)){ toast('Poné un monto','error'); return; }
+  var r=await window.sp('registrarPagoProveedor',{proveedorId:id, sucursal:sucActual, tipo:document.getElementById('pv-tipo').value, monto:monto, formaPago:efectivaForma('pv-fp','pv-caja'), descripcion:(document.getElementById('pv-tipo').value==='cargo'?'Cargo manual':'Pago a proveedor')});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   document.getElementById('pv-monto').value=''; toast('Registrado'); cerrarPagoProv(); renderDeudas();
 }

@@ -187,9 +187,32 @@
     },
     getMovProveedor: async function(params){
       var id=params&&params.id; if(!id) return {ok:true, movimientos:[], saldo:0};
-      var r=await sb.from('deuda_proveedores').select('fecha,tipo,monto,descripcion,comprobante,forma_pago').eq('proveedor_id',id).order('fecha'); if(r.error) throw r.error;
+      var sid=null; if(params&&params.sucursal){ var mm=await sucIdMap(); sid=mm[params.sucursal]||null; }
+      var q=sb.from('deuda_proveedores').select('fecha,tipo,monto,descripcion,comprobante,forma_pago,sucursal_id').eq('proveedor_id',id);
+      if(sid) q=q.eq('sucursal_id',sid);
+      var r=await q.order('fecha'); if(r.error) throw r.error;
       var saldo=0; var movs=(r.data||[]).map(function(m){ var v=Number(m.monto)||0; if(/pago/i.test(m.tipo)) saldo-=v; else saldo+=v; return { fecha:m.fecha, tipo:m.tipo, monto:v, descripcion:m.descripcion||'', comprobante:m.comprobante||'', formaPago:m.forma_pago||'', saldo:saldo }; });
       return {ok:true, movimientos:movs, saldo:saldo};
+    },
+    getProveedoresDeLocal: async function(params){
+      var m=await sucIdMap(); var sid=params&&params.sucursal?m[params.sucursal]:null; if(!sid) return {ok:true, proveedores:[]};
+      var pl=await sb.from('proveedor_locales').select('proveedor_id').eq('sucursal_id',sid); if(pl.error) throw pl.error;
+      var ids=(pl.data||[]).map(function(x){return x.proveedor_id;}); if(!ids.length) return {ok:true, proveedores:[]};
+      var pr=await sb.from('proveedores').select('id,nombre,activo').in('id',ids).order('nombre'); if(pr.error) throw pr.error;
+      return {ok:true, proveedores:(pr.data||[]).filter(function(p){return p.activo!==false;}).map(function(p){ return { id:p.id, nombre:p.nombre }; })};
+    },
+    getProveedorLocales: async function(params){
+      var id=params&&params.id; if(!id) return {ok:true, locales:[]};
+      var pl=await sb.from('proveedor_locales').select('sucursal_id').eq('proveedor_id',id); if(pl.error) throw pl.error;
+      var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
+      return {ok:true, locales:(pl.data||[]).map(function(x){ return idToName[x.sucursal_id]||String(x.sucursal_id); })};
+    },
+    getProveedoresConLocales: async function(){
+      var pr=await sb.from('proveedores').select('id,nombre,activo').order('nombre'); if(pr.error) throw pr.error;
+      var pl=await sb.from('proveedor_locales').select('proveedor_id,sucursal_id');
+      var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
+      var byProv={}; (pl.data||[]).forEach(function(x){ (byProv[x.proveedor_id]=byProv[x.proveedor_id]||[]).push(idToName[x.sucursal_id]||String(x.sucursal_id)); });
+      return {ok:true, proveedores:(pr.data||[]).filter(function(p){return p.activo!==false;}).map(function(p){ return { id:p.id, nombre:p.nombre, locales:byProv[p.id]||[] }; })};
     },
     getRemitos: async function(){
       var r=await sb.from('remitos_internos').select('id,numero,origen_id,destino_id,estado,concepto,total_costo,fecha_emision,fecha_recepcion').order('fecha_emision',{ascending:false}).limit(300);
@@ -219,12 +242,13 @@
     },
     getDeudasLocal: async function(params){
       var m=await sucIdMap(); var sid=params&&params.sucursal?m[params.sucursal]:null; if(!sid) return {ok:true, deudas:[]};
-      var cl=await sb.from('proveedor_cuenta_locales').select('cuenta_id').eq('sucursal_id',sid);
-      var ids=(cl.data||[]).map(function(x){return x.cuenta_id;}); if(!ids.length) return {ok:true, deudas:[]};
-      var cu=await sb.from('proveedor_cuentas').select('id,nombre,activo,prov:proveedores(nombre)').in('id',ids);
-      var dp=await sb.from('deuda_proveedores').select('cuenta_id,tipo,monto').in('cuenta_id',ids);
-      var saldo={}; (dp.data||[]).forEach(function(x){ var v=Number(x.monto)||0; saldo[x.cuenta_id]=(saldo[x.cuenta_id]||0)+(/pago/i.test(x.tipo)?-v:v); });
-      return {ok:true, deudas:(cu.data||[]).filter(function(c){return c.activo!==false;}).map(function(c){ return { cuentaId:c.id, proveedor:(c.prov?c.prov.nombre:''), nombre:c.nombre||'', saldo:+((saldo[c.id]||0)).toFixed(2) }; })};
+      var idsSet={};
+      var asign=await sb.from('proveedor_locales').select('proveedor_id').eq('sucursal_id',sid); (asign.data||[]).forEach(function(x){ idsSet[x.proveedor_id]=true; });
+      var dp=await sb.from('deuda_proveedores').select('proveedor_id,tipo,monto').eq('sucursal_id',sid);
+      var saldo={}; (dp.data||[]).forEach(function(x){ if(x.proveedor_id==null) return; var v=Number(x.monto)||0; saldo[x.proveedor_id]=(saldo[x.proveedor_id]||0)+(/pago/i.test(x.tipo)?-v:v); idsSet[x.proveedor_id]=true; });
+      var ids=Object.keys(idsSet).map(Number); if(!ids.length) return {ok:true, deudas:[]};
+      var pr=await sb.from('proveedores').select('id,nombre,activo').in('id',ids);
+      return {ok:true, deudas:(pr.data||[]).filter(function(p){return p.activo!==false;}).map(function(p){ return { proveedorId:p.id, proveedor:p.nombre, saldo:+((saldo[p.id]||0)).toFixed(2) }; }).sort(function(a,b){ return b.saldo-a.saldo; })};
     },
     getMovCuenta: async function(params){
       var id=params&&params.id; if(!id) return {ok:true, movimientos:[], saldo:0};
@@ -325,6 +349,15 @@
       var r=await sb.from('compras_detalle').select('id,cantidad,costo_unit,costo,producto:productos(codigo_interno,nombre)').eq('compra_id', params.id).order('id');
       if(r.error) throw r.error;
       return {ok:true, detalle:(r.data||[]).map(function(d){ return { id:d.id, codigo:(d.producto?d.producto.codigo_interno:''), nombre:(d.producto?d.producto.nombre:''), cantidad:Number(d.cantidad)||0, costo_unit:Number(d.costo_unit)||0, costo:Number(d.costo)||0 }; })};
+    },
+    getComprasConfirmadas: async function(params){
+      var m=await sucIdMap(); var sid=params&&params.sucursal?m[params.sucursal]:null;
+      var q=sb.from('compras').select('id,comprobante,total,fecha,proveedor:proveedores(nombre),detalle:compras_detalle(cantidad,costo_unit,costo,producto:productos(nombre,codigo_interno))').eq('estado','completa');
+      if(sid) q=q.eq('sucursal_id',sid);
+      if(params&&params.desde) q=q.gte('fecha',params.desde);
+      if(params&&params.hasta) q=q.lte('fecha',params.hasta+'T23:59:59');
+      var r=await q.order('fecha',{ascending:false}).limit(500); if(r.error) throw r.error;
+      return {ok:true, compras:(r.data||[]).map(function(c){ return { id:c.id, comprobante:c.comprobante||'', total:Number(c.total)||0, fecha:c.fecha, proveedor:(c.proveedor?c.proveedor.nombre:''), items:(c.detalle||[]).map(function(d){ return { nombre:(d.producto?(d.producto.nombre||d.producto.codigo_interno):'(s/producto)'), cantidad:Number(d.cantidad)||0, costo_unit:Number(d.costo_unit)||0, costo:Number(d.costo)||0 }; }) }; })};
     }
   };
 
@@ -538,10 +571,30 @@
     guardarProveedor: async function(p){
       var nombre=String(p.nombre||'').trim(); if(!nombre) throw new Error('Falta el nombre');
       var payload={ nombre:nombre, cuit:(p.cuit?String(p.cuit).trim():null), email:(p.email?String(p.email).trim():null), telefono:(p.telefono?String(p.telefono).trim():null), activo:true };
-      if(p.id){ var r=await sb.from('proveedores').update(payload).eq('id',p.id); if(r.error) throw r.error; _provId=null; return {ok:true,id:p.id}; }
-      var ex=await sb.from('proveedores').select('id').eq('nombre',nombre).maybeSingle();
-      if(ex.data){ var u=await sb.from('proveedores').update(payload).eq('id',ex.data.id); if(u.error) throw u.error; _provId=null; return {ok:true,id:ex.data.id}; }
-      var ins=await sb.from('proveedores').insert(payload).select('id').single(); if(ins.error) throw ins.error; _provId=null; return {ok:true,id:ins.data.id};
+      var id=p.id;
+      if(id){ var r=await sb.from('proveedores').update(payload).eq('id',id); if(r.error) throw r.error; }
+      else {
+        var ex=await sb.from('proveedores').select('id').eq('nombre',nombre).maybeSingle();
+        if(ex.data){ var u=await sb.from('proveedores').update(payload).eq('id',ex.data.id); if(u.error) throw u.error; id=ex.data.id; }
+        else { var ins=await sb.from('proveedores').insert(payload).select('id').single(); if(ins.error) throw ins.error; id=ins.data.id; }
+      }
+      _provId=null;
+      // Asignación a locales (al crear o si se pasa explícito)
+      if(p.locales && p.locales.length){
+        var m=await sucIdMap();
+        await sb.from('proveedor_locales').delete().eq('proveedor_id',id);
+        var rows=p.locales.map(function(l){ return { proveedor_id:id, sucursal_id:(typeof l==='number'?l:(m[l]||null)) }; }).filter(function(x){return x.sucursal_id;});
+        if(rows.length){ var ri=await sb.from('proveedor_locales').insert(rows); if(ri.error) throw ri.error; }
+      }
+      return {ok:true,id:id};
+    },
+    setProveedorLocales: async function(p){
+      var id=p.proveedorId||p.id; if(!id) throw new Error('Falta proveedor');
+      var m=await sucIdMap();
+      await sb.from('proveedor_locales').delete().eq('proveedor_id',id);
+      var rows=(p.locales||[]).map(function(l){ return { proveedor_id:id, sucursal_id:(typeof l==='number'?l:(m[l]||null)) }; }).filter(function(x){return x.sucursal_id;});
+      if(rows.length){ var r=await sb.from('proveedor_locales').insert(rows); if(r.error) throw r.error; }
+      return {ok:true};
     },
     eliminarProveedor: async function(p){
       if(!p.id) throw new Error('Falta id'); var r=await sb.from('proveedores').delete().eq('id',p.id);
@@ -772,7 +825,9 @@
     },
     descartarCompra: async function(p){
       var r=await sb.rpc('compra_descartar',{p:{ compra_id:p.id }}); if(r.error) throw r.error; return r.data||{ok:true};
-    }
+    },
+    reabrirCompra: async function(p){ var r=await sb.rpc('compra_reabrir',{p:{ compra_id:p.id }}); if(r.error) throw r.error; return r.data||{ok:true}; },
+    anularCompra: async function(p){ var r=await sb.rpc('compra_anular',{p:{ compra_id:p.id }}); if(r.error) throw r.error; return r.data||{ok:true}; }
   };
 
   // ---------------- DISPATCH ----------------

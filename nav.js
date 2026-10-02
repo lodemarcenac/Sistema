@@ -13,7 +13,7 @@
     ['productos.html','🏷️','Productos','productos'],
     ['clientes.html','👥','Clientes y Listas','clientes'],
     ['stock.html','📦','Stock','stock'],
-    ['compras.html','🧾','Compras','compras'],
+    ['compras.html','🧾','Compras y Gastos','compras'],
     ['remitos.html','🔄','Remitos','remitos'],
     ['cuentas.html','📒','Cuentas','cuentas'],
     ['conciliacion.html','💳','Conciliación Clover','conciliacion'],
