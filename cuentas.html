@@ -113,7 +113,7 @@ async function iniciar(){
   var rs=await window.sf('getSucursales'); var suc=(rs.ok?(rs.sucursales||[]):[]); SUCS=suc.map(function(s){return s.nombre;}); SUCID={}; suc.forEach(function(s){ SUCID[s.id]=s.nombre; });
   var rcfg=await window.sf('getConfigGeneral'); if(rcfg.ok && rcfg.config && rcfg.config.formas_pago){ try{ var a=JSON.parse(rcfg.config.formas_pago); if(a.length) FORMAS=a.map(function(f){return f.nombre||f;}); }catch(e){} }
   poblarSuc();
-  document.getElementById('pv-fp').innerHTML=FORMAS.filter(function(f){ return !/cuenta/i.test(f); }).map(function(f){return '<option>'+f+'</option>';}).join('');
+  document.getElementById('pv-fp').innerHTML=FORMAS.filter(function(f){ return !/cuenta\s*corriente/i.test(f); }).map(function(f){return '<option>'+f+'</option>';}).join('');
   toggleCaja('pv-fp','pv-caja-wrap');
   await cargarCuentasProv();
 }

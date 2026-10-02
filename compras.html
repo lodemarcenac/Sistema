@@ -73,12 +73,12 @@
         <h3>Compras · paso 1: la factura / remito</h3>
         <p class="hint muted">Cargá primero el <b>total</b> de la factura o remito y el pago. En el paso 2 agregás los productos (la suma de productos puede no coincidir con el total, y está bien).</p>
         <div class="abm-nueva">
-          <div><label>Proveedor</label><div style="display:flex;gap:6px;"><select id="c-cuenta" style="flex:1;"></select><button class="btn-sec" type="button" onclick="nuevoProvRapido('c-cuenta')" title="Nuevo proveedor">＋</button></div></div>
+          <div><label>Proveedor</label><div style="display:flex;gap:6px;"><select id="c-cuenta" style="flex:1;"></select><button class="btn" type="button" onclick="nuevoProvRapido()" title="Cargar un proveedor nuevo" style="padding:7px 12px;font-weight:800;font-size:1.05rem;line-height:1;">＋</button></div></div>
           <div><label>Comprobante (opc)</label><input id="c-comp" placeholder="N° factura / remito"></div>
-          <div><label>Total de la factura $</label><input id="c-total-fc" type="number" step="0.01" placeholder="0"></div>
-          <div><label>Pago ahora (opc)</label><input id="c-pago" type="number" step="0.01" placeholder="0 = queda a cuenta"></div>
-          <div><label>Forma de pago</label><select id="c-fp" onchange="toggleCaja('c-fp','c-caja-wrap')"></select></div>
+          <div><label>Total de la factura $</label><input id="c-total-fc" type="number" step="0.01" placeholder="0" oninput="onTotalCompra()"></div>
+          <div><label>Forma de pago</label><select id="c-fp" onchange="onFormaCompra()"></select></div>
           <div id="c-caja-wrap" hidden><label>Caja</label><select id="c-caja"><option>Caja del día</option><option>Caja guardada</option></select></div>
+          <div><label>Pago ahora</label><input id="c-pago" type="number" step="0.01" placeholder="0 = queda a cuenta"></div>
         </div>
         <div style="margin-top:12px;"><button class="btn" onclick="crearCompraUI()">Empezar compra →</button></div>
       </div>
@@ -127,12 +127,12 @@
           <div style="grid-column:1/-1;"><label>Detalle del gasto</label><input id="g-desc" placeholder="Ej: Luz, alquiler, flete…"></div>
           <div><label>Fecha</label><input id="g-fecha" type="date"></div>
           <div><label>Categoría</label><select id="g-cat"></select></div>
-          <div><label>Proveedor (opc)</label><div style="display:flex;gap:6px;"><select id="g-prov" style="flex:1;"></select><button class="btn-sec" type="button" onclick="nuevoProvRapido('g-prov')" title="Nuevo proveedor">＋</button></div></div>
+          <div><label>Proveedor (opc)</label><div style="display:flex;gap:6px;"><select id="g-prov" style="flex:1;"></select><button class="btn" type="button" onclick="nuevoProvRapido()" title="Cargar un proveedor nuevo" style="padding:7px 12px;font-weight:800;font-size:1.05rem;line-height:1;">＋</button></div></div>
           <div><label>Monto $</label><input id="g-monto" type="number" step="0.01" oninput="onMontoGasto()"></div>
-          <div style="grid-column:1/-1;">
-            <label>Imputar a local(es)</label>
-            <div style="margin:4px 0 6px;"><label style="font-weight:600;font-size:var(--fs-sm);display:inline-flex;align-items:center;gap:6px;"><input type="checkbox" id="g-multi" onchange="renderImput()"> Repartir entre varios locales</label></div>
-            <div id="g-imput"></div>
+          <div style="grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:10px;">
+            <label style="font-size:var(--fs-xs);color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin:0;">Imputar a</label>
+            <label style="font-weight:600;font-size:var(--fs-xs);display:inline-flex;align-items:center;gap:5px;margin:0;white-space:nowrap;"><input type="checkbox" id="g-multi" onchange="renderImput()"> Varios locales</label>
+            <div id="g-imput" style="flex:1;min-width:220px;"></div>
           </div>
           <div><label>Forma de pago</label><select id="g-fp" onchange="toggleCaja('g-fp','g-caja-wrap')"></select></div>
           <div id="g-caja-wrap" hidden><label>Caja</label><select id="g-caja"><option>Caja del día</option><option>Caja guardada</option></select></div>
@@ -231,9 +231,9 @@ async function cargarProveedoresLocal(){
   document.getElementById('g-prov').innerHTML='<option value="">(sin proveedor)</option>'+PROVS_LOCAL.map(function(p){ return '<option value="'+p.id+'">'+p.nombre+'</option>'; }).join('');
 }
 function poblarSelects(){
-  var fp=FORMAS.filter(function(f){ return !/cuenta/i.test(f); }).map(function(f){return '<option>'+f+'</option>';}).join('');
+  var fp=FORMAS.map(function(f){ var lbl=/cuenta\s*corriente/i.test(f)?(f+' (deuda proveedor)'):f; return '<option value="'+String(f).replace(/"/g,'&quot;')+'">'+lbl+'</option>'; }).join('');
   document.getElementById('c-fp').innerHTML=fp; document.getElementById('g-fp').innerHTML=fp;
-  toggleCaja('c-fp','c-caja-wrap'); toggleCaja('g-fp','g-caja-wrap');
+  onFormaCompra(); toggleCaja('g-fp','g-caja-wrap');
   renderImput();
   document.getElementById('g-cat').innerHTML='<option value="">(elegir categoría)</option>'+CG.map(function(c){return '<option value="'+c.id+'">'+c.nombre+(c.grupo?(' — '+c.grupo):'')+'</option>';}).join('');
 }
@@ -255,6 +255,15 @@ document.addEventListener('click', function(e){ var p=document.getElementById('a
 
 // ---- NUEVA COMPRA (2 etapas: cabecera -> productos, con borrador que se guarda solo) ----
 var COMPRA_ID=null, COMPRA_TOTAL_FC=0;
+// Forma de pago de la compra: Cuenta corriente => todo a cuenta (pago 0); otra => se paga.
+function onFormaCompra(){
+  toggleCaja('c-fp','c-caja-wrap');
+  var cc=/cuenta\s*corriente/i.test(document.getElementById('c-fp').value);
+  var pago=document.getElementById('c-pago');
+  if(cc){ pago.value='0'; pago.disabled=true; pago.title='A cuenta corriente: queda como deuda del proveedor'; }
+  else { pago.disabled=false; pago.title=''; if(!(Number(pago.value)>0)) pago.value=document.getElementById('c-total-fc').value||''; }
+}
+function onTotalCompra(){ if(!/cuenta\s*corriente/i.test(document.getElementById('c-fp').value)){ document.getElementById('c-pago').value=document.getElementById('c-total-fc').value||''; } }
 
 // Solo quien tenga el permiso "Editar costos" (productos.editar_costo) puede cambiar el costo.
 function puedeCosto(){ return !(window.PERM && window.PERM.cargado) || window.PERM.puede('productos.editar_costo'); }
@@ -418,15 +427,15 @@ function renderImput(){
   var total=Number(document.getElementById('g-monto').value)||0, prevM={}, prevC=null;
   cont.querySelectorAll('.gi-monto').forEach(function(i){ prevM[i.getAttribute('data-loc')]=i.value; });
   if(cont.querySelector('.gi-loc')){ prevC={}; cont.querySelectorAll('.gi-loc').forEach(function(c){ prevC[c.value]=c.checked; }); }
-  cont.innerHTML=SUCS.map(function(s){ var sv=String(s).replace(/"/g,'&quot;');
+  cont.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;">'+SUCS.map(function(s){ var sv=String(s).replace(/"/g,'&quot;');
     var chk = prevC ? !!prevC[s] : true, pct = Number(REP_DEF[s])||0;
     var monto = (prevM[s]!=null && prevM[s]!=='') ? prevM[s] : ((total && pct) ? (Math.round(total*pct/100*100)/100) : '');
-    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'+
-      '<label style="display:inline-flex;align-items:center;gap:6px;min-width:190px;font-size:var(--fs-sm);"><input type="checkbox" class="gi-loc" value="'+sv+'" '+(chk?'checked':'')+' onchange="sumImput()"> '+s+(pct?' <span class="muted">('+pct+'%)</span>':'')+'</label>'+
-      '<input class="gi-monto" data-loc="'+sv+'" type="number" step="0.01" value="'+monto+'" oninput="sumImput()" style="width:120px;padding:4px 6px;border:1px solid var(--border-inp);border-radius:5px;font-family:inherit;text-align:right;">'+
-      '</div>';
-  }).join('')+
-  '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:6px;"><button class="btn-sec" type="button" onclick="aplicarRepartoDefecto()">Aplicar reparto por defecto</button><span id="gi-sum" style="font-weight:600;"></span></div>';
+    return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:var(--fs-xs);white-space:nowrap;">'+
+      '<input type="checkbox" class="gi-loc" value="'+sv+'" '+(chk?'checked':'')+' onchange="sumImput()"> '+s+(pct?' <span class="muted">'+pct+'%</span>':'')+
+      ' <input class="gi-monto" data-loc="'+sv+'" type="number" step="0.01" value="'+monto+'" oninput="sumImput()" style="width:82px;padding:3px 5px;border:1px solid var(--border-inp);border-radius:5px;font-family:inherit;text-align:right;font-size:var(--fs-xs);">'+
+      '</span>';
+  }).join('')+'</div>'+
+  '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;"><button class="btn-sec" type="button" onclick="aplicarRepartoDefecto()" style="font-size:var(--fs-xs);padding:4px 10px;">Aplicar reparto por defecto</button><span id="gi-sum" style="font-weight:600;font-size:var(--fs-xs);"></span></div>';
   sumImput();
 }
 function aplicarRepartoDefecto(){
@@ -475,6 +484,8 @@ async function guardarGastoUI(){
     if(!r.ok){ toast('Error en '+splits[i].local+': '+r.error,'error'); return; }
   }
   if(/guard/i.test(forma)){ await window.sp('movReserva',{ sucursal:sucActual, tipo:'egreso', monto:sum, concepto:'Gasto'+(desc?(': '+desc):'') }); }
+  // Gasto a cuenta corriente del proveedor -> genera deuda con ese proveedor
+  if(/cuenta\s*corriente/i.test(forma) && base.proveedorId){ await window.sp('registrarPagoProveedor',{ proveedorId:Number(base.proveedorId), sucursal:sucActual, tipo:'cargo', monto:sum, formaPago:forma, descripcion:'Gasto a cuenta'+(desc?(': '+desc):'') }); }
   toast('Gasto guardado'+(splits.length>1?(' en '+splits.length+' locales'):'')); cancelarEdicionGasto(); cargarGastos();
 }
 function editarGasto(id){
@@ -523,14 +534,10 @@ function renderProv(){
 }
 // Locales del usuario (para asignar proveedores nuevos). Admin/sin restricción = todos.
 function localesUsuario(){ if(window.PERM && window.PERM.cargado && (window.PERM.locales||[]).length) return window.PERM.locales.slice(); return SUCS.slice(); }
-async function nuevoProvRapido(selId){
-  var nom=(prompt('Nombre del nuevo proveedor:')||'').trim(); if(!nom) return;
-  var r=await window.sp('guardarProveedor',{ nombre:nom, locales:localesUsuario() });
-  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  var rpr=await window.sf('getProveedores'); PROVS=(rpr.ok?rpr.proveedores:[])||[];
-  await cargarProveedoresLocal(); renderProv();
-  var sel=document.getElementById(selId); if(sel && r.id) sel.value=r.id;
-  toast('Proveedor agregado y asignado a tus locales');
+function nuevoProvRapido(){
+  switchTab('prov');
+  var el=document.getElementById('np-nom'); if(el){ el.focus(); el.scrollIntoView({behavior:'smooth',block:'center'}); }
+  toast('Cargá el proveedor acá; queda asignado a tus locales');
 }
 async function editarProv(id,campo,val){
   var p=PROVS.find(function(x){return x.id===id;}); if(!p) return; var pay={id:id, nombre:p.nombre, cuit:p.cuit, telefono:p.telefono, email:p.email}; pay[campo]=val;
