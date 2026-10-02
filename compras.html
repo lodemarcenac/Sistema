@@ -75,11 +75,11 @@
         <div class="abm-nueva">
           <div><label>Proveedor</label><div style="display:flex;gap:6px;"><select id="c-cuenta" style="flex:1;"></select><button class="btn" type="button" onclick="nuevoProvRapido()" title="Cargar un proveedor nuevo" style="padding:7px 12px;font-weight:800;font-size:1.05rem;line-height:1;">＋</button></div></div>
           <div><label>Comprobante (opc)</label><input id="c-comp" placeholder="N° factura / remito"></div>
-          <div><label>Total de la factura $</label><input id="c-total-fc" type="number" step="0.01" placeholder="0" oninput="onTotalCompra()"></div>
+          <div><label>Total de la factura $</label><input id="c-total-fc" type="number" step="0.01" placeholder="0"></div>
           <div><label>Forma de pago</label><select id="c-fp" onchange="onFormaCompra()"></select></div>
           <div id="c-caja-wrap" hidden><label>Caja</label><select id="c-caja"><option>Caja del día</option><option>Caja guardada</option></select></div>
-          <div><label>Pago ahora</label><input id="c-pago" type="number" step="0.01" placeholder="0 = queda a cuenta"></div>
         </div>
+        <p class="hint muted" style="margin:4px 0 0;">Con <b>Cuenta corriente</b> queda como deuda del proveedor; con otra forma se registra como pagada.</p>
         <div style="margin-top:12px;"><button class="btn" onclick="crearCompraUI()">Empezar compra →</button></div>
       </div>
 
@@ -255,15 +255,8 @@ document.addEventListener('click', function(e){ var p=document.getElementById('a
 
 // ---- NUEVA COMPRA (2 etapas: cabecera -> productos, con borrador que se guarda solo) ----
 var COMPRA_ID=null, COMPRA_TOTAL_FC=0;
-// Forma de pago de la compra: Cuenta corriente => todo a cuenta (pago 0); otra => se paga.
-function onFormaCompra(){
-  toggleCaja('c-fp','c-caja-wrap');
-  var cc=/cuenta\s*corriente/i.test(document.getElementById('c-fp').value);
-  var pago=document.getElementById('c-pago');
-  if(cc){ pago.value='0'; pago.disabled=true; pago.title='A cuenta corriente: queda como deuda del proveedor'; }
-  else { pago.disabled=false; pago.title=''; if(!(Number(pago.value)>0)) pago.value=document.getElementById('c-total-fc').value||''; }
-}
-function onTotalCompra(){ if(!/cuenta\s*corriente/i.test(document.getElementById('c-fp').value)){ document.getElementById('c-pago').value=document.getElementById('c-total-fc').value||''; } }
+// Forma de pago de la compra: Cuenta corriente => todo a cuenta; otra => pagada (muestra sub-selector de caja si es efectivo).
+function onFormaCompra(){ toggleCaja('c-fp','c-caja-wrap'); }
 
 // Solo quien tenga el permiso "Editar costos" (productos.editar_costo) puede cambiar el costo.
 function puedeCosto(){ return !(window.PERM && window.PERM.cargado) || window.PERM.puede('productos.editar_costo'); }
@@ -278,7 +271,9 @@ async function crearCompraUI(){
   if(!provId){ toast('Elegí un proveedor','error'); return; }
   var totalFC=Number(document.getElementById('c-total-fc').value)||0;
   if(!(totalFC>0) && !confirm('El total de la factura es 0. ¿Continuar igual?')) return;
-  var r=await window.sp('crearCompra',{compra:{ sucursal:sucActual, proveedor_id:provId, cuenta_id:null, comprobante:document.getElementById('c-comp').value.trim(), total:totalFC, pago_monto:document.getElementById('c-pago').value||0, forma_pago:efectivaForma('c-fp','c-caja') }});
+  var forma=efectivaForma('c-fp','c-caja');
+  var pago=/cuenta\s*corriente/i.test(forma)?0:totalFC;   // cuenta corriente = queda a deber; otra forma = pagada
+  var r=await window.sp('crearCompra',{compra:{ sucursal:sucActual, proveedor_id:provId, cuenta_id:null, comprobante:document.getElementById('c-comp').value.trim(), total:totalFC, pago_monto:pago, forma_pago:forma }});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   var pnom=(PROVS_LOCAL.find(function(p){return String(p.id)===String(provId);})||{}).nombre||'';
   var titulo=pnom+(document.getElementById('c-comp').value?(' · '+document.getElementById('c-comp').value.trim()):'');

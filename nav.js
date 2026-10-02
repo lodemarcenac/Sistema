@@ -14,8 +14,8 @@
     ['clientes.html','👥','Clientes y Listas','clientes'],
     ['stock.html','📦','Stock','stock'],
     ['compras.html','🧾','Compras y Gastos','compras'],
-    ['remitos.html','🔄','Remitos','remitos'],
-    ['cuentas.html','📒','Cuentas','cuentas'],
+    ['remitos.html','🔄','Remitos internos','remitos'],
+    ['cuentas.html','📒','Deudas a Pagar','cuentas'],
     ['conciliacion.html','💳','Conciliación Clover','conciliacion'],
     ['configuracion.html','⚙️','Configuración','configuracion'],
     ['usuarios.html','👤','Usuarios y roles','usuarios']

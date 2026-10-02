@@ -221,8 +221,8 @@
     },
     getRemitoDetalle: async function(params){
       var id=params&&params.id; if(!id) throw new Error('Falta remito');
-      var d=await sb.from('remitos_detalle').select('id,nombre,cantidad_emitida,cantidad_recibida,costo_unit,plus_pct,precio_remito_unit,categoria').eq('remito_id',id); if(d.error) throw d.error;
-      return {ok:true, detalle:(d.data||[]).map(function(x){ return { id:x.id, nombre:x.nombre, cantidad:Number(x.cantidad_emitida)||0, recibida:x.cantidad_recibida, costo:Number(x.costo_unit)||0, plus:Number(x.plus_pct)||0, precio:Number(x.precio_remito_unit)||0, categoria:x.categoria||'' }; })};
+      var d=await sb.from('remitos_detalle').select('id,nombre,cantidad_emitida,cantidad_recibida,costo_unit,plus_pct,precio_remito_unit,categoria,disposicion').eq('remito_id',id).order('id'); if(d.error) throw d.error;
+      return {ok:true, detalle:(d.data||[]).map(function(x){ return { id:x.id, nombre:x.nombre, cantidad:Number(x.cantidad_emitida)||0, recibida:x.cantidad_recibida, costo:Number(x.costo_unit)||0, plus:Number(x.plus_pct)||0, precio:Number(x.precio_remito_unit)||0, categoria:x.categoria||'', disposicion:x.disposicion||'' }; })};
     },
     getCuentasProveedor: async function(){
       var pr=await sb.from('proveedores').select('id,nombre,activo').order('nombre'); if(pr.error) throw pr.error;
@@ -633,6 +633,12 @@
     recibirRemito: async function(p){
       var payload={ remito_id:p.id }; if(p.recepciones) payload.recepciones=p.recepciones;
       var r=await sb.rpc('recibir_remito',{ p:payload }); if(r.error) throw r.error; return r.data||{ok:true};
+    },
+    procesarRemito: async function(p){
+      var payload={ remito_id:p.id, accion:p.accion, detalle_ids:p.detalle_ids||[] };
+      if(p.accion==='redirigir'){ var m=await sucIdMap(); payload.nuevo_destino_id=p.nuevo_destino_id||(p.nuevoDestino?m[p.nuevoDestino]:null); }
+      if(p.motivo) payload.motivo=p.motivo;
+      var r=await sb.rpc('remito_procesar',{ p:payload }); if(r.error) throw r.error; return r.data||{ok:true};
     },
     redirigirRemito: async function(p){
       var m=await sucIdMap(); var nid=p.nuevo_destino_id||(p.nuevoDestino?m[p.nuevoDestino]:null);

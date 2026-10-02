@@ -41,7 +41,7 @@
 <div id="app" hidden>
   <header>
     <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
-      <div class="ttl">🔄 Remitos</div>
+      <div class="ttl">🔄 Remitos internos</div>
       <nav><a href="index.html">📊 Tablero</a><a href="stock.html">📦 Stock</a><a href="remitos.html" class="on">🔄 Remitos</a><a href="cuentas.html">📒 Cuentas</a><a href="caja.html">💵 Caja</a><a href="ventas.html">🛒 Ventas</a></nav>
     </div>
     <div style="display:flex;align-items:center;gap:14px;">
@@ -71,6 +71,10 @@
         </div>
         <div class="tblwrap"><table class="data"><thead><tr><th>Producto</th><th class="num">Cantidad</th><th></th></tr></thead><tbody id="r-tbody"><tr><td colspan="3" class="muted" style="padding:18px;text-align:center;">Escaneá o buscá productos para armar el remito.</td></tr></tbody></table></div>
         <div style="margin-top:14px;"><button class="btn" onclick="emitirUI()">Emitir remito</button></div>
+      </div>
+      <div class="card" style="margin-top:14px;">
+        <h3 style="margin:0 0 6px;">Remitos de hoy</h3>
+        <div id="rem-hoy"><p class="muted">Cargando…</p></div>
       </div>
     </div>
 
@@ -104,11 +108,27 @@
 </div>
 
 <div class="ov" id="ov-rec" hidden style="position:fixed;inset:0;background:rgba(15,25,45,.45);display:flex;align-items:center;justify-content:center;z-index:250;padding:16px;">
-  <div style="background:#fff;border-radius:14px;padding:22px;max-width:560px;width:100%;box-shadow:var(--shadow-pop);">
-    <h3 id="rec-tit" style="font-size:var(--fs-xl);margin-bottom:6px;">Recibir remito</h3>
-    <p class="resumen" style="margin-bottom:10px;">Poné lo que <b>llegó realmente</b> de cada producto. Lo que falte <b>vuelve al stock del origen</b>.</p>
-    <div class="tblwrap"><table class="data"><thead><tr><th>Producto</th><th class="num">Enviado</th><th class="num">Recibido</th></tr></thead><tbody id="rec-tbody"></tbody></table></div>
-    <div style="text-align:right;margin-top:12px;"><button class="btn-sec" onclick="document.getElementById('ov-rec').hidden=true">Cancelar</button> <button class="btn" onclick="confirmarRecepcion()">Confirmar recepción</button></div>
+  <div style="background:#fff;border-radius:14px;padding:22px;max-width:580px;width:100%;box-shadow:var(--shadow-pop);">
+    <h3 id="rec-tit" style="font-size:var(--fs-xl);margin-bottom:6px;">Procesar remito</h3>
+    <p class="resumen" style="margin-bottom:10px;">Tildá las líneas y elegí qué hacer con ellas. Podés hacerlo en varias veces: lo que no resuelvas <b>queda en tránsito</b>.</p>
+    <div class="tblwrap"><table class="data"><thead><tr><th style="width:36px;"><input type="checkbox" id="rec-all" onclick="recToggleAll(this)" checked></th><th>Producto</th><th class="num">Cantidad</th></tr></thead><tbody id="rec-tbody"></tbody></table></div>
+    <div id="rec-redir" hidden style="margin-top:12px;padding:12px;background:var(--bg-soft,#f6f8fb);border-radius:8px;">
+      <label style="font-size:var(--fs-xs);color:var(--muted);font-weight:600;">Redirigir las líneas tildadas a:</label>
+      <div style="display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap;">
+        <select id="rec-dest" style="flex:1;min-width:140px;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></select>
+        <button class="btn" onclick="procesarRec('redirigir')">Confirmar envío</button>
+        <button class="btn-sec" onclick="document.getElementById('rec-redir').hidden=true">Cancelar</button>
+      </div>
+      <p class="resumen" style="margin-top:6px;">Se crea un <b>remito nuevo</b> (del origen al local elegido). Para enviar a varios locales, repetí este paso con cada destino.</p>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:8px;flex-wrap:wrap;">
+      <button class="btn-sec" onclick="document.getElementById('ov-rec').hidden=true">Cerrar</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn" onclick="procesarRec('aceptar')">✓ Aceptar</button>
+        <button class="mini-btn" onclick="abrirRedir()">↪ Redirigir</button>
+        <button class="mini-btn" style="color:var(--bad);border-color:#f0c9c9;" onclick="procesarRec('rechazar')">✕ Rechazar</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -147,11 +167,12 @@ async function iniciar(){
   var rs=await window.sf('getSucursales'); var suc=(rs.ok?(rs.sucursales||[]):[]); SUCS=suc.map(function(s){return s.nombre;}); SUCID={}; suc.forEach(function(s){ SUCID[s.id]=s.nombre; });
   var rb=await window.sf('getBalanzas'); if(rb.ok) BALANZAS=rb.balanzas||{};
   poblarSuc(); aplicarBalanza(); poblarDestino(); renderRem();
+  cargarRemitos();
   document.getElementById('r-scan').focus();
 }
 function aplicarBalanza(){ var b=BALANZAS[sucActual]; if(b){ balCfg={ prefijo:String(b.prefijo||'20'), dato:String(b.dato||'peso'), codlen:parseInt(b.codlen)||5, datolen:parseInt(b.datolen)||5 }; } }
 function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; document.getElementById('e-origen-txt').textContent=sucActual; }
-function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); document.getElementById('e-origen-txt').textContent=sucActual; aplicarBalanza(); poblarDestino(); }
+function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); document.getElementById('e-origen-txt').textContent=sucActual; aplicarBalanza(); poblarDestino(); renderHoy(); }
 function poblarDestino(){ document.getElementById('e-destino').innerHTML=SUCS.filter(function(s){return s!==sucActual;}).map(function(s){return '<option>'+s+'</option>';}).join(''); }
 function switchTab(name){ document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); }); ['emitir','pend','hist'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); }); if(name==='pend'||name==='hist') cargarRemitos(); }
 
@@ -217,31 +238,88 @@ function onScanRem(){
 }
 async function emitirUI(){
   var destino=document.getElementById('e-destino').value; if(!destino){ toast('Elegí el destino','error'); return; }
-  var items=carritoRem.filter(function(it){ return Number(it.cantidad)>0; }).map(function(it){ return {codigo:it.cod, cantidad:it.cantidad}; });
+  var conLineas=carritoRem.filter(function(it){ return Number(it.cantidad)>0; });
+  var items=conLineas.map(function(it){ return {codigo:it.cod, cantidad:it.cantidad}; });
   if(!items.length){ toast('Cargá al menos un producto con cantidad','error'); return; }
   var r=await window.sp('emitirRemito',{remito:{ origen:sucActual, destino:destino, concepto:document.getElementById('e-concepto').value.trim(), items:items }});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   toast('Remito '+ (r.numero||'') +' emitido — total '+fmt$(r.total));
+  // Impresión automática ORIGINAL + COPIA (igual que el sistema anterior)
+  imprimirRemito({ numero:r.numero, origen:sucActual, destino:destino, fecha:new Date().toISOString(),
+    lineas:conLineas.map(function(it){ return {nombre:it.nombre, codigo:it.cod, cantidad:it.cantidad}; }) });
   carritoRem=[]; document.getElementById('e-concepto').value=''; renderRem(); document.getElementById('r-scan').focus();
+  cargarRemitos();
+}
+
+// ---- Impresión de remito (ORIGINAL + COPIA, 80mm) ----
+function unidadDe(cod){ var p=PRODS[cod]; return (p && p.tipo==='unidad')?'u':'kg'; }
+function fmtFechaCorta(iso){ try{ return new Date(iso).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}); }catch(e){ return ''; } }
+function imprimirRemito(d){
+  var num=d.numero?('N° '+d.numero):(d.id||'');
+  var lineas=d.lineas||[];
+  var filas=lineas.map(function(l){ return '<tr><td>'+(l.nombre||l.codigo||'')+'</td><td class="r">'+l.cantidad+' '+unidadDe(l.codigo)+'</td></tr>'; }).join('');
+  var totU=0, totKg=0; lineas.forEach(function(l){ if(unidadDe(l.codigo)==='u') totU+=Number(l.cantidad)||0; else totKg+=Number(l.cantidad)||0; });
+  var totTxt='Ítems: '+lineas.length+(totU?(' · '+(+totU.toFixed(3))+' u'):'')+(totKg?(' · '+(+totKg.toFixed(3))+' kg'):'');
+  function copia(label,big,pb){ return '<div class="rem'+(pb?' pb':'')+'">'+
+    '<div class="tit'+(big?' big':'')+'">'+label+'</div><h2>REMITO DE TRASLADO</h2>'+
+    '<div class="c"><b>'+num+'</b></div><div class="l"></div>'+
+    '<div>Fecha: '+fmtFechaCorta(d.fecha||new Date().toISOString())+'</div>'+
+    '<div>Origen: <b>'+(d.origen||'')+'</b></div><div>Destino: <b>'+(d.destino||'')+'</b></div>'+
+    '<div class="l"></div>'+
+    '<table><thead><tr><th style="text-align:left;">Producto</th><th class="r">Cant.</th></tr></thead><tbody>'+filas+'</tbody></table>'+
+    '<div class="l"></div><div>'+totTxt+'</div>'+
+    '<div class="firma">Firma / aclaración recepción</div></div>'; }
+  var estilos='@page{size:80mm auto;margin:0;} *{box-sizing:border-box;} body{font-family:monospace;font-size:12px;width:72mm;margin:0 auto;padding:6px;color:#000;background:#fff;} h2{font-size:13px;text-align:center;margin:2px 0;} table{width:100%;border-collapse:collapse;} th,td{padding:2px 0;vertical-align:top;} .r{text-align:right;} .c{text-align:center;} .l{border-top:1px dashed #000;margin:6px 0;} .firma{margin-top:30px;border-top:1px solid #000;text-align:center;font-size:11px;padding-top:3px;} .tit{text-align:center;font-weight:bold;} .tit.big{font-size:20px;letter-spacing:3px;margin-bottom:2px;} .rem{padding-bottom:6px;} .pb{page-break-after:always;}';
+  var docHtml='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Remito '+num+'</title><style>'+estilos+'</style></head><body>'+copia('ORIGINAL',true,true)+copia('COPIA',false,false)+'</body></html>';
+  var ifr=document.getElementById('print-frame-rem'); if(ifr) ifr.remove();
+  ifr=document.createElement('iframe'); ifr.id='print-frame-rem'; ifr.style.position='fixed'; ifr.style.right='0'; ifr.style.bottom='0'; ifr.style.width='0'; ifr.style.height='0'; ifr.style.border='0';
+  document.body.appendChild(ifr);
+  var dd=ifr.contentWindow.document; dd.open(); dd.write(docHtml); dd.close();
+  setTimeout(function(){ try{ ifr.contentWindow.focus(); ifr.contentWindow.print(); }catch(e){ console.warn(e); } }, 300);
+}
+async function imprimirRemitoId(id){
+  var rem=REMITOS.find(function(x){return x.id===id;})||{};
+  var r=await window.sf('getRemitoDetalle&id='+id); var det=(r.ok?r.detalle:[])||[];
+  imprimirRemito({ numero:rem.numero, origen:SUCID[rem.origenId], destino:SUCID[rem.destinoId], fecha:rem.emision, lineas:det.map(function(d){ return {nombre:d.nombre, codigo:d.codigo, cantidad:d.cantidad}; }) });
+}
+function pillEstadoRem(est){
+  return est==='recibido'?'<span class="pill-est rec">recibido</span>':est==='rechazado'?'<span class="pill-est rech">rechazado</span>':est==='anulado'?'<span class="pill-est anul">anulado</span>':est==='recibido parcial'?'<span class="pill-est pend">parcial</span>':'<span class="pill-est pend">pendiente</span>';
+}
+function renderHoy(){
+  var cont=document.getElementById('rem-hoy'); if(!cont) return;
+  var hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'});
+  var arr=REMITOS.filter(function(r){ var f=r.emision?new Date(r.emision).toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'}):''; return f===hoy && (SUCID[r.origenId]===sucActual || SUCID[r.destinoId]===sucActual); });
+  if(!arr.length){ cont.innerHTML='<p class="muted">Todavía no hay remitos hoy.</p>'; return; }
+  cont.innerHTML='<div class="tblwrap"><table class="data"><thead><tr><th>Número</th><th>Origen</th><th>Destino</th><th>Estado</th><th class="num">Total</th><th></th></tr></thead><tbody>'+
+    arr.map(function(r){
+      var esOrigen=(SUCID[r.origenId]===sucActual), puedeRecibir=(SUCID[r.destinoId]===sucActual);
+      var pend=(r.estado!=='recibido' && r.estado!=='rechazado' && r.estado!=='anulado' && r.estado!=='recibido parcial');
+      return '<tr><td>'+r.numero+'</td><td>'+(SUCID[r.origenId]||'')+'</td><td>'+(SUCID[r.destinoId]||'')+'</td><td>'+pillEstadoRem(r.estado)+'</td><td class="num">'+fmt$(r.total)+'</td>'+
+        '<td style="white-space:nowrap;"><button class="mini-btn" onclick="verDet('+r.id+',\''+r.numero+'\')">Ver</button>'+
+        '<button class="mini-btn" title="Reimprimir" onclick="imprimirRemitoId('+r.id+')">🖨</button>'+
+        (pend&&puedeRecibir?'<button class="mini-btn" onclick="recibirUI('+r.id+')">Procesar</button>':'')+
+        (pend&&esOrigen?'<button class="mini-btn" onclick="redirigirUI('+r.id+')">Redirigir</button>':'')+
+        (pend&&esOrigen?'<button class="x-btn" title="Anular" onclick="anularUI('+r.id+',\''+r.numero+'\')">✕</button>':'')+
+        '</td></tr>';
+    }).join('')+'</tbody></table></div>';
 }
 
 // listar
-async function cargarRemitos(){ var r=await window.sf('getRemitos'); REMITOS=(r.ok?r.remitos:[])||[]; poblarFiltrosHist(); renderPend(); renderHist(); }
+async function cargarRemitos(){ var r=await window.sf('getRemitos'); REMITOS=(r.ok?r.remitos:[])||[]; poblarFiltrosHist(); renderPend(); renderHist(); renderHoy(); }
 function poblarFiltrosHist(){
   var opts=function(id){ var sel=document.getElementById(id); if(!sel) return; var cur=sel.value; sel.innerHTML='<option value="">'+(id==='h-origen'?'Todos los orígenes':'Todos los destinos')+'</option>'+SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sel.value=cur; };
   opts('h-origen'); opts('h-destino');
 }
 function renderPend(){
-  var arr=REMITOS.filter(function(r){ return r.estado!=='recibido' && r.estado!=='rechazado' && r.estado!=='anulado'; });
+  var arr=REMITOS.filter(function(r){ return r.estado!=='recibido' && r.estado!=='rechazado' && r.estado!=='anulado' && r.estado!=='recibido parcial'; });
   document.getElementById('pend-tbody').innerHTML=arr.map(function(r){
     var f=r.emision?new Date(r.emision).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
     var puedeRecibir=(SUCID[r.destinoId]===sucActual);
     var esOrigen=(SUCID[r.origenId]===sucActual);
     return '<tr><td>'+r.numero+'</td><td>'+(SUCID[r.origenId]||'')+'</td><td>'+(SUCID[r.destinoId]||'')+'</td><td>'+f+'</td><td class="num">'+fmt$(r.total)+'</td>'+
       '<td style="white-space:nowrap;"><button class="mini-btn" onclick="verDet('+r.id+',\''+r.numero+'\')">Ver</button>'+
-      (puedeRecibir?'<button class="btn" style="padding:4px 10px;font-size:.75rem;" onclick="recibirUI('+r.id+')">Recibir</button>':'')+
-      (puedeRecibir?'<button class="mini-btn" style="color:var(--bad);border-color:#f0c9c9;" onclick="rechazarUI('+r.id+',\''+r.numero+'\')">Rechazar</button>':'')+
-      ((esOrigen||puedeRecibir)?'<button class="mini-btn" onclick="redirigirUI('+r.id+')">Redirigir</button>':'')+
+      (puedeRecibir?'<button class="btn" style="padding:4px 10px;font-size:.75rem;" onclick="recibirUI('+r.id+')">Procesar</button>':'')+
+      (esOrigen?'<button class="mini-btn" onclick="redirigirUI('+r.id+')">Redirigir</button>':'')+
       (esOrigen?'<button class="mini-btn" style="color:var(--bad);border-color:#f0c9c9;" onclick="anularUI('+r.id+',\''+r.numero+'\')">Anular</button>':'')+
       (!puedeRecibir&&!esOrigen?'<span class="muted" style="font-size:.72rem;"> (recibe '+(SUCID[r.destinoId]||'')+')</span>':'')+'</td></tr>';
   }).join('') || '<tr><td colspan="6" class="muted">No hay remitos pendientes.</td></tr>';
@@ -276,22 +354,44 @@ async function verDet(id,num){
 var recRemitoId=null, recDetalle=[];
 async function recibirUI(id){
   recRemitoId=id; var r=await window.sf('getRemitoDetalle&id='+id); if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  recDetalle=r.detalle||[];
-  document.getElementById('rec-tbody').innerHTML=recDetalle.map(function(d,i){ return '<tr><td>'+d.nombre+'</td><td class="num">'+d.cantidad+'</td><td class="num"><input class="rec-in" data-i="'+i+'" type="number" step="0.001" value="'+d.cantidad+'" style="width:90px;padding:4px 6px;text-align:right;border:1px solid var(--border-inp);border-radius:5px;font-family:inherit;"></td></tr>'; }).join('');
+  // solo líneas sin resolver (pendientes)
+  recDetalle=(r.detalle||[]).filter(function(d){ return !d.disposicion; });
+  var rem=REMITOS.find(function(x){return x.id===id;});
+  document.getElementById('rec-tit').textContent='Procesar remito'+(rem?' '+rem.numero:'');
+  document.getElementById('rec-redir').hidden=true;
+  var allCb=document.getElementById('rec-all'); if(allCb) allCb.checked=true;
+  document.getElementById('rec-tbody').innerHTML=recDetalle.map(function(d){
+    return '<tr><td><input type="checkbox" class="rec-chk" data-id="'+d.id+'" checked></td><td>'+d.nombre+'</td><td class="num">'+d.cantidad+'</td></tr>';
+  }).join('') || '<tr><td colspan="3" class="muted">No quedan líneas por resolver.</td></tr>';
   document.getElementById('ov-rec').hidden=false;
 }
-async function confirmarRecepcion(){
-  var recep=[]; document.querySelectorAll('#rec-tbody .rec-in').forEach(function(inp){ var i=Number(inp.getAttribute('data-i')); var d=recDetalle[i]; if(d && d.id!=null) recep.push({detalle_id:d.id, cantidad_recibida:(inp.value===''?0:Number(inp.value))}); });
-  var r=await window.sp('recibirRemito',{id:recRemitoId, recepciones:recep});
+function recToggleAll(cb){ document.querySelectorAll('#rec-tbody .rec-chk').forEach(function(x){ x.checked=cb.checked; }); }
+function recSelIds(){ var ids=[]; document.querySelectorAll('#rec-tbody .rec-chk:checked').forEach(function(x){ ids.push(Number(x.getAttribute('data-id'))); }); return ids; }
+function abrirRedir(){
+  if(!recSelIds().length){ toast('Tildá al menos una línea','error'); return; }
+  var rem=REMITOS.find(function(x){return x.id===recRemitoId;});
+  var origen=rem?SUCID[rem.origenId]:'', destinoActual=rem?SUCID[rem.destinoId]:'';
+  document.getElementById('rec-dest').innerHTML=SUCS.filter(function(s){return s!==origen && s!==destinoActual;}).map(function(s){return '<option>'+s+'</option>';}).join('');
+  document.getElementById('rec-redir').hidden=false;
+}
+async function procesarRec(accion){
+  var ids=recSelIds(); if(!ids.length){ toast('Tildá al menos una línea','error'); return; }
+  var payload={ id:recRemitoId, accion:accion, detalle_ids:ids };
+  if(accion==='redirigir'){ var dest=document.getElementById('rec-dest').value; if(!dest){ toast('Elegí un destino','error'); return; } payload.nuevoDestino=dest; }
+  var r=await window.sp('procesarRemito', payload);
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  document.getElementById('ov-rec').hidden=true;
-  toast(r.parcial?'Recibido parcial — el faltante volvió al origen':'Remito recibido'); cargarRemitos();
+  var msg=accion==='aceptar'?'Líneas aceptadas — entraron al stock':accion==='rechazar'?'Líneas rechazadas — volvieron al origen':('Redirigido a '+payload.nuevoDestino+(r.numero_nuevo?' (remito '+r.numero_nuevo+')':''));
+  toast(msg);
+  await cargarRemitos();
+  if(r.pendientes>0){ recibirUI(recRemitoId); } else { document.getElementById('ov-rec').hidden=true; }
 }
 async function rechazarUI(id, num){
-  if(!confirm('¿Rechazar el remito '+num+'? Toda la mercadería vuelve al local de origen y no se genera deuda.')) return;
-  var motivo=prompt('Motivo del rechazo (opcional):','')||'';
-  var r=await window.sp('rechazarRemito',{ id:id, motivo:motivo.trim() });
-  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  if(!confirm('¿Rechazar TODO el remito '+num+'? Toda la mercadería vuelve al local de origen y no se genera deuda.')) return;
+  var r=await window.sf('getRemitoDetalle&id='+id); if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  var ids=(r.detalle||[]).filter(function(d){return !d.disposicion;}).map(function(d){return d.id;});
+  if(!ids.length){ toast('No quedan líneas por rechazar','error'); return; }
+  var rr=await window.sp('procesarRemito',{ id:id, accion:'rechazar', detalle_ids:ids });
+  if(!rr.ok){ toast('Error: '+rr.error,'error'); return; }
   toast('Remito rechazado — la mercadería volvió al origen'); cargarRemitos();
 }
 async function anularUI(id, num){

@@ -38,7 +38,7 @@
 <div id="app" hidden>
   <header>
     <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
-      <div class="ttl">📒 Cuentas</div>
+      <div class="ttl">📒 Deudas a Pagar</div>
       <nav><a href="index.html">📊 Tablero</a><a href="clientes.html">👥 Clientes</a><a href="compras.html">🧾 Compras</a><a href="remitos.html">🔄 Remitos</a><a href="cuentas.html" class="on">📒 Cuentas</a><a href="caja.html">💵 Caja</a><a href="ventas.html">🛒 Ventas</a></nav>
     </div>
     <div style="display:flex;align-items:center;gap:14px;">
@@ -58,7 +58,8 @@
           <h3 style="margin:0;">Deuda con proveedores</h3>
           <span class="muted" id="pv-total"></span>
         </div>
-        <p class="resumen" style="margin:8px 0 12px;">Este local ve las cuentas de proveedor donde participa. El saldo = compras a cuenta corriente (cargos) menos pagos.</p>
+        <p class="resumen" style="margin:8px 0 10px;">Proveedores de este local, ordenados de mayor a menor deuda. El saldo = compras/gastos a cuenta corriente (cargos) menos pagos.</p>
+        <input id="pv-buscar" placeholder="Buscar proveedor por nombre…" oninput="pintarDeudas()" style="width:100%;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;margin-bottom:10px;">
         <div id="pv-lista"><p class="muted">Cargando…</p></div>
       </div>
       <div class="card" id="pv-pago-card" hidden style="margin-bottom:14px;">
@@ -144,13 +145,18 @@ function pintarSaldo(el, s, etiquetaDebe, etiquetaFavor){ if(s>0.5){ el.classNam
 // ---- PROVEEDORES (listado consolidado de deudas) ----
 var DEUDAS=[], pvProvSel=null;
 async function renderDeudas(){
-  var cont=document.getElementById('pv-lista'), tot=document.getElementById('pv-total');
   var r=await window.sf('getDeudasLocal&sucursal='+encodeURIComponent(sucActual)); DEUDAS=(r.ok?r.deudas:[])||[];
-  if(!DEUDAS.length){ cont.innerHTML='<p class="muted">Este local no tiene proveedores. Asignalos en Configuración → Proveedores.</p>'; tot.textContent=''; return; }
   DEUDAS.sort(function(a,b){ return b.saldo-a.saldo; });
+  pintarDeudas();
+}
+function pintarDeudas(){
+  var cont=document.getElementById('pv-lista'), tot=document.getElementById('pv-total');
+  var q=(document.getElementById('pv-buscar').value||'').trim().toLowerCase();
   var totalDeuda=DEUDAS.reduce(function(s,d){ return s+(d.saldo>0?d.saldo:0); },0);
   tot.innerHTML='Deuda total: <b style="color:var(--bad);">'+fmt$(totalDeuda)+'</b>';
-  cont.innerHTML=DEUDAS.map(function(d){
+  var arr=DEUDAS.filter(function(d){ return !q || (d.proveedor||'').toLowerCase().indexOf(q)>=0; });
+  if(!arr.length){ cont.innerHTML='<p class="muted">'+(DEUDAS.length?'Sin resultados para la búsqueda.':'Este local no tiene proveedores. Asignalos en Configuración → Proveedores.')+'</p>'; return; }
+  cont.innerHTML=arr.map(function(d){
     var etq=d.saldo>0.5?('<span style="color:var(--bad);font-weight:700;">Debe '+fmt$(d.saldo)+'</span>'):(d.saldo<-0.5?('<span style="color:var(--good);font-weight:700;">A favor '+fmt$(-d.saldo)+'</span>'):'<span class="muted">al día</span>');
     return '<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">'+
