@@ -69,7 +69,11 @@
           <button class="btn" onclick="onScanRem()">Agregar</button>
           <div id="r-sug" class="ac-pop" hidden></div>
         </div>
-        <div class="tblwrap"><table class="data"><thead><tr><th>Producto</th><th class="num">Cantidad</th><th></th></tr></thead><tbody id="r-tbody"><tr><td colspan="3" class="muted" style="padding:18px;text-align:center;">Escaneá o buscá productos para armar el remito.</td></tr></tbody></table></div>
+        <div class="tblwrap"><table class="data"><thead><tr><th>Producto</th><th class="num">Costo</th><th class="num">Cantidad</th><th class="num">Total (c/plus)</th><th></th></tr></thead><tbody id="r-tbody"><tr><td colspan="5" class="muted" style="padding:18px;text-align:center;">Escaneá o buscá productos para armar el remito.</td></tr></tbody></table></div>
+        <div style="display:flex;justify-content:flex-end;align-items:baseline;gap:10px;margin-top:10px;">
+          <span class="muted" style="font-weight:600;">Total del remito (costo + plus):</span>
+          <span id="r-total" style="font-size:var(--fs-xl);font-weight:700;color:var(--brand);">$0</span>
+        </div>
         <div style="margin-top:14px;"><button class="btn" onclick="emitirUI()">Emitir remito</button></div>
       </div>
       <div class="card" style="margin-top:14px;">
@@ -102,7 +106,7 @@
 <div class="ov" id="ov-det" hidden style="position:fixed;inset:0;background:rgba(15,25,45,.45);display:flex;align-items:center;justify-content:center;z-index:250;padding:16px;">
   <div style="background:#fff;border-radius:14px;padding:22px;max-width:560px;width:100%;box-shadow:var(--shadow-pop);">
     <h3 id="det-tit" style="font-size:var(--fs-xl);margin-bottom:10px;">Remito</h3>
-    <div class="tblwrap"><table class="data"><thead><tr><th>Producto</th><th class="num">Cant.</th><th class="num">Costo</th><th class="num">Plus%</th><th class="num">Precio</th></tr></thead><tbody id="det-tbody"></tbody></table></div>
+    <div class="tblwrap"><table class="data"><thead><tr><th>Producto</th><th class="num">Cant.</th><th class="num">Costo</th><th class="num">Plus%</th><th class="num">Total (c/plus)</th></tr></thead><tbody id="det-tbody"></tbody></table></div>
     <div style="text-align:right;margin-top:12px;"><button class="btn-sec" onclick="document.getElementById('ov-det').hidden=true">Cerrar</button></div>
   </div>
 </div>
@@ -148,7 +152,7 @@
 <script src="nav.js"></script>
 <script>
 var sb=window.sbClient;
-var PRODS={}, SUCS=[], SUCID={}, sucActual='', REMITOS=[], BALANZAS={}, carritoRem=[];
+var PRODS={}, SUCS=[], SUCID={}, sucActual='', REMITOS=[], BALANZAS={}, carritoRem=[], PLUS={};
 var balCfg={ prefijo:'20', dato:'peso', codlen:5, datolen:5 };
 function fmt$(n){ return '$'+Math.round(Number(n)||0).toLocaleString('es-AR'); }
 function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
@@ -164,6 +168,7 @@ document.getElementById('btn-salir').addEventListener('click', async function(){
 async function iniciar(){
   document.getElementById('login').hidden=true; document.getElementById('app').hidden=false;
   var rp=await window.sf('getProductos'); PRODS=(rp.ok?rp.productos:{})||{};
+  var rc=await window.sf('getCategoriasFull'); PLUS={}; if(rc.ok){ (rc.categorias||[]).forEach(function(c){ PLUS[c.nombre]=Number(c.plusRemito)||0; }); }
   var rs=await window.sf('getSucursales'); var suc=(rs.ok?(rs.sucursales||[]):[]); SUCS=suc.map(function(s){return s.nombre;}); SUCID={}; suc.forEach(function(s){ SUCID[s.id]=s.nombre; });
   var rb=await window.sf('getBalanzas'); if(rb.ok) BALANZAS=rb.balanzas||{};
   poblarSuc(); aplicarBalanza(); poblarDestino(); renderRem();
@@ -203,16 +208,34 @@ function agregarRem(cod, cant){
   else { carritoRem.push({cod:cod, nombre:p.nombre||cod, cantidad:+cant.toFixed(3)}); }
   renderRem();
 }
+function costoDe(cod){ var p=PRODS[cod]; return p?(Number(p.costo)||0):0; }
+function plusDe(cod){ var p=PRODS[cod]; return p?(Number(PLUS[p.categoria])||0):0; }
+function precioRemDe(cod){ return Math.round(costoDe(cod)*(1+plusDe(cod)/100)*100)/100; }
+function totalRem(){ return carritoRem.reduce(function(s,it){ return s+(Number(it.cantidad)||0)*precioRemDe(it.cod); },0); }
+function actualizarTotalRem(){ var el=document.getElementById('r-total'); if(el) el.textContent=fmt$(totalRem()); }
 function renderRem(){
   var tb=document.getElementById('r-tbody');
-  if(!carritoRem.length){ tb.innerHTML='<tr><td colspan="3" class="muted" style="padding:18px;text-align:center;">Escaneá o buscá productos para armar el remito.</td></tr>'; return; }
+  if(!carritoRem.length){ tb.innerHTML='<tr><td colspan="5" class="muted" style="padding:18px;text-align:center;">Escaneá o buscá productos para armar el remito.</td></tr>'; actualizarTotalRem(); return; }
   tb.innerHTML=carritoRem.map(function(it,i){
+    var es_u=(unidadDe(it.cod)==='u');
+    var tot=(Number(it.cantidad)||0)*precioRemDe(it.cod);
     return '<tr><td>'+it.nombre+' <span style="color:#8891a3">('+it.cod+')</span></td>'+
-      '<td class="num"><input type="number" step="0.001" value="'+it.cantidad+'" onchange="editarCantRem('+i+',this.value)" style="width:90px;padding:4px 6px;text-align:right;border:1px solid var(--border-inp);border-radius:5px;font-family:inherit;"></td>'+
+      '<td class="num">'+fmt$(costoDe(it.cod))+'</td>'+
+      '<td class="num"><span style="display:inline-flex;align-items:center;gap:5px;justify-content:flex-end;">'+
+        '<input type="number" step="'+(es_u?'1':'0.001')+'" min="0" value="'+(Number(it.cantidad)>0?it.cantidad:'')+'" placeholder="0" oninput="editarCantRem('+i+',this.value)" style="width:78px;padding:4px 6px;text-align:right;border:1px solid var(--border-inp);border-radius:5px;font-family:inherit;">'+
+        '<span class="muted" style="font-size:.78rem;min-width:22px;text-align:left;">'+(es_u?'u':'kg')+'</span></span></td>'+
+      '<td class="num" id="rem-tot-'+i+'">'+fmt$(tot)+'</td>'+
       '<td><button class="x-btn" title="Quitar" onclick="quitarRem('+i+')">✕</button></td></tr>';
   }).join('');
+  actualizarTotalRem();
 }
-function editarCantRem(i,val){ if(carritoRem[i]) carritoRem[i].cantidad=(val===''?0:Number(val)); }
+function editarCantRem(i,val){
+  if(!carritoRem[i]) return;
+  carritoRem[i].cantidad=(val===''?0:Number(val));
+  var cell=document.getElementById('rem-tot-'+i);
+  if(cell) cell.textContent=fmt$((Number(carritoRem[i].cantidad)||0)*precioRemDe(carritoRem[i].cod));
+  actualizarTotalRem();
+}
 function quitarRem(i){ carritoRem.splice(i,1); renderRem(); }
 function ocultarSugRem(){ var b=document.getElementById('r-sug'); b.hidden=true; b.innerHTML=''; }
 function limpiarScanRem(){ var s=document.getElementById('r-scan'); s.value=''; ocultarSugRem(); s.focus(); }
@@ -348,7 +371,10 @@ function renderHist(){
 async function verDet(id,num){
   var r=await window.sf('getRemitoDetalle&id='+id); if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   document.getElementById('det-tit').textContent='Remito '+num;
-  document.getElementById('det-tbody').innerHTML=(r.detalle||[]).map(function(d){ return '<tr><td>'+d.nombre+'</td><td class="num">'+d.cantidad+'</td><td class="num">'+fmt$(d.costo)+'</td><td class="num">'+d.plus+'%</td><td class="num">'+fmt$(d.precio)+'</td></tr>'; }).join('') || '<tr><td colspan="5" class="muted">Sin líneas.</td></tr>';
+  var det=r.detalle||[];
+  var filas=det.map(function(d){ var tot=(Number(d.cantidad)||0)*(Number(d.precio)||0); return '<tr><td>'+d.nombre+'</td><td class="num">'+d.cantidad+'</td><td class="num">'+fmt$(d.costo)+'</td><td class="num">'+d.plus+'%</td><td class="num">'+fmt$(tot)+'</td></tr>'; }).join('');
+  if(det.length){ var tg=det.reduce(function(s,d){ return s+(Number(d.cantidad)||0)*(Number(d.precio)||0); },0); filas+='<tr><td colspan="4" class="num" style="font-weight:700;">Total</td><td class="num" style="font-weight:700;color:var(--brand);">'+fmt$(tg)+'</td></tr>'; }
+  document.getElementById('det-tbody').innerHTML=filas || '<tr><td colspan="5" class="muted">Sin líneas.</td></tr>';
   document.getElementById('ov-det').hidden=false;
 }
 var recRemitoId=null, recDetalle=[];
