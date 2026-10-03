@@ -115,7 +115,7 @@
   <div style="background:#fff;border-radius:14px;padding:22px;max-width:580px;width:100%;box-shadow:var(--shadow-pop);">
     <h3 id="rec-tit" style="font-size:var(--fs-xl);margin-bottom:6px;">Procesar remito</h3>
     <p class="resumen" style="margin-bottom:10px;">Tildá las líneas y elegí qué hacer con ellas. Podés hacerlo en varias veces: lo que no resuelvas <b>queda en tránsito</b>.</p>
-    <div class="tblwrap"><table class="data"><thead><tr><th style="width:36px;"><input type="checkbox" id="rec-all" onclick="recToggleAll(this)" checked></th><th>Producto</th><th class="num">Cantidad</th></tr></thead><tbody id="rec-tbody"></tbody></table></div>
+    <div class="tblwrap"><table class="data"><thead><tr><th style="width:36px;"><input type="checkbox" id="rec-all" onclick="recToggleAll(this)" checked></th><th>Producto</th><th class="num">Cantidad</th><th class="num">Costo</th><th class="num">Total (c/plus)</th></tr></thead><tbody id="rec-tbody"></tbody></table></div>
     <div id="rec-redir" hidden style="margin-top:12px;padding:12px;background:var(--bg-soft,#f6f8fb);border-radius:8px;">
       <label style="font-size:var(--fs-xs);color:var(--muted);font-weight:600;">Redirigir las líneas tildadas a:</label>
       <div style="display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap;">
@@ -177,7 +177,7 @@ async function iniciar(){
 }
 function aplicarBalanza(){ var b=BALANZAS[sucActual]; if(b){ balCfg={ prefijo:String(b.prefijo||'20'), dato:String(b.dato||'peso'), codlen:parseInt(b.codlen)||5, datolen:parseInt(b.datolen)||5 }; } }
 function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; document.getElementById('e-origen-txt').textContent=sucActual; }
-function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); document.getElementById('e-origen-txt').textContent=sucActual; aplicarBalanza(); poblarDestino(); renderHoy(); }
+function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); document.getElementById('e-origen-txt').textContent=sucActual; aplicarBalanza(); poblarDestino(); cargarRemitos(); }
 function poblarDestino(){ document.getElementById('e-destino').innerHTML=SUCS.filter(function(s){return s!==sucActual;}).map(function(s){return '<option>'+s+'</option>';}).join(''); }
 function switchTab(name){ document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); }); ['emitir','pend','hist'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); }); if(name==='pend'||name==='hist') cargarRemitos(); }
 
@@ -276,6 +276,7 @@ async function emitirUI(){
 
 // ---- Impresión de remito (ORIGINAL + COPIA, 80mm) ----
 function unidadDe(cod){ var p=PRODS[cod]; return (p && p.tipo==='unidad')?'u':'kg'; }
+function unidadRem(d){ return (d && d.tipo==='unidad')?'u':'kg'; }   // unidad de una línea de detalle de remito
 function fmtFechaCorta(iso){ try{ return new Date(iso).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}); }catch(e){ return ''; } }
 function imprimirRemito(d){
   var num=d.numero?('N° '+d.numero):(d.id||'');
@@ -328,7 +329,21 @@ function renderHoy(){
 }
 
 // listar
-async function cargarRemitos(){ var r=await window.sf('getRemitos'); REMITOS=(r.ok?r.remitos:[])||[]; poblarFiltrosHist(); renderPend(); renderHist(); renderHoy(); }
+function esAdminRem(){ return !!(window.PERM && window.PERM.esAdmin); }
+function remScopeQS(){
+  // Admin general: ve todos. Usuario con locales asignados: ve los de TODOS sus locales.
+  // Sin locales asignados: solo el local seleccionado.
+  if(esAdminRem()) return '';
+  var locs=(window.PERM&&window.PERM.locales)||[];
+  if(locs.length) return '&sucursales='+encodeURIComponent(locs.join(','));
+  return '&sucursal='+encodeURIComponent(sucActual);
+}
+async function cargarRemitos(){
+  var r=await window.sf('getRemitos'+remScopeQS());
+  REMITOS=(r.ok?r.remitos:[])||[]; poblarFiltrosHist(); renderPend(); renderHist(); renderHoy();
+}
+// Si los permisos llegan después del primer render, recargar con el alcance correcto.
+document.addEventListener('perm-listo', function(){ cargarRemitos(); });
 function poblarFiltrosHist(){
   var opts=function(id){ var sel=document.getElementById(id); if(!sel) return; var cur=sel.value; sel.innerHTML='<option value="">'+(id==='h-origen'?'Todos los orígenes':'Todos los destinos')+'</option>'+SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sel.value=cur; };
   opts('h-origen'); opts('h-destino');
@@ -372,7 +387,7 @@ async function verDet(id,num){
   var r=await window.sf('getRemitoDetalle&id='+id); if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   document.getElementById('det-tit').textContent='Remito '+num;
   var det=r.detalle||[];
-  var filas=det.map(function(d){ var tot=(Number(d.cantidad)||0)*(Number(d.precio)||0); return '<tr><td>'+d.nombre+'</td><td class="num">'+d.cantidad+'</td><td class="num">'+fmt$(d.costo)+'</td><td class="num">'+d.plus+'%</td><td class="num">'+fmt$(tot)+'</td></tr>'; }).join('');
+  var filas=det.map(function(d){ var tot=(Number(d.cantidad)||0)*(Number(d.precio)||0); return '<tr><td>'+d.nombre+'</td><td class="num">'+d.cantidad+' '+unidadRem(d)+'</td><td class="num">'+fmt$(d.costo)+'</td><td class="num">'+d.plus+'%</td><td class="num">'+fmt$(tot)+'</td></tr>'; }).join('');
   if(det.length){ var tg=det.reduce(function(s,d){ return s+(Number(d.cantidad)||0)*(Number(d.precio)||0); },0); filas+='<tr><td colspan="4" class="num" style="font-weight:700;">Total</td><td class="num" style="font-weight:700;color:var(--brand);">'+fmt$(tg)+'</td></tr>'; }
   document.getElementById('det-tbody').innerHTML=filas || '<tr><td colspan="5" class="muted">Sin líneas.</td></tr>';
   document.getElementById('ov-det').hidden=false;
@@ -386,9 +401,12 @@ async function recibirUI(id){
   document.getElementById('rec-tit').textContent='Procesar remito'+(rem?' '+rem.numero:'');
   document.getElementById('rec-redir').hidden=true;
   var allCb=document.getElementById('rec-all'); if(allCb) allCb.checked=true;
-  document.getElementById('rec-tbody').innerHTML=recDetalle.map(function(d){
-    return '<tr><td><input type="checkbox" class="rec-chk" data-id="'+d.id+'" checked></td><td>'+d.nombre+'</td><td class="num">'+d.cantidad+'</td></tr>';
-  }).join('') || '<tr><td colspan="3" class="muted">No quedan líneas por resolver.</td></tr>';
+  var filas=recDetalle.map(function(d){
+    var tot=(Number(d.cantidad)||0)*(Number(d.precio)||0);
+    return '<tr><td><input type="checkbox" class="rec-chk" data-id="'+d.id+'" checked></td><td>'+d.nombre+'</td><td class="num">'+d.cantidad+' '+unidadRem(d)+'</td><td class="num">'+fmt$(d.costo)+'</td><td class="num">'+fmt$(tot)+'</td></tr>';
+  }).join('');
+  if(recDetalle.length){ var tg=recDetalle.reduce(function(s,d){ return s+(Number(d.cantidad)||0)*(Number(d.precio)||0); },0); filas+='<tr><td colspan="4" class="num" style="font-weight:700;">Total</td><td class="num" style="font-weight:700;color:var(--brand);">'+fmt$(tg)+'</td></tr>'; }
+  document.getElementById('rec-tbody').innerHTML=filas || '<tr><td colspan="5" class="muted">No quedan líneas por resolver.</td></tr>';
   document.getElementById('ov-rec').hidden=false;
 }
 function recToggleAll(cb){ document.querySelectorAll('#rec-tbody .rec-chk').forEach(function(x){ x.checked=cb.checked; }); }

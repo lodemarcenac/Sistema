@@ -287,7 +287,14 @@ async function verificarCaja(){
     ban.innerHTML='<span>⚠️ Hay una caja abierta del <b>'+abrDia+'</b> (cajero '+(caja.cajero||'—')+'). Cerrala para poder cobrar hoy.</span><a class="btn" href="caja.html" style="text-decoration:none;">Ir a Caja</a>';
     ban.hidden=false; return;
   }
-  cajaOK=true; ban.hidden=true;
+  cajaOK=true;
+  // Caja compartida entre PCs del local: si la abrió otra persona, avisamos (no bloquea).
+  var yo=(window.PERM&&(window.PERM.nombre||window.PERM.email))||'';
+  if(caja.cajero && yo && caja.cajero!==yo){
+    ban.style.background='#e8f1fb'; ban.style.borderColor='#bcd4f0'; ban.style.color='#1b4f8a';
+    ban.innerHTML='<span>💵 Caja del local abierta por <b>'+caja.cajero+'</b>. Vendés sobre esa misma caja.</span>';
+    ban.hidden=false;
+  } else { ban.hidden=true; }
 }
 async function abrirCajaVentas(){
   var cajero=(window.PERM&&(window.PERM.nombre||window.PERM.email))||'';
@@ -295,8 +302,11 @@ async function abrirCajaVentas(){
   if(monto===null) return;
   var r=await window.sp('abrirCaja',{ sucursal:sucActual, cajero:cajero, apertura:monto });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  toast('Caja abierta'); await verificarCaja(); document.getElementById('scan').focus();
+  toast(r.yaAbierta?('Ya había una caja abierta ('+(r.cajero||'otra PC')+') — te sumaste a esa'):'Caja abierta');
+  await verificarCaja(); document.getElementById('scan').focus();
 }
+// La caja es compartida por el local: re-chequeo periódico para enterarse si la otra PC la abrió/cerró.
+setInterval(function(){ if(document.getElementById('app') && !document.getElementById('app').hidden) verificarCaja(); }, 60000);
 
 function poblarSuc(){
   var sel=document.getElementById('selSuc');

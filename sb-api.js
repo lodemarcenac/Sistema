@@ -214,15 +214,25 @@
       var byProv={}; (pl.data||[]).forEach(function(x){ (byProv[x.proveedor_id]=byProv[x.proveedor_id]||[]).push(idToName[x.sucursal_id]||String(x.sucursal_id)); });
       return {ok:true, proveedores:(pr.data||[]).filter(function(p){return p.activo!==false;}).map(function(p){ return { id:p.id, nombre:p.nombre, locales:byProv[p.id]||[] }; })};
     },
-    getRemitos: async function(){
-      var r=await sb.from('remitos_internos').select('id,numero,origen_id,destino_id,estado,concepto,total_costo,fecha_emision,fecha_recepcion').order('fecha_emision',{ascending:false}).limit(300);
+    getRemitos: async function(params){
+      var q=sb.from('remitos_internos').select('id,numero,origen_id,destino_id,estado,concepto,total_costo,fecha_emision,fecha_recepcion').order('fecha_emision',{ascending:false}).limit(300);
+      var names=null;
+      if(params){
+        if(params.sucursales) names=String(params.sucursales).split(',').map(function(s){return s.trim();}).filter(Boolean);
+        else if(params.sucursal) names=[params.sucursal];
+      }
+      if(names && names.length){
+        var m=await sucIdMap(); var ids=names.map(function(n){return m[n];}).filter(function(x){return x!=null;});
+        if(ids.length){ var list='('+ids.join(',')+')'; q=q.or('origen_id.in.'+list+',destino_id.in.'+list); }
+      }
+      var r=await q;
       if(r.error) throw r.error;
       return {ok:true, remitos:(r.data||[]).map(function(x){ return { id:x.id, numero:x.numero, origenId:x.origen_id, destinoId:x.destino_id, estado:x.estado, concepto:x.concepto||'', total:Number(x.total_costo)||0, emision:x.fecha_emision, recepcion:x.fecha_recepcion }; })};
     },
     getRemitoDetalle: async function(params){
       var id=params&&params.id; if(!id) throw new Error('Falta remito');
-      var d=await sb.from('remitos_detalle').select('id,nombre,cantidad_emitida,cantidad_recibida,costo_unit,plus_pct,precio_remito_unit,categoria,disposicion').eq('remito_id',id).order('id'); if(d.error) throw d.error;
-      return {ok:true, detalle:(d.data||[]).map(function(x){ return { id:x.id, nombre:x.nombre, cantidad:Number(x.cantidad_emitida)||0, recibida:x.cantidad_recibida, costo:Number(x.costo_unit)||0, plus:Number(x.plus_pct)||0, precio:Number(x.precio_remito_unit)||0, categoria:x.categoria||'', disposicion:x.disposicion||'' }; })};
+      var d=await sb.from('remitos_detalle').select('id,nombre,cantidad_emitida,cantidad_recibida,costo_unit,plus_pct,precio_remito_unit,categoria,disposicion,producto:productos(tipo,codigo_interno)').eq('remito_id',id).order('id'); if(d.error) throw d.error;
+      return {ok:true, detalle:(d.data||[]).map(function(x){ return { id:x.id, nombre:x.nombre, cantidad:Number(x.cantidad_emitida)||0, recibida:x.cantidad_recibida, costo:Number(x.costo_unit)||0, plus:Number(x.plus_pct)||0, precio:Number(x.precio_remito_unit)||0, categoria:x.categoria||'', disposicion:x.disposicion||'', tipo:(x.producto?x.producto.tipo:''), codigo:(x.producto?x.producto.codigo_interno:'') }; })};
     },
     getCuentasProveedor: async function(){
       var pr=await sb.from('proveedores').select('id,nombre,activo').order('nombre'); if(pr.error) throw pr.error;
@@ -723,10 +733,10 @@
     // --- CAJA / RESERVA ---
     abrirCaja: async function(p){
       var m=await sucIdMap(); var sid=m[p.sucursal]; if(!sid) throw new Error('Local inválido');
-      var ex=await sb.from('cajas').select('id').eq('sucursal_id',sid).eq('cerrada',false).maybeSingle();
-      if(ex.data) throw new Error('Ya hay una caja abierta en este local');
-      var ins=await sb.from('cajas').insert({ sucursal_id:sid, fecha:hoy(), cajero:(p.cajero||null), apertura:(Number(p.apertura)||0), abierta_at:new Date().toISOString(), cerrada:false }).select('id').single();
-      if(ins.error) throw ins.error; return {ok:true, id:ins.data.id};
+      // Idempotente por local: si ya hay caja abierta (otra PC), se suma a esa. Atómico server-side.
+      var r=await sb.rpc('abrir_caja',{ p_sucursal:sid, p_cajero:(p.cajero||null), p_apertura:(Number(p.apertura)||0) });
+      if(r.error) throw r.error;
+      var d=r.data||{}; return {ok:true, id:d.id, yaAbierta:!!d.ya_abierta, creada:!!d.creada, cajero:d.cajero||'', apertura:Number(d.apertura)||0};
     },
     cerrarCaja: async function(p){
       var r=await sb.rpc('cerrar_caja',{ p_caja_id:p.id, p_contado:Number(p.contado)||0, p_queda:Number(p.queda)||0, p_reserva:Number(p.reserva)||0 });

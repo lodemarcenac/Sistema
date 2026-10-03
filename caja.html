@@ -166,13 +166,14 @@ function calcCierre(){
 async function abrirCajaUI(){
   var r=await window.sp('abrirCaja',{ sucursal:sucActual, cajero:document.getElementById('ab-cajero').value.trim(), apertura:document.getElementById('ab-monto').value });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  toast('Caja abierta'); document.getElementById('ab-cajero').value=''; document.getElementById('ab-monto').value='0'; cargarCaja();
+  toast(r.yaAbierta?('Ya había una caja abierta ('+(r.cajero||'otra PC')+') en este local'):'Caja abierta');
+  document.getElementById('ab-cajero').value=(window.PERM&&(window.PERM.nombre||window.PERM.email))||''; document.getElementById('ab-monto').value='0'; cargarCaja();
 }
 async function cerrarCajaUI(){
   var contado=document.getElementById('ci-contado').value;
   if(contado===''){ toast('Poné el efectivo contado','error'); return; }
   var queda=Number(document.getElementById('ci-queda').value)||0, reserva=Number(document.getElementById('ci-reserva').value)||0;
-  if(!confirm('¿Cerrar la caja? Contado '+fmt$(contado)+' → queda '+fmt$(queda)+' en caja y '+fmt$(reserva)+' a la reserva.')) return;
+  if(!confirm('¿Cerrar la caja del local? Es la caja COMPARTIDA del local: si hay otra PC vendiendo, va a quedar sin caja abierta.\n\nContado '+fmt$(contado)+' → queda '+fmt$(queda)+' en caja y '+fmt$(reserva)+' a la reserva.')) return;
   var r=await window.sp('cerrarCaja',{ id:cajaActual.id, contado:contado, queda:queda, reserva:reserva });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   toast('Caja cerrada — diferencia '+fmt$(r.diferencia)); cargarTodo();

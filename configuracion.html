@@ -146,14 +146,24 @@
       </div>
       <div class="card">
         <h3>Aranceles y plazos por medio de pago</h3>
-        <p class="hint">% de descuento y días hábiles hasta el depósito, por medio. Sirve para calcular el <b>neto esperado</b> y la <b>fecha estimada de acreditación</b> en Conciliación. El «Medio» debe coincidir con el nombre de Clover (ej. «Tarjeta de crédito», «Tarjeta de débito», «QR PosNet»).</p>
+        <p class="hint">% de descuento y días hábiles hasta el depósito, por medio. Sirve para calcular el <b>neto esperado</b> y la <b>fecha estimada de acreditación</b> en Conciliación. El «Medio» debe coincidir con el nombre que manda tu terminal Clover. Hoy tu terminal reporta: <b>Debit Card</b>, <b>Credit Card</b>, <b>Prepaid Card</b> y <b>QR PosNet</b> (no distingue mayúsculas/espacios).</p>
         <div class="tblwrap"><table class="cfg"><thead><tr><th>Medio</th><th>Arancel %</th><th>Días hábiles</th><th></th></tr></thead><tbody id="cv-aranc-tbody"></tbody></table></div>
         <div class="fp-row" style="border:none;margin-top:8px;">
-          <input type="text" id="cv-na-medio" placeholder="Medio (ej. Tarjeta de crédito)">
+          <input type="text" id="cv-na-medio" placeholder="Medio (ej. Credit Card)">
           <input type="number" id="cv-na-pct" placeholder="Arancel %" step="0.01" style="max-width:120px;flex:none;">
           <input type="number" id="cv-na-dias" placeholder="Días" style="max-width:100px;flex:none;">
           <button class="btn" onclick="addCvArancel()">Agregar</button>
         </div>
+      </div>
+      <div class="card">
+        <h3>Impuestos y retenciones (neto estimado)</h3>
+        <p class="hint">Además del arancel, el neto estimado de Conciliación descuenta estos valores para acercarse al <b>depósito real</b>. Son estimativos (puede haber una diferencia chica por transacción). Valores de referencia de tu última liquidación.</p>
+        <div class="abm-nueva" style="grid-template-columns:repeat(3,minmax(120px,1fr));">
+          <div><label>IVA % sobre el arancel</label><input type="number" id="cv-imp-iva" step="0.01" placeholder="21"></div>
+          <div><label>Percepción IVA % sobre el arancel</label><input type="number" id="cv-imp-percep" step="0.01" placeholder="3"></div>
+          <div><label>IIBB % sobre las ventas</label><input type="number" id="cv-imp-iibb" step="0.01" placeholder="0.5"></div>
+        </div>
+        <div style="margin-top:10px;"><button class="btn" onclick="guardarCvImp()">Guardar impuestos</button></div>
       </div>
     </div>
   </main>
@@ -255,6 +265,16 @@ async function cargarClover(){
   var r1=await window.sf('getCloverCuentas'); CV_ESTADO=(r1.ok?r1.cuentas:{})||{};
   var r2=await window.sf('getCloverAranceles'); CV_ARANC=(r2.ok?r2.aranceles:[])||[];
   renderCvTerm(); renderCvAranc();
+  var imp={iva:21,percep:3,iibb:0.5};
+  try{ var rc=await window.sf('getConfigGeneral'); if(rc.ok && rc.config && rc.config.clover_imp){ var o=JSON.parse(rc.config.clover_imp)||{}; if(o.iva!=null)imp.iva=o.iva; if(o.percep!=null)imp.percep=o.percep; if(o.iibb!=null)imp.iibb=o.iibb; } }catch(e){}
+  var gi=function(id,v){ var el=document.getElementById(id); if(el) el.value=v; };
+  gi('cv-imp-iva',imp.iva); gi('cv-imp-percep',imp.percep); gi('cv-imp-iibb',imp.iibb);
+}
+async function guardarCvImp(){
+  var o={ iva:Number(document.getElementById('cv-imp-iva').value)||0, percep:Number(document.getElementById('cv-imp-percep').value)||0, iibb:Number(document.getElementById('cv-imp-iibb').value)||0 };
+  var r=await window.sp('guardarConfig',{ clave:'clover_imp', valor:JSON.stringify(o) });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  toast('Impuestos guardados');
 }
 function renderCvTerm(){
   var locs=SUCS.filter(function(s){return s.id;});

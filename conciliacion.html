@@ -80,6 +80,8 @@
 <script>
 var sb=window.sbClient;
 var SUCS=[], SUCID={}, ARANCELES={}, TX=[];
+// Impuestos/retenciones para acercar el neto estimado al depósito real (editable en Config → Clover).
+var IMP={ iva:21, percep:3, iibb:0.5 };   // IVA % s/arancel · Percepción IVA % s/arancel · IIBB % s/ventas
 
 function p2(n){ return (n<10?'0':'')+n; }
 function iso(d){ return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate()); }
@@ -109,7 +111,8 @@ async function iniciar(){
 }
 async function recargarAranceles(){
   var r=await window.sf('getCloverAranceles'); var list=(r.ok?r.aranceles:[])||[];
-  ARANCELES={}; list.forEach(function(a){ ARANCELES[a.medio]={pct:a.arancel_pct, dias:a.dias}; });
+  ARANCELES={}; list.forEach(function(a){ ARANCELES[String(a.medio||'').toLowerCase().trim()]={pct:a.arancel_pct, dias:a.dias}; });
+  try{ var rc=await window.sf('getConfigGeneral'); if(rc.ok && rc.config && rc.config.clover_imp){ var o=JSON.parse(rc.config.clover_imp)||{}; IMP={ iva:(o.iva!=null?Number(o.iva):21), percep:(o.percep!=null?Number(o.percep):3), iibb:(o.iibb!=null?Number(o.iibb):0.5) }; } }catch(e){}
 }
 
 function periodo(k, soloSet){
@@ -130,7 +133,12 @@ function medioPill(m){
   return '<span class="pill '+c+'">'+m+'</span>';
 }
 function sumarHabiles(ms, dias){ var d=new Date(ms); var add=0; while(add<dias){ d.setDate(d.getDate()+1); var w=d.getDay(); if(w!==0&&w!==6) add++; } return d; }
-function netoEsperado(t){ var a=ARANCELES[t.medio]; if(!a) return null; return { neto:t.monto*(1-a.pct/100), fecha:sumarHabiles(t.fecha, a.dias), pct:a.pct }; }
+function netoEsperado(t){
+  var a=ARANCELES[String(t.medio||'').toLowerCase().trim()]; if(!a) return null;
+  var arancel=t.monto*a.pct/100;
+  var imp=arancel*((Number(IMP.iva)||0)+(Number(IMP.percep)||0))/100 + t.monto*(Number(IMP.iibb)||0)/100;
+  return { neto:t.monto-arancel-imp, fecha:sumarHabiles(t.fecha, a.dias), pct:a.pct };
+}
 
 async function cargar(){
   var suc=sucSel(); if(!suc){ return; }
@@ -184,7 +192,7 @@ async function cargar(){
   body.innerHTML=
     '<div class="seccion">🧾 Detalle de transacciones</div>'+
     '<div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Fecha / hora</th><th>Medio</th><th class="num">Bruto</th><th class="num">Cuotas</th><th>Tarjeta</th><th>Autorización</th><th class="num">Neto est.</th><th>Acredita ~</th></tr></thead><tbody>'+filas+'</tbody></table></div></div>'+
-    '<div class="nota">Datos en vivo de la terminal Clover (bruto). «Neto est.» y «Acredita ~» se calculan con los aranceles/plazos cargados (tabla clover_aranceles) — son estimados. El depósito REAL (ya acreditado) se confirma con la liquidación de Fiserv o el banco.</div>';
+    '<div class="nota">Datos en vivo de la terminal Clover (bruto). «Neto est.» descuenta arancel + IVA s/arancel + retenciones (IIBB / percepción IVA), y «Acredita ~» usa los días cargados — son <b>estimados</b> para controlar que el depósito llegue (puede haber una diferencia chica por transacción). El depósito REAL se confirma con la liquidación mensual de Fiserv o el banco.</div>';
 }
 
 function exportar(){
