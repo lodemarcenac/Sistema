@@ -16,6 +16,31 @@
   var SUPABASE_URL='https://wnrnnecqauzqvdopyuyr.supabase.co';
   var SUPABASE_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inducm5uZWNxYXV6cXZkb3B5dXlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MzgzNTIsImV4cCI6MjEwNDExNDM1Mn0.OXajZCCXn2xcjxEP_qtDECnpaByCsbX1I7eUH0b5jw8';
   var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+  // --- Login por NOMBRE DE USUARIO ---------------------------------------
+  // Los empleados entran con un usuario (no mail). Interceptamos el login: si
+  // lo que tipearon NO tiene '@', lo tratamos como usuario y resolvemos su
+  // email de cuenta con la función email_de_usuario. Si tiene '@', es email
+  // directo (compatibilidad con los usuarios viejos). Transparente para todas
+  // las páginas (no hace falta tocar el handler de cada una).
+  async function resolverEmailUsuario(usuario){
+    try{ var r=await sb.rpc('email_de_usuario',{ p_usuario:usuario }); if(!r.error && r.data) return r.data; }catch(e){}
+    return null;
+  }
+  (function(){
+    var _orig = sb.auth.signInWithPassword.bind(sb.auth);
+    sb.auth.signInWithPassword = async function(creds){
+      try{
+        var id = (creds && creds.email!=null) ? String(creds.email).trim() : '';
+        if(id && id.indexOf('@')<0){
+          var em = await resolverEmailUsuario(id);
+          if(em){ creds = Object.assign({}, creds, { email:em }); }
+          else { return { data:{ user:null, session:null }, error:{ message:'Usuario o contraseña incorrectos' } }; }
+        }
+      }catch(e){}
+      return _orig(creds);
+    };
+  })();
   window.sbClient = sb;
 
   function hoyISO(){ return new Date().toISOString().slice(0,10); }
@@ -140,24 +165,24 @@
       return {ok:true, roles:(r.data||[]).filter(function(x){return x.activo!==false;}).map(function(x){ return { id:x.id, nombre:x.nombre, permisos:byRol[x.id]||[] }; })};
     },
     getPerfiles: async function(){
-      var r=await sb.from('perfiles').select('id,email,nombre,activo,rol_id,rol:roles(nombre)').order('email'); if(r.error) throw r.error;
+      var r=await sb.from('perfiles').select('id,email,usuario,nombre,activo,rol_id,usuario_id,rol:roles(nombre)').order('usuario'); if(r.error) throw r.error;
       var ul=await sb.from('usuario_locales').select('perfil_id,sucursal_id'); var byP={}; (ul.data||[]).forEach(function(x){ (byP[x.perfil_id]=byP[x.perfil_id]||[]).push(x.sucursal_id); });
       var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
-      return {ok:true, perfiles:(r.data||[]).filter(function(p){return p.activo!==false;}).map(function(p){ return { id:p.id, email:p.email, nombre:p.nombre||'', rolId:p.rol_id, rol:(p.rol?p.rol.nombre:''), locales:(byP[p.id]||[]).map(function(id){return idToName[id]||id;}), localesIds:(byP[p.id]||[]) }; })};
+      return {ok:true, perfiles:(r.data||[]).filter(function(p){return p.activo!==false;}).map(function(p){ return { id:p.id, email:p.email, usuario:p.usuario||'', usuarioId:p.usuario_id||null, nombre:p.nombre||'', rolId:p.rol_id, rol:(p.rol?p.rol.nombre:''), locales:(byP[p.id]||[]).map(function(id){return idToName[id]||id;}), localesIds:(byP[p.id]||[]) }; })};
     },
     getMiPerfil: async function(){
       var u=await sb.auth.getUser(); var email=(u.data&&u.data.user&&u.data.user.email)||null;
       var cnt=await sb.from('perfiles').select('id',{count:'exact',head:true}); if(cnt.error) throw cnt.error;
       if((cnt.count||0)===0) return {ok:true, bootstrap:true, esAdmin:true, permisos:['*'], locales:[], rol:'Administrador (inicial)', email:email};
       if(!email) return {ok:true, esAdmin:false, permisos:[], locales:[], rol:null, email:null};
-      var pr=await sb.from('perfiles').select('id,nombre,activo,rol_id,rol:roles(nombre)').eq('email',email).maybeSingle(); if(pr.error) throw pr.error;
+      var pr=await sb.from('perfiles').select('id,nombre,usuario,activo,rol_id,rol:roles(nombre)').eq('email',email).maybeSingle(); if(pr.error) throw pr.error;
       var perfil=pr.data;
       if(!perfil || perfil.activo===false) return {ok:true, esAdmin:false, permisos:[], locales:[], rol:null, email:email, sinPerfil:true};
       var permisos=[]; if(perfil.rol_id){ var rp=await sb.from('rol_permisos').select('permiso').eq('rol_id',perfil.rol_id); permisos=(rp.data||[]).map(function(x){return x.permiso;}); }
       var locs=await sb.from('usuario_locales').select('sucursal_id').eq('perfil_id',perfil.id);
       var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
       var locales=(locs.data||[]).map(function(x){ return idToName[x.sucursal_id]||x.sucursal_id; });
-      return {ok:true, esAdmin:(permisos.indexOf('*')>=0), permisos:permisos, locales:locales, rol:(perfil.rol?perfil.rol.nombre:null), nombre:perfil.nombre, email:email};
+      return {ok:true, esAdmin:(permisos.indexOf('*')>=0), permisos:permisos, locales:locales, rol:(perfil.rol?perfil.rol.nombre:null), nombre:perfil.nombre, usuario:(perfil.usuario||''), email:email};
     },
     getProveedores: async function(){
       var r=await sb.from('proveedores').select('id,nombre,cuit,email,telefono,activo').order('nombre'); if(r.error) throw r.error;
@@ -558,14 +583,26 @@
     crearUsuarioAuth: async function(p){
       var s=await sb.auth.getSession(); var tok=(s.data&&s.data.session&&s.data.session.access_token)||'';
       try{
-        var res=await fetch(SUPABASE_URL+'/functions/v1/crear-usuario', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tok, 'apikey':SUPABASE_ANON }, body:JSON.stringify({ email:p.email, password:p.password }) });
+        var res=await fetch(SUPABASE_URL+'/functions/v1/crear-usuario', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tok, 'apikey':SUPABASE_ANON }, body:JSON.stringify({ usuario:p.usuario, password:p.password, email:(p.email||'') }) });
         var j=await res.json();
         return j;
       }catch(e){ return {ok:false, error:'No se pudo contactar la función (¿está deployada?): '+(e.message||e)}; }
     },
+    setPasswordUsuario: async function(p){
+      var s=await sb.auth.getSession(); var tok=(s.data&&s.data.session&&s.data.session.access_token)||'';
+      if(!p.usuario_id) return {ok:false, error:'Este usuario no tiene login creado (reseteá la contraseña recreándolo o pedí que entre una vez).'};
+      try{
+        var res=await fetch(SUPABASE_URL+'/functions/v1/crear-usuario', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tok, 'apikey':SUPABASE_ANON }, body:JSON.stringify({ modo:'password', usuario_id:p.usuario_id, password:p.password }) });
+        return await res.json();
+      }catch(e){ return {ok:false, error:'No se pudo contactar la función: '+(e.message||e)}; }
+    },
     guardarPerfil: async function(p){
-      var email=String(p.email||'').trim().toLowerCase(); if(!email) throw new Error('Falta el email');
-      var m=await sucIdMap(); var payload={ email:email, nombre:(p.nombre||null), rol_id:(p.rolId||null) }; var pid=p.id;
+      var m=await sucIdMap(); var payload={ nombre:(p.nombre||null), rol_id:(p.rolId||null) }; var pid=p.id;
+      if(p.usuario!=null) payload.usuario=(String(p.usuario).trim()||null);
+      if(p.usuario_id) payload.usuario_id=p.usuario_id;
+      var email=String(p.email||'').trim().toLowerCase();
+      if(!pid){ if(!email) throw new Error('Falta el email de cuenta'); payload.email=email; }
+      else if(email) payload.email=email;   // en edición normalmente NO se cambia
       if(pid){ var r=await sb.from('perfiles').update(payload).eq('id',pid); if(r.error) throw r.error; }
       else { var ex=await sb.from('perfiles').select('id').eq('email',email).maybeSingle(); if(ex.data){ pid=ex.data.id; var u=await sb.from('perfiles').update(payload).eq('id',pid); if(u.error) throw u.error; } else { var ins=await sb.from('perfiles').insert(payload).select('id').single(); if(ins.error) throw ins.error; pid=ins.data.id; } }
       await sb.from('usuario_locales').delete().eq('perfil_id',pid);

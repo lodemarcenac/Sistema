@@ -18,7 +18,7 @@
       if(!window.sbClient || !window.sf) return;
       var s=await window.sbClient.auth.getSession(); if(!(s.data && s.data.session)) return;
       var r=await window.sf('getMiPerfil'); if(!r || !r.ok) return;
-      window.PERM={ cargado:true, esAdmin:!!r.esAdmin, permisos:r.permisos||[], locales:r.locales||[], rol:r.rol, nombre:r.nombre||'', email:r.email||'', bootstrap:!!r.bootstrap, puede:mkPuede(r.esAdmin, r.permisos) };
+      window.PERM={ cargado:true, esAdmin:!!r.esAdmin, permisos:r.permisos||[], locales:r.locales||[], rol:r.rol, nombre:r.nombre||'', usuario:r.usuario||'', email:r.email||'', bootstrap:!!r.bootstrap, puede:mkPuede(r.esAdmin, r.permisos) };
       window.puede=function(k){ return window.PERM.puede(k); };
       filtrarNav(); filtrarLocales();
       document.dispatchEvent(new Event('perm-listo'));
@@ -46,7 +46,41 @@
   }
   window.puede=function(k){ return window.PERM.puede(k); };
   window.aplicarPermisos=applyGuard;
+  // El login ahora es por NOMBRE DE USUARIO (los empleados no usan mail).
+  // Relabela el campo de email en todas las páginas (el id li-email se mantiene)
+  // y agrega el link "¿Olvidaste tu contraseña?" (solo sirve a quien tiene mail).
+  function relabelLogin(){
+    var inp=document.getElementById('li-email'); if(!inp) return;
+    try{ inp.type='text'; }catch(e){}
+    inp.setAttribute('autocomplete','username'); inp.removeAttribute('required');
+    inp.placeholder='Usuario';
+    var lab=inp.previousElementSibling;
+    if(lab && lab.tagName==='LABEL') lab.textContent='Usuario';
+    var form=document.getElementById('login-form');
+    if(form && !document.getElementById('link-recuperar')){
+      var a=document.createElement('a'); a.id='link-recuperar'; a.href='#'; a.textContent='¿Olvidaste tu contraseña?';
+      a.style.cssText='display:block;margin-top:12px;font-size:.85rem;color:#1b4f8a;text-decoration:none;cursor:pointer;';
+      a.addEventListener('click', function(e){ e.preventDefault(); recuperarClave(); });
+      form.appendChild(a);
+    }
+  }
+  async function recuperarClave(){
+    var id=prompt('Ingresá tu usuario (o email) para recuperar la contraseña:');
+    if(id===null) return; id=String(id).trim(); if(!id) return;
+    var email=id;
+    if(id.indexOf('@')<0){
+      try{ var r=await window.sbClient.rpc('email_de_usuario',{ p_usuario:id }); email=(r && !r.error && r.data)?r.data:null; }catch(e){ email=null; }
+    }
+    if(!email){ alert('No encontramos ese usuario.'); return; }
+    if(/@lodemarcenac\.local$/i.test(email)){ alert('Este usuario no tiene un email cargado para recuperar la clave.\nPedile al administrador que te la resetee.'); return; }
+    try{
+      var res=await window.sbClient.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+      if(res.error){ alert('No se pudo: '+res.error.message); return; }
+      alert('Te enviamos un correo para restablecer la contraseña.\nRevisá tu casilla (y la carpeta de spam).');
+    }catch(e){ alert('No se pudo: '+(e.message||e)); }
+  }
   document.addEventListener('DOMContentLoaded', function(){
+    relabelLogin();
     var app=document.getElementById('app');
     if(app){
       var obs=new MutationObserver(function(){ if(!app.hidden) applyGuard(); });

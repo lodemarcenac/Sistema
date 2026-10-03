@@ -132,13 +132,13 @@ async function iniciar(){
 }
 function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarTodo(); }
 async function cargarTodo(){ await cargarCaja(); await cargarReserva(); await cargarHist(); }
-document.addEventListener('perm-listo', function(){ var ca=document.getElementById('ab-cajero'); if(ca && !ca.value) ca.value=(window.PERM&&(window.PERM.nombre||window.PERM.email))||''; });
+document.addEventListener('perm-listo', function(){ var ca=document.getElementById('ab-cajero'); if(ca && !ca.value) ca.value=(window.PERM&&(window.PERM.nombre||window.PERM.usuario||window.PERM.email))||''; });
 
 async function cargarCaja(){
   var r=await window.sf('getCajaAbierta&sucursal='+encodeURIComponent(sucActual)); cajaActual=(r.ok?r.caja:null);
   document.getElementById('caja-cerrada').hidden=!!cajaActual;
   document.getElementById('caja-abierta').hidden=!cajaActual;
-  if(!cajaActual){ var ca=document.getElementById('ab-cajero'); if(ca && !ca.value) ca.value=(window.PERM&&(window.PERM.nombre||window.PERM.email))||''; }
+  if(!cajaActual){ var ca=document.getElementById('ab-cajero'); if(ca && !ca.value) ca.value=(window.PERM&&(window.PERM.nombre||window.PERM.usuario||window.PERM.email))||''; }
   if(!cajaActual) return;
   var rr=await window.sf('getCajaResumen&id='+cajaActual.id); var d=(rr.ok?rr.resumen:{})||{};
   document.getElementById('ca-info').textContent='Cajero: '+(cajaActual.cajero||'—')+' · abierta '+new Date(cajaActual.abiertaAt).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'});
@@ -167,7 +167,7 @@ async function abrirCajaUI(){
   var r=await window.sp('abrirCaja',{ sucursal:sucActual, cajero:document.getElementById('ab-cajero').value.trim(), apertura:document.getElementById('ab-monto').value });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   toast(r.yaAbierta?('Ya había una caja abierta ('+(r.cajero||'otra PC')+') en este local'):'Caja abierta');
-  document.getElementById('ab-cajero').value=(window.PERM&&(window.PERM.nombre||window.PERM.email))||''; document.getElementById('ab-monto').value='0'; cargarCaja();
+  document.getElementById('ab-cajero').value=(window.PERM&&(window.PERM.nombre||window.PERM.usuario||window.PERM.email))||''; document.getElementById('ab-monto').value='0'; cargarCaja();
 }
 async function cerrarCajaUI(){
   var contado=document.getElementById('ci-contado').value;

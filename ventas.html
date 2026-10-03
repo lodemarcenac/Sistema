@@ -289,7 +289,7 @@ async function verificarCaja(){
   }
   cajaOK=true;
   // Caja compartida entre PCs del local: si la abrió otra persona, avisamos (no bloquea).
-  var yo=(window.PERM&&(window.PERM.nombre||window.PERM.email))||'';
+  var yo=(window.PERM&&(window.PERM.nombre||window.PERM.usuario||window.PERM.email))||'';
   if(caja.cajero && yo && caja.cajero!==yo){
     ban.style.background='#e8f1fb'; ban.style.borderColor='#bcd4f0'; ban.style.color='#1b4f8a';
     ban.innerHTML='<span>💵 Caja del local abierta por <b>'+caja.cajero+'</b>. Vendés sobre esa misma caja.</span>';
@@ -297,7 +297,7 @@ async function verificarCaja(){
   } else { ban.hidden=true; }
 }
 async function abrirCajaVentas(){
-  var cajero=(window.PERM&&(window.PERM.nombre||window.PERM.email))||'';
+  var cajero=(window.PERM&&(window.PERM.nombre||window.PERM.usuario||window.PERM.email))||'';
   var monto=prompt('Abrir caja de '+sucActual+' (cajero: '+(cajero||'—')+')\nMonto de apertura:', '0');
   if(monto===null) return;
   var r=await window.sp('abrirCaja',{ sucursal:sucActual, cajero:cajero, apertura:monto });

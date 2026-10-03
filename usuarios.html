@@ -56,17 +56,18 @@
     <div id="t-usuarios">
       <div class="card" style="margin-bottom:14px;">
         <h3 id="u-titulo">Nuevo usuario</h3>
-        <p class="hint muted" style="margin-bottom:10px;">Cargá email + contraseña, rol y locales, y el usuario se crea <b>completo desde acá</b> (login incluido). Al <b>editar</b> uno existente, la contraseña se deja en blanco (no se cambia).</p>
+        <p class="hint muted" style="margin-bottom:10px;">El empleado entra con <b>usuario</b> y <b>contraseña</b> (no mail). Vos los generás acá. El <b>email es opcional</b>: sirve para que esa persona recupere su clave por correo. Si no tiene, dejalo vacío y vos le <b>reseteás la contraseña desde acá</b> cuando editás. Al editar, dejá la contraseña en blanco para no cambiarla.</p>
         <div class="abm-nueva">
-          <div><label>Email</label><input id="u-email" type="email" placeholder="usuario@correo.com"></div>
-          <div><label>Contraseña <span style="text-transform:none;font-weight:400;">(solo al crear)</span></label><input id="u-pass" type="text" placeholder="mín. 6 caracteres"></div>
+          <div><label>Usuario</label><input id="u-usuario" placeholder="ej: juan" autocomplete="off"></div>
+          <div><label>Contraseña <span style="text-transform:none;font-weight:400;">(en blanco = no cambia)</span></label><input id="u-pass" type="text" placeholder="mín. 6 caracteres"></div>
+          <div><label>Email recupero <span style="text-transform:none;font-weight:400;">(opcional)</span></label><input id="u-email" type="email" placeholder="correo@ejemplo.com"></div>
           <div><label>Nombre</label><input id="u-nombre" placeholder="Nombre y apellido"></div>
           <div><label>Rol</label><select id="u-rol"></select></div>
         </div>
         <div style="margin-top:10px;"><label class="perm-h" style="margin:0 0 4px;">Locales asignados</label><div class="locs" id="u-locs"></div></div>
         <div style="margin-top:12px;"><button class="btn" onclick="guardarUsuarioUI()">Guardar usuario</button> <button class="btn-sec" id="u-cancel" hidden onclick="cancelarEdicionU()">Cancelar</button></div>
       </div>
-      <div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Locales</th><th></th></tr></thead><tbody id="u-tbody"></tbody></table></div></div>
+      <div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Locales</th><th>Email</th><th></th></tr></thead><tbody id="u-tbody"></tbody></table></div></div>
     </div>
 
     <div id="t-roles" hidden>
@@ -138,34 +139,49 @@ function poblarRolSelect(){ document.getElementById('u-rol').innerHTML='<option 
 function poblarLocs(){ document.getElementById('u-locs').innerHTML=SUCS.map(function(s){return '<label><input type="checkbox" class="u-loc" value="'+String(s).replace(/"/g,'&quot;')+'"> '+s+'</label>';}).join(''); }
 
 // ---- USUARIOS ----
+function esSynthEmail(e){ return /@lodemarcenac\.local$/i.test(e||''); }
 function renderUsuarios(){
   document.getElementById('u-tbody').innerHTML=PERFILES.map(function(p){
-    return '<tr><td>'+p.email+'</td><td>'+(p.nombre||'')+'</td><td>'+(p.rol||'<span class="muted">sin rol</span>')+'</td><td>'+((p.locales||[]).join(', ')||'<span class="muted">todos/ninguno</span>')+'</td>'+
+    var mail=esSynthEmail(p.email)?'<span class="muted">—</span>':(p.email||'<span class="muted">—</span>');
+    return '<tr><td><b>'+(p.usuario||'<span class="muted">(sin usuario)</span>')+'</b></td><td>'+(p.nombre||'')+'</td><td>'+(p.rol||'<span class="muted">sin rol</span>')+'</td><td>'+((p.locales||[]).join(', ')||'<span class="muted">todos/ninguno</span>')+'</td><td>'+mail+'</td>'+
       '<td style="white-space:nowrap;"><button class="mini-btn" onclick="editarUsuario('+p.id+')">Editar</button><button class="x-btn" title="Eliminar" onclick="borrarUsuario('+p.id+')">✕</button></td></tr>';
-  }).join('') || '<tr><td colspan="5" class="muted">Sin usuarios cargados.</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="muted">Sin usuarios cargados.</td></tr>';
 }
 function editarUsuario(id){
   var p=PERFILES.find(function(x){return x.id===id;}); if(!p) return; uEditId=id;
   document.getElementById('u-titulo').textContent='Editar usuario'; document.getElementById('u-cancel').hidden=false;
-  document.getElementById('u-email').value=p.email; document.getElementById('u-pass').value=''; document.getElementById('u-nombre').value=p.nombre||''; document.getElementById('u-rol').value=p.rolId||'';
+  document.getElementById('u-usuario').value=p.usuario||'';
+  document.getElementById('u-email').value=esSynthEmail(p.email)?'':(p.email||'');
+  document.getElementById('u-pass').value=''; document.getElementById('u-nombre').value=p.nombre||''; document.getElementById('u-rol').value=p.rolId||'';
   document.querySelectorAll('.u-loc').forEach(function(c){ c.checked=(p.locales||[]).indexOf(c.value)>=0; });
   window.scrollTo({top:0,behavior:'smooth'});
 }
-function cancelarEdicionU(){ uEditId=null; document.getElementById('u-titulo').textContent='Nuevo usuario'; document.getElementById('u-cancel').hidden=true; document.getElementById('u-email').value=''; document.getElementById('u-pass').value=''; document.getElementById('u-nombre').value=''; document.getElementById('u-rol').value=''; document.querySelectorAll('.u-loc').forEach(function(c){c.checked=false;}); }
+function cancelarEdicionU(){ uEditId=null; document.getElementById('u-titulo').textContent='Nuevo usuario'; document.getElementById('u-cancel').hidden=true; document.getElementById('u-usuario').value=''; document.getElementById('u-email').value=''; document.getElementById('u-pass').value=''; document.getElementById('u-nombre').value=''; document.getElementById('u-rol').value=''; document.querySelectorAll('.u-loc').forEach(function(c){c.checked=false;}); }
 async function guardarUsuarioUI(){
-  var email=document.getElementById('u-email').value.trim(); if(!email){ toast('Poné el email','error'); return; }
+  var usuario=document.getElementById('u-usuario').value.trim(); if(!usuario){ toast('Poné el usuario','error'); return; }
+  var emailIn=document.getElementById('u-email').value.trim();
+  var pw=document.getElementById('u-pass').value;
   var locales=[]; document.querySelectorAll('.u-loc:checked').forEach(function(c){ locales.push(c.value); });
-  // Al crear uno nuevo, si hay contraseña, se crea el login (Edge Function)
+  var nombre=document.getElementById('u-nombre').value.trim(), rolId=(document.getElementById('u-rol').value||null);
+
   if(!uEditId){
-    var pw=document.getElementById('u-pass').value;
+    // Crear: usuario + contraseña obligatorios; email opcional.
+    if(!pw || pw.length<6){ toast('Poné una contraseña de al menos 6 caracteres','error'); return; }
+    var ra=await window.sp('crearUsuarioAuth',{ usuario:usuario, password:pw, email:emailIn });
+    if(!ra.ok){ toast('Error creando el login: '+ra.error,'error'); return; }
+    var r=await window.sp('guardarPerfil',{ usuario:usuario, email:ra.email, usuario_id:ra.id, nombre:nombre, rolId:rolId, locales:locales });
+    if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  } else {
+    // Editar: cambia usuario/nombre/rol/locales. Si hay contraseña, la resetea.
     if(pw){
       if(pw.length<6){ toast('La contraseña debe tener al menos 6 caracteres','error'); return; }
-      var ra=await window.sp('crearUsuarioAuth',{ email:email, password:pw });
-      if(!ra.ok && !/registered|already|exist|duplicate|duplicad|ya /i.test(ra.error||'')){ toast('Error creando el login: '+ra.error,'error'); return; }
+      var p=PERFILES.find(function(x){return x.id===uEditId;})||{};
+      var rpw=await window.sp('setPasswordUsuario',{ usuario_id:p.usuarioId, password:pw });
+      if(!rpw.ok){ toast('No se pudo cambiar la contraseña: '+rpw.error,'error'); return; }
     }
+    var r2=await window.sp('guardarPerfil',{ id:uEditId, usuario:usuario, nombre:nombre, rolId:rolId, locales:locales });
+    if(!r2.ok){ toast('Error: '+r2.error,'error'); return; }
   }
-  var r=await window.sp('guardarPerfil',{ id:uEditId, email:email, nombre:document.getElementById('u-nombre').value.trim(), rolId:(document.getElementById('u-rol').value||null), locales:locales });
-  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   toast('Usuario guardado'); cancelarEdicionU();
   var rp=await window.sf('getPerfiles'); PERFILES=(rp.ok?rp.perfiles:[])||[]; renderUsuarios();
 }
