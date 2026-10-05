@@ -15,7 +15,11 @@
 (function(){
   var SUPABASE_URL='https://wnrnnecqauzqvdopyuyr.supabase.co';
   var SUPABASE_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inducm5uZWNxYXV6cXZkb3B5dXlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MzgzNTIsImV4cCI6MjEwNDExNDM1Mn0.OXajZCCXn2xcjxEP_qtDECnpaByCsbX1I7eUH0b5jw8';
-  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+  // Sesión en sessionStorage: sobrevive recargas y navegación, pero se cierra al
+  // cerrar Chrome / reiniciar la PC (obliga a loguearse de nuevo). Pedido del usuario.
+  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+    auth: { storage: window.sessionStorage, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+  });
 
   // --- Login por NOMBRE DE USUARIO ---------------------------------------
   // Los empleados entran con un usuario (no mail). Interceptamos el login: si

@@ -9,7 +9,7 @@
 (function(){
   window.PERM = { cargado:false, esAdmin:false, permisos:[], locales:[], rol:null, puede:function(){ return true; } };
   // Evita el "parpadeo" del login al navegar: si ya hay sesión guardada, oculta el login de entrada.
-  try{ for(var _i=0;_i<localStorage.length;_i++){ var _k=localStorage.key(_i)||''; if(_k.indexOf('-auth-token')>=0){ var _st=document.createElement('style'); _st.id='hide-login-flash'; _st.textContent='#login{display:none!important;}'; (document.head||document.documentElement).appendChild(_st); break; } } }catch(e){}
+  try{ var _chk=function(st){ try{ for(var _i=0;_i<st.length;_i++){ if((st.key(_i)||'').indexOf('-auth-token')>=0) return true; } }catch(e){} return false; }; if(_chk(window.sessionStorage)||_chk(window.localStorage)){ var _st=document.createElement('style'); _st.id='hide-login-flash'; _st.textContent='#login{display:none!important;}'; (document.head||document.documentElement).appendChild(_st); } }catch(e){}
   function mostrarLogin(){ var st=document.getElementById('hide-login-flash'); if(st) st.remove(); var lg=document.getElementById('login'); if(lg){ lg.hidden=false; lg.style.display=''; } }
   var NAVMAP = { 'index.html':'tableros','reportes.html':'reportes','productos.html':'productos','clientes.html':'clientes','stock.html':'stock','compras.html':'compras','remitos.html':'remitos','cuentas.html':'cuentas','conciliacion.html':'conciliacion','caja.html':'caja','ventas.html':'ventas','configuracion.html':'configuracion','usuarios.html':'usuarios' };
   function mkPuede(esAdmin, permisos){ var set={}; (permisos||[]).forEach(function(p){ set[p]=true; }); return function(k){ return !!(esAdmin || set['*'] || set[k]); }; }

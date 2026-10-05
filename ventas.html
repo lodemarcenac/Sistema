@@ -207,7 +207,7 @@
     <div id="ok-info"></div>
     <div class="ticket" id="ticket"></div>
     <div class="acts" style="margin-top:12px;">
-      <button class="btn-sec" onclick="imprimirTicket()">🖨️ Imprimir</button>
+      <button class="btn-sec" onclick="reimprimirDesdeOk()">🖨️ Imprimir</button>
       <button class="btn" onclick="nuevaVenta()">Nueva venta</button>
     </div>
   </div>
@@ -664,12 +664,15 @@ async function cobrar(){
   mostrarOk(r,venta,pagosLimpios);
 }
 
+var okTimer=null;
 function mostrarOk(r,venta,pagosLimpios){
   document.getElementById('ok-info').innerHTML='<div class="tot-row big" style="border:none;margin:0"><span>'+ (r.comprobante||'') +'</span></div>';
   document.getElementById('ticket').textContent=armarTicket(r,venta,pagosLimpios);
   document.getElementById('ov-ok').hidden=false;
   setTimeout(imprimirTicket, 150);   // imprime solo al cobrar (comandera 70mm)
+  clearTimeout(okTimer); okTimer=setTimeout(nuevaVenta, 2200);   // vuelve solo a nueva venta
 }
+function reimprimirDesdeOk(){ clearTimeout(okTimer); imprimirTicket(); }   // si reimprime, no auto-cierra
 function armarTicket(r,venta,pagosLimpios){
   var info=SUCINFO[sucActual]||{}; var L=[];
   L.push(centrar('CARNICERÍA'));
@@ -716,6 +719,7 @@ function imprimirTicket(){
   setTimeout(function(){ try{ ifr.contentWindow.focus(); ifr.contentWindow.print(); }catch(e){ console.warn(e); } }, 250);
 }
 function nuevaVenta(){
+  clearTimeout(okTimer);
   document.getElementById('ov-ok').hidden=true;
   carrito=[]; resetPagos();
   document.getElementById('desc').value=0;
