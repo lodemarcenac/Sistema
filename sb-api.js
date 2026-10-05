@@ -429,6 +429,11 @@
       var r=await sb.from('productos').update({ margen_override:(p.margen===''||p.margen==null?null:Number(p.margen)) }).eq('codigo_interno',String(p.codigo));
       if(r.error) throw r.error; return {ok:true};
     },
+    setNombreProducto: async function(p){
+      var nombre=String(p.nombre||'').trim(); if(!nombre) throw new Error('El nombre no puede quedar vacío');
+      var r=await sb.from('productos').update({ nombre:nombre }).eq('codigo_interno',String(p.codigo));
+      if(r.error) throw r.error; return {ok:true};
+    },
     setProductoActivo: async function(p){
       var r=await sb.from('productos').update({ activo:!!p.activo }).eq('codigo_interno',String(p.codigo));
       if(r.error) throw r.error; return {ok:true};
@@ -459,6 +464,7 @@
           var rows=[]; Object.keys(f.precios||{}).forEach(function(l){ var v=Number(f.precios[l]); if(lm[l] && v>0) rows.push({ producto_id:pid, lista_id:lm[l], precio:v, fecha:hoy() }); });
           if(rows.length){ var pr=await sb.from('producto_precios').upsert(rows,{onConflict:'producto_id,lista_id'}); if(pr.error) throw pr.error; }
         }catch(e){ errores.push(cod+': '+(e.message||e)); }
+        if(typeof p.onProgress==='function'){ try{ p.onProgress(i+1, filas.length); }catch(_e){} if((i & 7)===0) await new Promise(function(r){ setTimeout(r,0); }); }
       }
       return {ok:true, creados:creados, actualizados:actualizados, errores:errores};
     },

@@ -88,9 +88,17 @@
     </details>
     <details class="alta">
       <summary>📥 Importar productos (masivo)</summary>
-      <p class="resumen">Pegá desde Excel/Sheets <b>con la fila de encabezados</b>. Columnas reconocidas: <code>codigo, nombre, marca, categoria, tipo, costo, margen</code> y una columna por cada <b>lista de precio</b> (ej. <code>Minorista</code>, <code>Mayorista</code>…). Crea los que no existen y actualiza los que sí (por código).</p>
-      <textarea id="imp-txt" style="width:100%;height:130px;font-family:monospace;font-size:.8rem;padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);" placeholder="codigo	nombre	categoria	tipo	costo	Minorista	Mayorista&#10;00042	Bife angosto	Cortes Vaca	pesable	5000	9000	8000"></textarea>
+      <p class="resumen"><b>Subí un archivo</b> (Excel .xlsx/.xls o .csv) <b>o pegá</b> desde Excel/Sheets, con la fila de encabezados. Columnas reconocidas: <code>codigo, nombre, marca, categoria, tipo, costo, margen</code> y una columna por cada <b>lista de precio</b> (ej. <code>Minorista</code>, <code>Mayorista</code>…). Crea los que no existen y actualiza los que sí (por código). <b>Ojo:</b> una celda vacía en <code>costo</code>, <code>tipo</code> o <code>nombre</code> pisa ese dato — incluí siempre esas columnas.</p>
+      <div style="margin:4px 0 8px;">
+        <input type="file" id="imp-file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarArchivo(event)">
+        <button class="btn-alta" type="button" onclick="document.getElementById('imp-file').click()">📄 Subir archivo (Excel/CSV)</button>
+        <span class="muted" id="imp-file-res" style="margin-left:8px;"></span>
+      </div>
+      <textarea id="imp-txt" style="width:100%;height:130px;font-family:monospace;font-size:.8rem;padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);" placeholder="O pegá acá desde Excel/Sheets…&#10;codigo	nombre	categoria	tipo	costo	Minorista	Mayorista&#10;00042	Bife angosto	Cortes Vaca	pesable	5000	9000	8000"></textarea>
       <div style="margin-top:8px;"><button class="btn-alta" type="button" onclick="importarUI()">Importar</button> <span class="muted" id="imp-res"></span></div>
+      <div id="imp-bar-wrap" hidden style="margin-top:8px;height:14px;background:#e7ecf3;border-radius:8px;overflow:hidden;">
+        <div id="imp-bar" style="height:100%;width:0;background:var(--brand);transition:width .15s;"></div>
+      </div>
     </details>
     <div class="barra">
       <input id="q" placeholder="Buscar por código o nombre..." oninput="render()">
@@ -165,6 +173,7 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="sb-api.js"></script>
 <script src="auth-guard.js"></script>
 <script src="nav.js"></script>
@@ -227,6 +236,17 @@ function poblarAlta(){
   }).join('');
 }
 function sinPermiso(k,msg){ if(window.PERM && window.PERM.cargado && !window.PERM.puede(k)){ toast(msg||'No tenés permiso para esta acción','error'); render(); return true; } return false; }
+function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function puedeAccion(k){ return !(window.PERM && window.PERM.cargado) || window.PERM.puede(k); }
+async function editarNombre(cod,val){
+  if(sinPermiso('productos.editar_nombre','No tenés permiso para editar nombres')) return;
+  val=String(val||'').trim();
+  if(!val){ toast('El nombre no puede quedar vacío','error'); render(); return; }
+  var r=await window.sp('setNombreProducto',{codigo:cod,nombre:val});
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  if(PRODS[cod]) PRODS[cod].nombre=val;
+  toast('Nombre actualizado');
+}
 async function editarCosto(cod,val){
   if(sinPermiso('productos.editar_costo','No tenés permiso para editar costos')) return;
   var r=await window.sp('setCostoProducto',{codigo:cod,costo:val});
@@ -254,16 +274,44 @@ function sugerirAlta(force){
   if(el){ el.value=estimado; recalcAlta(); }
   if(hint) hint.textContent='≈ '+fmt$(estimado)+' (margen '+margen+'%)';
 }
+function importarArchivo(ev){
+  var file=ev.target.files&&ev.target.files[0]; if(!file) return;
+  if(typeof XLSX==='undefined'){ toast('No cargó el lector de Excel, probá de nuevo','error'); return; }
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var wb=XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var tsv=XLSX.utils.sheet_to_csv(ws, {FS:'\t', blankrows:false});
+      document.getElementById('imp-txt').value=tsv;
+      var n=parseImport(tsv).length;
+      document.getElementById('imp-file-res').textContent='✓ '+file.name+' — '+n+' fila(s) detectada(s). Revisá y tocá Importar.';
+      toast('Archivo cargado: '+n+' fila(s). Revisá y tocá Importar.');
+    }catch(err){ toast('No se pudo leer el archivo: '+(err.message||err),'error'); }
+  };
+  reader.onerror=function(){ toast('No se pudo leer el archivo','error'); };
+  reader.readAsArrayBuffer(file);
+  ev.target.value='';   // permite re-subir el mismo archivo
+}
 async function importarUI(){
   var filas=parseImport(document.getElementById('imp-txt').value);
   if(!filas.length){ toast('No se detectaron filas (¿pusiste encabezados?)','error'); return; }
   if(!confirm('¿Importar '+filas.length+' producto(s)?')) return;
-  document.getElementById('imp-res').textContent='Importando…';
-  var r=await window.sp('importProductos',{filas:filas});
-  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  var total=filas.length;
+  var wrap=document.getElementById('imp-bar-wrap'), bar=document.getElementById('imp-bar');
+  if(wrap) wrap.hidden=false; if(bar) bar.style.width='0%';
+  document.getElementById('imp-res').textContent='Importando 0/'+total+'…';
+  var r=await window.sp('importProductos',{filas:filas, onProgress:function(done,tot){
+    var pct=Math.round(done*100/tot);
+    if(bar) bar.style.width=pct+'%';
+    document.getElementById('imp-res').textContent='Importando '+done+'/'+tot+'… ('+pct+'%)';
+  }});
+  if(bar) bar.style.width='100%';
+  if(!r.ok){ toast('Error: '+r.error,'error'); if(wrap) wrap.hidden=true; return; }
   document.getElementById('imp-res').textContent='✓ '+r.creados+' creados, '+r.actualizados+' actualizados'+(r.errores&&r.errores.length?(', '+r.errores.length+' con error'):'');
   if(r.errores&&r.errores.length) console.warn('Errores import:',r.errores);
   toast('Import: '+r.creados+' creados, '+r.actualizados+' actualizados');
+  setTimeout(function(){ if(wrap) wrap.hidden=true; }, 2000);
   iniciar();
 }
 function parseImport(text){
@@ -537,7 +585,11 @@ function render(){
     var p=PRODS[cod];
     var pill = (p.tipo==='unidad') ? '<span class="pill u">unidad</span>' : '<span class="pill p">kg</span>';
     return '<tr class="'+(p.activo===false?'inactivo':'')+'">'+
-      '<td>'+cod+'</td><td>'+(p.nombre||'')+'</td><td>'+(p.categoria||'')+'</td><td>'+pill+'</td>'+
+      '<td>'+cod+'</td>'+
+      '<td>'+(puedeAccion('productos.editar_nombre')
+        ? '<input class="cell" type="text" value="'+escAttr(p.nombre||'')+'" onchange="editarNombre(\''+cod+'\',this.value)" style="min-width:150px;text-align:left;">'
+        : (p.nombre||''))+'</td>'+
+      '<td>'+(p.categoria||'')+'</td><td>'+pill+'</td>'+
       '<td class="num"><input class="cell" type="number" step="0.01" value="'+(p.costo==null?'':p.costo)+'" onchange="editarCosto(\''+cod+'\',this.value)"></td>'+
       '<td class="num"><input class="cell" type="number" step="0.1" placeholder="cat" value="'+(p.margenOverride==null?'':p.margenOverride)+'" onchange="editarMargen(\''+cod+'\',this.value)"></td>'+
       LISTAS.map(function(l){

@@ -96,7 +96,8 @@
 // ---- Config Supabase (URL + anon key = públicas, van en el cliente) ----
 const SUPABASE_URL = 'https://wnrnnecqauzqvdopyuyr.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inducm5uZWNxYXV6cXZkb3B5dXlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MzgzNTIsImV4cCI6MjEwNDExNDM1Mn0.OXajZCCXn2xcjxEP_qtDECnpaByCsbX1I7eUH0b5jw8';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+// Usar el cliente de sb-api.js (tiene el parche de login por nombre de usuario).
+const sb = window.sbClient || window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const COLORES={2021:'#5B9CF6',2022:'#3DBA6F',2023:'#E8A33D',2024:'#E05252',2025:'#9B6FE0',2026:'#3DC9C9',2027:'#E86FB0',2028:'#6FCF97'};
