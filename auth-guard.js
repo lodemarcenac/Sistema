@@ -20,9 +20,21 @@
       var r=await window.sf('getMiPerfil'); if(!r || !r.ok) return;
       window.PERM={ cargado:true, esAdmin:!!r.esAdmin, permisos:r.permisos||[], locales:r.locales||[], rol:r.rol, nombre:r.nombre||'', usuario:r.usuario||'', email:r.email||'', bootstrap:!!r.bootstrap, puede:mkPuede(r.esAdmin, r.permisos) };
       window.puede=function(k){ return window.PERM.puede(k); };
+      if(guardPagina()) return;   // si no tiene permiso para esta página, redirige (no sigue)
       filtrarNav(); filtrarLocales();
       document.dispatchEvent(new Event('perm-listo'));
     }catch(e){ /* ante cualquier error no bloqueamos el uso */ }
+  }
+  // Si el usuario no tiene permiso para el módulo de ESTA página, lo manda a la
+  // primera que sí pueda ver (ej. un vendedor que cae en el Tablero -> Ventas).
+  function guardPagina(){
+    if(!window.PERM.cargado || window.PERM.esAdmin || window.PERM.bootstrap) return false;
+    var here=(location.pathname.split('/').pop()||'index.html').toLowerCase();
+    var mod=NAVMAP[here];
+    if(!mod || window.PERM.puede(mod)) return false;   // página sin módulo, o permitida
+    var orden=['ventas.html','caja.html','index.html','productos.html','clientes.html','stock.html','compras.html','remitos.html','cuentas.html','conciliacion.html','reportes.html','configuracion.html','usuarios.html'];
+    for(var i=0;i<orden.length;i++){ var m=NAVMAP[orden[i]]; if(m && orden[i]!==here && window.PERM.puede(m)){ location.replace(orden[i]); return true; } }
+    return false;   // no tiene ninguna página permitida: no redirige (evita loop)
   }
   function filtrarLocales(){
     if(!window.PERM.cargado || window.PERM.esAdmin) return;

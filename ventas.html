@@ -42,6 +42,8 @@
   /* Cliente destacado cuando NO es consumidor final */
   #cli-card.cc{background:linear-gradient(90deg,#fff6e6,#fffdf7);border-color:#e7c66b;}
   #cli-card.cc .cli-nom{color:#8a5a00;font-weight:700;}
+  /* Cliente ≠ Consumidor final: la barra de arriba cambia a ámbar (muy visible) */
+  body.cliente-activo header{ background:linear-gradient(100deg,#b45309,#d97706,#f59e0b)!important; }
   .cli-nom{font-size:var(--fs-lg);font-weight:600;margin-bottom:2px;}
   .cli-saldo{font-size:var(--fs-sm);font-weight:700;margin-top:6px;}
   .cli-saldo.debe{color:var(--bad);} .cli-saldo.favor{color:var(--good);} .cli-saldo.cero{color:var(--muted);}
@@ -565,6 +567,7 @@ function setConsumidorFinal(nombreLibre){
 }
 function renderCliente(){
   var card=document.getElementById('cli-card'), nom=document.getElementById('cli-nom'), info=document.getElementById('cli-info'), saldo=document.getElementById('cli-saldo');
+  document.body.classList.toggle('cliente-activo', !clienteActual.esCF);
   if(clienteActual.esCF){
     card.classList.remove('cc'); nom.textContent='Consumidor final'; info.textContent='Lista: '+baseName; saldo.hidden=true;
   } else {
@@ -804,6 +807,15 @@ async function editarVentaUI(id){
   carrito=[];
   var noCargados=0;
   (det.detalle||[]).forEach(function(it){
+    var cod=String(it.codigo||'');
+    if(cod.indexOf('COMBO:')===0){   // línea de combo cerrado → recargar el combo
+      var cid=Number(cod.split(':')[1]);
+      var c=COMBOS_CERR.find(function(x){ return x.id===cid; });
+      if(c){ var comps=(c.componentes||[]).map(function(k){ return { codigo:k.codigo, tipo:(k.tipoProd||'pesable'), cantidad:Number(k.minimo)||0, peso_unit:(k.pesoUnitario===''||k.pesoUnitario==null?0:Number(k.pesoUnitario)) }; });
+        carrito.push({ esCombo:true, comboId:cid, nombre:c.nombre, precio:Number(c.precioCerrado)||0, descPct:0, componentes:comps }); }
+      else { noCargados++; }
+      return;
+    }
     if(!it.codigo || !PRODS[it.codigo]){ noCargados++; return; }
     var opts={};
     if(it.peso!=null && Number(it.peso)>0) opts.peso=Number(it.peso);
