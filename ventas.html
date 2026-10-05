@@ -780,14 +780,43 @@ async function cargarHistorial(){
 function renderHistList(vs){
   var tb=document.getElementById('h-tbody');
   if(!vs.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted)">Sin ventas.</td></tr>'; return; }
+  var hoyStr=new Date().toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'});
   tb.innerHTML=vs.map(function(v){
     var fh=new Date(v.fecha).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
     var anul=(v.estado==='anulada');
+    var esHoy=(new Date(v.fecha).toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'})===hoyStr);
     return '<tr'+(anul?' style="opacity:.5;"':'')+'><td>'+v.comprobante+(anul?' <span class="badge-of" style="background:#fbeaea;color:var(--bad)">ANULADA</span>':'')+'</td>'+
       '<td>'+fh+'</td><td>'+(v.cliente||'')+'</td><td class="num">'+fmt$(v.total)+'</td><td>'+(v.formaPago||'')+'</td>'+
       '<td style="white-space:nowrap;"><button class="mini-btn" onclick="reimprimirVenta('+v.id+')">🖨️</button>'+
+      (anul||!esHoy?'':'<button class="mini-btn" title="Editar: anula y recarga al carrito para corregir (incl. forma de pago)" onclick="editarVentaUI('+v.id+')">✎ Editar</button>')+
       (anul?'':'<button class="x-btn" title="Anular venta" onclick="anularVentaUI('+v.id+')">✕</button>')+'</td></tr>';
   }).join('');
+}
+async function editarVentaUI(id){
+  if(window.PERM && window.PERM.cargado && !window.PERM.puede('ventas.anular')){ toast('No tenés permiso para anular/editar ventas','error'); return; }
+  if(!confirm('Editar venta del día:\n\nSe ANULA la venta original (vuelve el stock) y se cargan sus productos al carrito para que la corrijas (cantidades, precios, descuentos, cliente o forma de pago) y la cobres de nuevo.\n\n¿Seguir?')) return;
+  var det=await window.sf('getVentaDetalle&id='+id);
+  if(!det.ok){ toast('Error: '+det.error,'error'); return; }
+  var r=await window.sp('anularVenta',{id:id});
+  if(!r.ok && /AUTORIZACION_REQUERIDA/.test(r.error||'')){ toast('No se puede editar una venta de un día anterior','error'); return; }
+  if(!r.ok){ toast('Error anulando: '+(r.error||'?'),'error'); return; }
+  // Recargar el carrito con los productos de la venta anulada
+  carrito=[];
+  var noCargados=0;
+  (det.detalle||[]).forEach(function(it){
+    if(!it.codigo || !PRODS[it.codigo]){ noCargados++; return; }
+    var opts={};
+    if(it.peso!=null && Number(it.peso)>0) opts.peso=Number(it.peso);
+    if(it.cantidad!=null) opts.cantidad=Number(it.cantidad);
+    agregar(it.codigo, opts);
+    var idx=carrito.length-1; if(carrito[idx]) carrito[idx].descPct=Number(it.descuento_pct)||0;
+  });
+  var dg=document.getElementById('desc'); if(dg) dg.value=Number(det.venta&&det.venta.descuento_pct)||0;
+  if(det.venta && det.venta.cliente_id){ try{ await elegirCliente(det.venta.cliente_id); }catch(e){} }
+  render();
+  document.getElementById('ov-hist').hidden=true;
+  toast('Venta anulada — corregí lo que haga falta y cobrá de nuevo'+(noCargados?(' ('+noCargados+' ítem/s no se pudieron recargar)'):''));
+  var sc=document.getElementById('scan'); if(sc) sc.focus();
 }
 async function reimprimirVenta(id){
   var r=await window.sf('getVentaDetalle&id='+id);
