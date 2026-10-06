@@ -78,6 +78,16 @@
           </div>
           <div class="tot-row" style="margin-top:8px;"><span>Diferencia (contado − esperado)</span><span id="ci-dif" class="dif">$0</span></div>
           <div id="ci-aviso" class="muted" style="font-size:.8rem;"></div>
+
+          <hr style="border:none;border-top:1px solid var(--line);margin:12px 0;">
+          <div class="muted" style="font-weight:600;margin-bottom:4px;">Otros medios del turno — control con el posnet / Clover</div>
+          <div id="ca-medios" style="margin-bottom:4px;"></div>
+          <div class="tot-row"><span><b>Posnet (tarjeta + QR) según el sistema</b></span><span id="ca-posnet">$0</span></div>
+          <div style="margin-top:6px;"><label style="font-size:.8rem;color:var(--muted);">Total informado por el posnet (opcional, para cotejar):</label>
+            <input id="ci-posnet" type="number" step="0.01" oninput="calcCierre()" style="width:150px;margin-left:6px;padding:5px 8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);"></div>
+          <div class="tot-row"><span>Diferencia posnet (informado − sistema)</span><span id="ci-posnet-dif" class="dif">$0</span></div>
+          <div class="tot-row big" style="margin-top:8px;"><span>Total vendido del turno</span><span id="ca-total-turno">$0</span></div>
+
           <div style="margin-top:10px;"><button class="btn" onclick="cerrarCajaUI()">Cerrar caja</button></div>
         </div>
       </div>
@@ -149,8 +159,17 @@ async function cargarCaja(){
   document.getElementById('ca-pagos').textContent='−'+fmt$(d.pagos_prov_ef);
   document.getElementById('ca-esperado').textContent=fmt$(d.esperado);
   cajaActual.esperado=Number(d.esperado)||0;
-  document.getElementById('ci-contado').value=''; document.getElementById('ci-queda').value=''; document.getElementById('ci-reserva').value=''; calcCierre();
+  // Medios del turno (control posnet/Clover) + total del turno
+  var porMedio=d.por_medio||[]; var posnet=0, totalTurno=0;
+  var rows=porMedio.map(function(x){ var m=x.metodo||'', mo=Number(x.monto)||0; totalTurno+=mo; if(esPosnet(m)) posnet+=mo;
+    return '<div class="tot-row"><span>'+m+'</span><span>'+fmt$(mo)+'</span></div>'; }).join('');
+  document.getElementById('ca-medios').innerHTML=rows || '<div class="muted" style="font-size:.8rem;">Sin ventas en el turno.</div>';
+  document.getElementById('ca-posnet').textContent=fmt$(posnet);
+  document.getElementById('ca-total-turno').textContent=fmt$(totalTurno);
+  cajaActual.posnet=posnet;
+  document.getElementById('ci-contado').value=''; document.getElementById('ci-queda').value=''; document.getElementById('ci-reserva').value=''; document.getElementById('ci-posnet').value=''; calcCierre();
 }
+function esPosnet(m){ m=(m||'').toLowerCase(); return /tarj|cr[eé]d|d[eé]b|posnet|clover|visa|master|qr|credit|debit|prepaid/.test(m); }
 function calcCierre(){
   var esp=cajaActual?cajaActual.esperado:0;
   var contado=Number(document.getElementById('ci-contado').value)||0;
@@ -162,6 +181,13 @@ function calcCierre(){
   var av=document.getElementById('ci-aviso');
   if(contado>0 && Math.abs(reparto-contado)>0.5){ av.textContent='⚠️ Queda ('+fmt$(queda)+') + Reserva ('+fmt$(reserva)+') = '+fmt$(reparto)+', no coincide con lo contado ('+fmt$(contado)+').'; }
   else { av.textContent=''; }
+  // Control posnet (informado vs sistema)
+  var posSis=cajaActual?(cajaActual.posnet||0):0;
+  var inpPos=document.getElementById('ci-posnet'); var pd=document.getElementById('ci-posnet-dif');
+  if(inpPos && pd){
+    if(inpPos.value===''){ pd.textContent='—'; pd.className='dif'; }
+    else { var dp=+((Number(inpPos.value)||0)-posSis).toFixed(2); pd.textContent=(dp>=0?'+':'')+fmt$(dp); pd.className='dif '+(Math.abs(dp)<0.5?'ok':'bad'); }
+  }
 }
 async function abrirCajaUI(){
   var r=await window.sp('abrirCaja',{ sucursal:sucActual, cajero:document.getElementById('ab-cajero').value.trim(), apertura:document.getElementById('ab-monto').value });
