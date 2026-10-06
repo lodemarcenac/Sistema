@@ -70,25 +70,22 @@
           <div class="tot-row"><span>− Gastos en efectivo (caja)</span><span id="ca-gastos">$0</span></div>
           <div class="tot-row"><span>− Pagos a proveedor efectivo (caja)</span><span id="ca-pagos">$0</span></div>
           <div class="tot-row big"><span>Efectivo esperado</span><span id="ca-esperado">$0</span></div>
+          <div class="tot-row big"><span>Esperado de cobro con Clover (tarjeta / QR)</span><span id="ca-posnet">$0</span></div>
+
           <hr style="border:none;border-top:1px solid var(--line);margin:12px 0;">
+          <div class="muted" style="font-weight:600;margin-bottom:4px;">A completar para el cierre</div>
           <div class="abm-nueva">
-            <div><label>Efectivo contado</label><input id="ci-contado" type="number" step="0.01" oninput="calcCierre()"></div>
-            <div><label>Queda en caja</label><input id="ci-queda" type="number" step="0.01" oninput="calcCierre()"></div>
-            <div><label>Va a la reserva</label><input id="ci-reserva" type="number" step="0.01" oninput="calcCierre()"></div>
+            <div><label>Caja chica (efectivo para operar mañana)</label><input id="ci-queda" type="number" step="0.01" oninput="calcCierre()"></div>
+            <div><label>Caja guardada (efectivo guardado / a retirar)</label><input id="ci-reserva" type="number" step="0.01" oninput="calcCierre()"></div>
           </div>
-          <div class="tot-row" style="margin-top:8px;"><span>Diferencia (contado − esperado)</span><span id="ci-dif" class="dif">$0</span></div>
-          <div id="ci-aviso" class="muted" style="font-size:.8rem;"></div>
+          <div class="tot-row big" style="margin-top:6px;"><span>Caja total (chica + guardada)</span><span id="ci-cajatotal">$0</span></div>
+          <div class="tot-row"><span>Efectivo — contra lo esperado</span><span id="ci-dif" class="dif">—</span></div>
 
-          <hr style="border:none;border-top:1px solid var(--line);margin:12px 0;">
-          <div class="muted" style="font-weight:600;margin-bottom:4px;">Otros medios del turno — control con el posnet / Clover</div>
-          <div id="ca-medios" style="margin-bottom:4px;"></div>
-          <div class="tot-row"><span><b>Posnet (tarjeta + QR) según el sistema</b></span><span id="ca-posnet">$0</span></div>
-          <div style="margin-top:6px;"><label style="font-size:.8rem;color:var(--muted);">Total informado por el posnet (opcional, para cotejar):</label>
-            <input id="ci-posnet" type="number" step="0.01" oninput="calcCierre()" style="width:150px;margin-left:6px;padding:5px 8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);"></div>
-          <div class="tot-row"><span>Diferencia posnet (informado − sistema)</span><span id="ci-posnet-dif" class="dif">$0</span></div>
-          <div class="tot-row big" style="margin-top:8px;"><span>Total vendido del turno</span><span id="ca-total-turno">$0</span></div>
+          <div style="margin-top:10px;"><label>Cierre de la terminal POS (total tarjeta / QR según el lote)</label>
+            <input id="ci-posnet" type="number" step="0.01" oninput="calcCierre()" style="width:160px;margin-left:6px;padding:5px 8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);"></div>
+          <div class="tot-row"><span>Clover — contra lo esperado</span><span id="ci-posnet-dif" class="dif">—</span></div>
 
-          <div style="margin-top:10px;"><button class="btn" onclick="cerrarCajaUI()">Cerrar caja</button></div>
+          <div style="margin-top:12px;"><button class="btn" onclick="cerrarCajaUI()">Cerrar caja</button></div>
         </div>
       </div>
 
@@ -159,35 +156,31 @@ async function cargarCaja(){
   document.getElementById('ca-pagos').textContent='−'+fmt$(d.pagos_prov_ef);
   document.getElementById('ca-esperado').textContent=fmt$(d.esperado);
   cajaActual.esperado=Number(d.esperado)||0;
-  // Medios del turno (control posnet/Clover) + total del turno
-  var porMedio=d.por_medio||[]; var posnet=0, totalTurno=0;
-  var rows=porMedio.map(function(x){ var m=x.metodo||'', mo=Number(x.monto)||0; totalTurno+=mo; if(esPosnet(m)) posnet+=mo;
-    return '<div class="tot-row"><span>'+m+'</span><span>'+fmt$(mo)+'</span></div>'; }).join('');
-  document.getElementById('ca-medios').innerHTML=rows || '<div class="muted" style="font-size:.8rem;">Sin ventas en el turno.</div>';
-  document.getElementById('ca-posnet').textContent=fmt$(posnet);
-  document.getElementById('ca-total-turno').textContent=fmt$(totalTurno);
-  cajaActual.posnet=posnet;
-  document.getElementById('ci-contado').value=''; document.getElementById('ci-queda').value=''; document.getElementById('ci-reserva').value=''; document.getElementById('ci-posnet').value=''; calcCierre();
+  // Esperado de cobro con Clover (tarjeta + QR) según lo registrado en las ventas
+  var porMedio=d.por_medio||[]; var posnet=0;
+  porMedio.forEach(function(x){ if(esPosnet(x.metodo)) posnet+=Number(x.monto)||0; });
+  cajaActual.posnet=+posnet.toFixed(2);
+  document.getElementById('ca-posnet').textContent=fmt$(cajaActual.posnet);
+  document.getElementById('ci-queda').value=''; document.getElementById('ci-reserva').value=''; document.getElementById('ci-posnet').value=''; calcCierre();
 }
 function esPosnet(m){ m=(m||'').toLowerCase(); return /tarj|cr[eé]d|d[eé]b|posnet|clover|visa|master|qr|credit|debit|prepaid/.test(m); }
+function pintarDif(el, dif, hayDato){
+  if(!el) return;
+  if(!hayDato){ el.textContent='—'; el.className='dif'; return; }
+  dif=+Number(dif).toFixed(2);
+  if(dif>0.5){ el.textContent='Sobra '+fmt$(dif); el.className='dif ok'; }
+  else if(dif<-0.5){ el.textContent='Falta '+fmt$(Math.abs(dif)); el.className='dif bad'; }
+  else { el.textContent='OK (cuadra)'; el.className='dif ok'; }
+}
 function calcCierre(){
-  var esp=cajaActual?cajaActual.esperado:0;
-  var contado=Number(document.getElementById('ci-contado').value)||0;
-  var queda=Number(document.getElementById('ci-queda').value)||0;
-  var reserva=Number(document.getElementById('ci-reserva').value)||0;
-  var dif=+(contado-esp).toFixed(2);
-  var el=document.getElementById('ci-dif'); el.textContent=(dif>=0?'+':'')+fmt$(dif); el.className='dif '+(Math.abs(dif)<0.5?'ok':'bad');
-  var reparto=+(queda+reserva).toFixed(2);
-  var av=document.getElementById('ci-aviso');
-  if(contado>0 && Math.abs(reparto-contado)>0.5){ av.textContent='⚠️ Queda ('+fmt$(queda)+') + Reserva ('+fmt$(reserva)+') = '+fmt$(reparto)+', no coincide con lo contado ('+fmt$(contado)+').'; }
-  else { av.textContent=''; }
-  // Control posnet (informado vs sistema)
-  var posSis=cajaActual?(cajaActual.posnet||0):0;
-  var inpPos=document.getElementById('ci-posnet'); var pd=document.getElementById('ci-posnet-dif');
-  if(inpPos && pd){
-    if(inpPos.value===''){ pd.textContent='—'; pd.className='dif'; }
-    else { var dp=+((Number(inpPos.value)||0)-posSis).toFixed(2); pd.textContent=(dp>=0?'+':'')+fmt$(dp); pd.className='dif '+(Math.abs(dp)<0.5?'ok':'bad'); }
-  }
+  var espEf=cajaActual?(cajaActual.esperado||0):0;
+  var chicaStr=document.getElementById('ci-queda').value, guardStr=document.getElementById('ci-reserva').value;
+  var chica=Number(chicaStr)||0, guardada=Number(guardStr)||0;
+  var cajaTotal=+(chica+guardada).toFixed(2);
+  document.getElementById('ci-cajatotal').textContent=fmt$(cajaTotal);
+  pintarDif(document.getElementById('ci-dif'), cajaTotal-espEf, (chicaStr!=='' || guardStr!==''));
+  var inpPos=document.getElementById('ci-posnet'); var espPos=cajaActual?(cajaActual.posnet||0):0;
+  pintarDif(document.getElementById('ci-posnet-dif'), (Number(inpPos.value)||0)-espPos, inpPos.value!=='');
 }
 async function abrirCajaUI(){
   var r=await window.sp('abrirCaja',{ sucursal:sucActual, cajero:document.getElementById('ab-cajero').value.trim(), apertura:document.getElementById('ab-monto').value });
@@ -196,11 +189,11 @@ async function abrirCajaUI(){
   document.getElementById('ab-cajero').value=(window.PERM&&(window.PERM.nombre||window.PERM.usuario||window.PERM.email))||''; document.getElementById('ab-monto').value='0'; cargarCaja();
 }
 async function cerrarCajaUI(){
-  var contado=document.getElementById('ci-contado').value;
-  if(contado===''){ toast('Poné el efectivo contado','error'); return; }
-  var queda=Number(document.getElementById('ci-queda').value)||0, reserva=Number(document.getElementById('ci-reserva').value)||0;
-  if(!confirm('¿Cerrar la caja del local? Es la caja COMPARTIDA del local: si hay otra PC vendiendo, va a quedar sin caja abierta.\n\nContado '+fmt$(contado)+' → queda '+fmt$(queda)+' en caja y '+fmt$(reserva)+' a la reserva.')) return;
-  var r=await window.sp('cerrarCaja',{ id:cajaActual.id, contado:contado, queda:queda, reserva:reserva });
+  var chicaStr=document.getElementById('ci-queda').value, guardStr=document.getElementById('ci-reserva').value;
+  if(chicaStr==='' && guardStr===''){ toast('Completá la caja chica y la caja guardada','error'); return; }
+  var chica=Number(chicaStr)||0, guardada=Number(guardStr)||0; var cajaTotal=+(chica+guardada).toFixed(2);
+  if(!confirm('¿Cerrar la caja del local? (es la caja COMPARTIDA; si hay otra PC vendiendo, queda sin caja abierta)\n\nCaja chica (mañana): '+fmt$(chica)+'\nCaja guardada (a retirar): '+fmt$(guardada)+'\nCaja total: '+fmt$(cajaTotal))) return;
+  var r=await window.sp('cerrarCaja',{ id:cajaActual.id, contado:cajaTotal, queda:chica, reserva:guardada });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   toast('Caja cerrada — diferencia '+fmt$(r.diferencia)); cargarTodo();
 }
