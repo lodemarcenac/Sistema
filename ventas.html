@@ -50,15 +50,22 @@
   .tot-row{display:flex;justify-content:space-between;align-items:baseline;font-size:var(--fs-sm);color:var(--ink-soft);margin:3px 0;}
   .tot-row.big{font-size:var(--fs-2xl);font-weight:700;color:var(--brand);margin-top:8px;border-top:1px solid var(--line);padding-top:8px;}
   /* Formas de pago como botones/renglones */
-  .pm{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
-  .pm-b{flex:1;text-align:left;padding:9px 12px;border:1.5px solid var(--border-inp);background:#fff;border-radius:var(--radius-sm);font-weight:600;font-size:var(--fs-sm);cursor:pointer;font-family:inherit;color:var(--ink-soft);}
+  .pm{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
+  .pm-b{flex:1;text-align:left;padding:5px 9px;border:1.5px solid var(--border-inp);background:#fff;border-radius:var(--radius-sm);font-weight:600;font-size:var(--fs-xs);cursor:pointer;font-family:inherit;color:var(--ink-soft);}
   .pm-b.on{border-color:var(--brand);background:var(--brand-soft);color:var(--brand);}
-  .pm input{width:104px;padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);text-align:right;font-family:inherit;font-size:var(--fs-base);}
-  .pm .pm-amt{width:104px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:var(--brand);font-size:var(--fs-base);}
-  .falt{font-size:var(--fs-sm);margin:6px 0 10px;font-weight:600;}
+  .pm input{width:90px;padding:4px 6px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);text-align:right;font-family:inherit;font-size:var(--fs-sm);}
+  .pm .pm-amt{width:90px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:var(--brand);font-size:var(--fs-sm);}
+  .falt{font-size:var(--fs-sm);margin:4px 0 0;font-weight:600;}
   .falt.ok{color:var(--good);} .falt.bad{color:var(--bad);}
   .btn-cobrar{width:100%;padding:14px;background:var(--good);color:#fff;border:none;border-radius:var(--radius-sm);font-weight:700;font-size:var(--fs-lg);cursor:pointer;font-family:inherit;}
   .btn-cobrar:disabled{opacity:.5;cursor:default;}
+  /* Cliente arriba + barra inferior TOTAL/Cobrar (todo en una pantalla) */
+  .cli-bar{ flex:0 0 auto; }
+  .pay-bar{ flex:0 0 auto; display:flex; align-items:center; gap:14px; margin-top:10px; padding:7px 14px; background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); flex-wrap:wrap; }
+  .pay-total{ font-size:var(--fs-base); font-weight:700; color:var(--ink-soft); white-space:nowrap; }
+  .pay-total b{ font-size:var(--fs-xl); color:var(--brand); margin-left:6px; }
+  .pay-bar .falt{ margin:0; flex:1 1 auto; text-align:right; }
+  .pay-bar .btn-cobrar{ width:auto; min-width:200px; padding:9px 26px; font-size:var(--fs-base); }
   .ov{position:fixed;inset:0;background:rgba(15,25,45,.45);display:flex;align-items:center;justify-content:center;z-index:150;padding:16px;}
   .ov .box{background:#fff;border-radius:14px;padding:22px;max-width:420px;width:100%;box-shadow:var(--shadow-pop);}
   .ov h3{font-size:var(--fs-xl);margin-bottom:10px;}
@@ -165,16 +172,14 @@
           <div class="card">
             <label class="mini">Forma de pago</label>
             <div id="pagos"></div>
-            <div class="falt" id="falt"></div>
-          </div>
-        </div>
-        <div class="side-fixed">
-          <div class="card" style="margin-bottom:0;">
-            <div class="tot-row big"><span>TOTAL</span><span id="t-total">$0</span></div>
-            <button class="btn-cobrar" id="btn-cobrar" onclick="cobrar()" style="margin-top:8px;">Cobrar</button>
           </div>
         </div>
       </div>
+    </div>
+    <div class="pay-bar">
+      <div class="pay-total">TOTAL <b id="t-total">$0</b></div>
+      <div class="falt" id="falt"></div>
+      <button class="btn-cobrar" id="btn-cobrar" onclick="cobrar()">Cobrar</button>
     </div>
   </main>
 </div>
