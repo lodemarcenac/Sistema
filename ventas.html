@@ -124,6 +124,18 @@
   <main>
     <div id="off-banner" hidden style="background:#c2410c;color:#fff;border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-weight:700;font-size:var(--fs-sm);text-align:center;letter-spacing:.02em;"></div>
     <div id="caja-banner" hidden style="background:#fdf0d5;border:1px solid #e7c66b;color:#7a5b00;border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:var(--fs-sm);"></div>
+    <div class="card cli-bar" id="cli-card" style="display:flex;align-items:center;gap:12px;padding:8px 12px;margin-bottom:12px;flex-wrap:wrap;">
+      <label class="mini" style="margin:0;">Cliente</label>
+      <div style="position:relative;flex:1 1 220px;max-width:300px;">
+        <input id="cli" class="cli-in" placeholder="Consumidor final" autocomplete="off" oninput="onCliInput()" style="margin:0;">
+        <div id="cli-sug" class="ac" hidden></div>
+      </div>
+      <div style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span class="cli-nom" id="cli-nom">Consumidor final</span>
+        <span class="muted" id="cli-info">Lista: Minorista</span>
+        <span class="cli-saldo" id="cli-saldo" hidden></span>
+      </div>
+    </div>
     <div class="grid">
       <div class="col-main">
         <div class="scan">
@@ -144,16 +156,6 @@
 
       <div class="side">
         <div class="side-scroll">
-          <div class="card" id="cli-card">
-            <label class="mini">Cliente</label>
-            <div style="position:relative;">
-              <input id="cli" class="cli-in" placeholder="Consumidor final" autocomplete="off" oninput="onCliInput()">
-              <div id="cli-sug" class="ac" hidden></div>
-            </div>
-            <div class="cli-nom" id="cli-nom" style="margin-top:8px;">Consumidor final</div>
-            <div class="muted" id="cli-info">Lista: Minorista</div>
-            <div class="cli-saldo" id="cli-saldo" hidden></div>
-          </div>
           <div class="card">
             <div class="tot-row"><span>Bruto</span><span id="t-bruto">$0</span></div>
             <div class="tot-row"><span>Descuento general
