@@ -258,9 +258,10 @@ var COMPRA_ID=null, COMPRA_TOTAL_FC=0;
 // Forma de pago de la compra: Cuenta corriente => todo a cuenta; otra => pagada (muestra sub-selector de caja si es efectivo).
 function onFormaCompra(){ toggleCaja('c-fp','c-caja-wrap'); }
 
-// Solo quien tenga el permiso "Editar costos" (productos.editar_costo) puede cambiar el costo.
-function puedeCosto(){ return !(window.PERM && window.PERM.cargado) || window.PERM.puede('productos.editar_costo'); }
-function aplicarPermCosto(){ var cu=document.getElementById('ci-cu'); if(!cu) return; var ro=!puedeCosto(); cu.readOnly=ro; cu.style.background=ro?'#f2f4f8':''; cu.title=ro?'Solo un administrador (permiso «Editar costos») puede cambiar el costo':''; }
+// Solo quien tenga el permiso "Editar costo en compras" (compras.editar_costo) puede cambiar el costo.
+// Si no lo tiene, el campo SE MUESTRA igual (precargado con el último costo guardado) pero de solo lectura.
+function puedeCosto(){ return !(window.PERM && window.PERM.cargado) || window.PERM.puede('compras.editar_costo'); }
+function aplicarPermCosto(){ var cu=document.getElementById('ci-cu'); if(!cu) return; var ro=!puedeCosto(); cu.readOnly=ro; cu.style.background=ro?'#f2f4f8':''; cu.title=ro?'No tenés permiso para editar el costo en compras (se usa el último costo guardado)':''; }
 document.addEventListener('perm-listo', aplicarPermCosto);
 // Al elegir un producto en la fila de carga, precarga su último costo conocido.
 function ciProd(input){ var cod=(input.value||'').trim(); if(PRODS[cod] && PRODS[cod].costo!=null){ document.getElementById('ci-cu').value=PRODS[cod].costo; } }

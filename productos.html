@@ -221,12 +221,15 @@ async function iniciar(){
   if(!res.ok){ document.getElementById('resumen').textContent='Error: '+res.error; return; }
   PRODS = res.productos||{};
   if(!LISTAS.length){ var setL={}; Object.keys(PRODS).forEach(function(cod){ Object.keys(PRODS[cod].precio||{}).forEach(function(l){ setL[l]=true; }); }); LISTAS=Object.keys(setL).sort(); }
+  var dcat = await window.sf('getCategoriasFull'); CATS=(dcat.ok?dcat.categorias:[])||[];   // para que el alta tenga TODAS las categorías (aunque no tengan productos)
   poblarAlta();
   render();
 }
 function toast(msg,tipo){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(tipo?' '+tipo:''); e.textContent=msg; c.appendChild(e); setTimeout(function(){ e.remove(); },2600); }
 function poblarAlta(){
-  var cats=Object.keys(PRODS).map(function(c){return PRODS[c].categoria;}).filter(Boolean);
+  // Categorías: las de la tabla (CATS, aunque no tengan productos) + las que usan los productos.
+  var cats=(CATS||[]).map(function(c){return c.nombre;}).filter(Boolean)
+    .concat(Object.keys(PRODS).map(function(c){return PRODS[c].categoria;}).filter(Boolean));
   cats=[...new Set(cats)].sort();
   document.getElementById('cats-list').innerHTML=cats.map(function(c){ return '<option value="'+c+'">'; }).join('');
   document.getElementById('alta-precios').innerHTML=LISTAS.map(function(l){
@@ -507,7 +510,8 @@ async function crearCategoriaUI(){
   var r=await window.sp('guardarCategoria',{nombre:nom, margen:document.getElementById('nc-margen').value, plusRemito:document.getElementById('nc-plus').value});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   toast('Categoría agregada'); ['nc-nom','nc-margen','nc-plus'].forEach(function(id){document.getElementById(id).value='';});
-  renderCategorias();
+  await renderCategorias();   // refresca CATS
+  poblarAlta();               // y actualiza la lista del alta al toque
 }
 
 // ---- Listas ----
