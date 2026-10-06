@@ -20,10 +20,23 @@
       var r=await window.sf('getMiPerfil'); if(!r || !r.ok) return;
       window.PERM={ cargado:true, esAdmin:!!r.esAdmin, permisos:r.permisos||[], locales:r.locales||[], rol:r.rol, nombre:r.nombre||'', usuario:r.usuario||'', email:r.email||'', bootstrap:!!r.bootstrap, puede:mkPuede(r.esAdmin, r.permisos) };
       window.puede=function(k){ return window.PERM.puede(k); };
+      if(homeRedirect()) return;  // 1ª vez tras loguearse: manda a la pantalla de inicio según el rol
       if(guardPagina()) return;   // si no tiene permiso para esta página, redirige (no sigue)
       filtrarNav(); filtrarLocales();
       document.dispatchEvent(new Event('perm-listo'));
     }catch(e){ /* ante cualquier error no bloqueamos el uso */ }
+  }
+  // Al loguearse (una vez por sesión del navegador), lleva a la pantalla de inicio
+  // según el rol: admin/encargado -> Reportes (Tablero del día); vendedor -> Ventas.
+  function homeRedirect(){
+    try{ if(sessionStorage.getItem('home-ok')) return false; }catch(e){ return false; }
+    if(!window.PERM.cargado) return false;
+    try{ sessionStorage.setItem('home-ok','1'); }catch(e){}
+    var here=(location.pathname.split('/').pop()||'index.html').toLowerCase();
+    var home = (window.PERM.esAdmin || window.PERM.puede('reportes')) ? 'reportes.html'
+             : (window.PERM.puede('ventas') ? 'ventas.html' : null);
+    if(home && home!==here){ location.replace(home); return true; }
+    return false;
   }
   // Si el usuario no tiene permiso para el módulo de ESTA página, lo manda a la
   // primera que sí pueda ver (ej. un vendedor que cae en el Tablero -> Ventas).

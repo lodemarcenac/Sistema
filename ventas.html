@@ -79,12 +79,16 @@
   .col-main .scan{ flex:0 0 auto; }
   .col-main .card.p0{ flex:1 1 auto; min-height:0; display:flex; margin-bottom:0; }
   .col-main .cart{ flex:1 1 auto; min-height:0; overflow:auto; width:100%; }
-  .side{ min-height:0; overflow:auto; padding-right:2px; }
+  .side{ min-height:0; display:flex; flex-direction:column; }
+  .side .side-scroll{ flex:1 1 auto; min-height:0; overflow:auto; padding-right:2px; }
+  .side .side-fixed{ flex:0 0 auto; padding-top:8px; }
   table.cart-t thead th{ position:sticky; top:0; z-index:2; }
   @media(max-width:820px){
     #app{ height:auto; }
     #app > main{ overflow:visible; }
     .col-main, .side{ overflow:visible; }
+    .side{ display:block; }
+    .side .side-scroll{ overflow:visible; }
     .col-main .card.p0{ display:block; }
     .col-main .cart{ overflow:visible; }
   }
@@ -139,28 +143,34 @@
       </div>
 
       <div class="side">
-        <div class="card" id="cli-card">
-          <label class="mini">Cliente</label>
-          <div style="position:relative;">
-            <input id="cli" class="cli-in" placeholder="Consumidor final" autocomplete="off" oninput="onCliInput()">
-            <div id="cli-sug" class="ac" hidden></div>
+        <div class="side-scroll">
+          <div class="card" id="cli-card">
+            <label class="mini">Cliente</label>
+            <div style="position:relative;">
+              <input id="cli" class="cli-in" placeholder="Consumidor final" autocomplete="off" oninput="onCliInput()">
+              <div id="cli-sug" class="ac" hidden></div>
+            </div>
+            <div class="cli-nom" id="cli-nom" style="margin-top:8px;">Consumidor final</div>
+            <div class="muted" id="cli-info">Lista: Minorista</div>
+            <div class="cli-saldo" id="cli-saldo" hidden></div>
           </div>
-          <div class="cli-nom" id="cli-nom" style="margin-top:8px;">Consumidor final</div>
-          <div class="muted" id="cli-info">Lista: Minorista</div>
-          <div class="cli-saldo" id="cli-saldo" hidden></div>
+          <div class="card">
+            <div class="tot-row"><span>Bruto</span><span id="t-bruto">$0</span></div>
+            <div class="tot-row"><span>Descuento general
+              <input id="desc" type="number" step="1" min="0" max="100" value="0" style="width:52px;padding:3px 5px;margin:0 0 0 4px;border:1px solid var(--border-inp);border-radius:5px;" oninput="render()"> %</span>
+              <span id="t-desc">-$0</span></div>
+          </div>
+          <div class="card">
+            <label class="mini">Forma de pago</label>
+            <div id="pagos"></div>
+            <div class="falt" id="falt"></div>
+          </div>
         </div>
-        <div class="card">
-          <div class="tot-row"><span>Bruto</span><span id="t-bruto">$0</span></div>
-          <div class="tot-row"><span>Descuento general
-            <input id="desc" type="number" step="1" min="0" max="100" value="0" style="width:52px;padding:3px 5px;margin:0 0 0 4px;border:1px solid var(--border-inp);border-radius:5px;" oninput="render()"> %</span>
-            <span id="t-desc">-$0</span></div>
-          <div class="tot-row big"><span>TOTAL</span><span id="t-total">$0</span></div>
-        </div>
-        <div class="card">
-          <label class="mini">Forma de pago</label>
-          <div id="pagos"></div>
-          <div class="falt" id="falt"></div>
-          <button class="btn-cobrar" id="btn-cobrar" onclick="cobrar()">Cobrar</button>
+        <div class="side-fixed">
+          <div class="card" style="margin-bottom:0;">
+            <div class="tot-row big"><span>TOTAL</span><span id="t-total">$0</span></div>
+            <button class="btn-cobrar" id="btn-cobrar" onclick="cobrar()" style="margin-top:8px;">Cobrar</button>
+          </div>
         </div>
       </div>
     </div>
@@ -476,7 +486,7 @@ function agregar(cod,opts){
   carrito.push({ cod:cod, nombre:p.nombre||cod, tipo:(p.tipo||'pesable'), categoria:p.categoria||'', marca:p.marca||'', peso:(opts.peso!=null?+Number(opts.peso).toFixed(3):null), cantidad:(opts.cantidad!=null?Number(opts.cantidad):(p.tipo==='unidad'?1:null)), descPct:0 });
   render();
 }
-function editarCant(i,val){ var it=carrito[i]; if(!it || it.esCombo) return; if(it.tipo==='pesable'){ it.peso=(val===''?0:+Number(val).toFixed(3)); } else { it.cantidad=(val===''?1:Number(val)); } render(); }
+function editarCant(i,val){ var it=carrito[i]; if(!it || it.esCombo) return; if(it.tipo==='pesable'){ it.peso=(val===''?0:+Number(val).toFixed(3)); } else { it.cantidad=(val===''?1:Math.max(1,Math.round(Number(val)||1))); } render(); }
 function abrirCombos(){
   var cont=document.getElementById('combos-list');
   cont.innerHTML = COMBOS_CERR.length ? COMBOS_CERR.map(function(c){
@@ -516,7 +526,7 @@ function render(){
       }
       var qcell = it.tipo==='pesable'
         ? '<input class="q" type="number" step="0.001" value="'+(it.peso||0)+'" onchange="editarCant('+i+',this.value)"> kg'
-        : '<input class="q" type="number" step="1" value="'+(it.cantidad||1)+'" onchange="editarCant('+i+',this.value)"> u';
+        : '<input class="q" type="number" step="1" min="1" value="'+(it.cantidad||1)+'" onchange="editarCant('+i+',this.value)"> u';
       var badge = c.paqueteFijo ? '<span class="badge-of badge-fija">📦 fija</span>' : (c.oferta==='combo'?'<span class="badge-of" style="background:#f0e8fb;color:var(--purple)">combo</span>':(c.oferta?'<span class="badge-of">oferta</span>':''));
       var descAttr = c.paqueteFijo ? ' title="La fija es precio cerrado; el descuento igual se aplica sobre el total"' : '';
       return '<tr><td>'+it.nombre+' <span class="cod">('+it.cod+')</span>'+badge+'</td>'+

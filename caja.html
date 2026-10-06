@@ -85,6 +85,10 @@
             <input id="ci-posnet" type="number" step="0.01" oninput="calcCierre()" style="width:160px;margin-left:6px;padding:5px 8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);"></div>
           <div class="tot-row"><span>Clover — contra lo esperado</span><span id="ci-posnet-dif" class="dif">—</span></div>
 
+          <hr style="border:none;border-top:1px solid var(--line);margin:12px 0;">
+          <div class="tot-row big"><span>Diferencia neta (efectivo + Clover)</span><span id="ci-dif-neta" class="dif">—</span></div>
+          <div class="muted" style="font-size:.78rem;margin-top:2px;">Si en un medio sobra y en el otro falta por lo mismo, suele ser un error de método de pago: la neta queda en cero.</div>
+
           <div style="margin-top:12px;"><button class="btn" onclick="cerrarCajaUI()">Cerrar caja</button></div>
         </div>
       </div>
@@ -174,13 +178,17 @@ function pintarDif(el, dif, hayDato){
 }
 function calcCierre(){
   var espEf=cajaActual?(cajaActual.esperado||0):0;
-  var chicaStr=document.getElementById('ci-queda').value, guardStr=document.getElementById('ci-reserva').value;
+  var espPos=cajaActual?(cajaActual.posnet||0):0;
+  var chicaStr=document.getElementById('ci-queda').value, guardStr=document.getElementById('ci-reserva').value, posStr=document.getElementById('ci-posnet').value;
   var chica=Number(chicaStr)||0, guardada=Number(guardStr)||0;
   var cajaTotal=+(chica+guardada).toFixed(2);
   document.getElementById('ci-cajatotal').textContent=fmt$(cajaTotal);
-  pintarDif(document.getElementById('ci-dif'), cajaTotal-espEf, (chicaStr!=='' || guardStr!==''));
-  var inpPos=document.getElementById('ci-posnet'); var espPos=cajaActual?(cajaActual.posnet||0):0;
-  pintarDif(document.getElementById('ci-posnet-dif'), (Number(inpPos.value)||0)-espPos, inpPos.value!=='');
+  var hayCaja=(chicaStr!=='' || guardStr!==''), hayPos=(posStr!=='');
+  var efDif=cajaTotal-espEf;
+  var posDif=hayPos?((Number(posStr)||0)-espPos):0;
+  pintarDif(document.getElementById('ci-dif'), efDif, hayCaja);
+  pintarDif(document.getElementById('ci-posnet-dif'), posDif, hayPos);
+  pintarDif(document.getElementById('ci-dif-neta'), efDif+posDif, (hayCaja||hayPos));
 }
 async function abrirCajaUI(){
   var r=await window.sp('abrirCaja',{ sucursal:sucActual, cajero:document.getElementById('ab-cajero').value.trim(), apertura:document.getElementById('ab-monto').value });
