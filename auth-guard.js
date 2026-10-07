@@ -65,11 +65,16 @@
     if(!window.PERM.cargado || window.PERM.esAdmin) return;
     var locs=window.PERM.locales||[]; if(!locs.length) return;   // sin locales asignados = no se limita
     var sel=document.getElementById('selSuc'); if(!sel) return;
-    var quedan=[];
-    Array.prototype.slice.call(sel.options).forEach(function(o){ if(locs.indexOf(o.value)>=0 || locs.indexOf(o.textContent)>=0) quedan.push(o.value); else o.remove(); });
+    var before=sel.value;   // valor que la página ya tomó en su variable sucActual
+    Array.prototype.slice.call(sel.options).forEach(function(o){ if(!(locs.indexOf(o.value)>=0 || locs.indexOf(o.textContent)>=0)) o.remove(); });
     if(!sel.options.length) return;
-    if(quedan.indexOf(sel.value)<0){ sel.value=sel.options[0].value; try{ sel.dispatchEvent(new Event('change')); }catch(e){} }
+    var vals=Array.prototype.slice.call(sel.options).map(function(o){ return o.value; });
+    if(vals.indexOf(sel.value)<0) sel.value=sel.options[0].value;
     if(sel.options.length===1) sel.disabled=true;
+    // Si el valor efectivo cambió (p.ej. localStorage tenía otro local, o el navegador
+    // auto-seleccionó otra opción al quitar la elegida), sincronizar la página: actualizar
+    // localStorage y disparar 'change' para que sucActual + datos queden en el local correcto.
+    if(sel.value!==before){ try{ localStorage.setItem('pvSucursalPort', sel.value); }catch(e){} try{ sel.dispatchEvent(new Event('change')); }catch(e){} }
   }
   function filtrarNav(){
     document.querySelectorAll('#sidenav .sn-item[data-perm]').forEach(function(a){
@@ -140,7 +145,7 @@
     // Versión de ESTE código (debe coincidir con app/version.json en cada deploy).
     // Se compara contra la version.json del servidor: si difieren, el código que
     // está corriendo quedó viejo (aunque el navegador haya cacheado los archivos).
-    var BUILD='2026-10-07.4';
+    var BUILD='2026-10-07.5';
     function check(){
       fetch('version.json?t='+Date.now(), {cache:'no-store'})
         .then(function(r){ return r.ok?r.json():null; })
