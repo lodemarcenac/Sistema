@@ -163,6 +163,26 @@
       var pg=await sb.from('pagos').select('*').eq('venta_id',id); if(pg.error) throw pg.error;
       return {ok:true, venta:v.data, detalle:d.data||[], pagos:pg.data||[]};
     },
+    // Detalle renglón por renglón (por kg) de todas las ventas de un local entre fechas.
+    // Para exportar. params: sucursal(nombre, opcional=todos), desde, hasta, excluirAnuladas('1').
+    getVentasDetalle: async function(params){
+      params=params||{};
+      var q=sb.from('ventas_detalle').select('nombre,categoria,marca,codigo,peso,precio_kg,precio,cantidad,precio_lista,descuento_pct,venta:ventas!inner(comprobante,fecha,cliente_nombre,forma_pago,estado,sucursal_id)').limit(100000);
+      if(params.sucursal){ var m=await sucIdMap(); var sid=m[params.sucursal]; if(sid) q=q.eq('venta.sucursal_id', sid); }
+      if(params.desde) q=q.gte('venta.fecha', params.desde);
+      if(params.hasta) q=q.lte('venta.fecha', params.hasta+'T23:59:59');
+      if(params.excluirAnuladas==='1') q=q.eq('venta.estado','ok');
+      var r=await q; if(r.error) throw r.error;
+      var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
+      var rows=(r.data||[]).map(function(d){ var v=d.venta||{}; return {
+        fecha:v.fecha, comprobante:v.comprobante, cliente:v.cliente_nombre||'', formaPago:v.forma_pago||'', estado:v.estado||'',
+        local:idToName[v.sucursal_id]||'', categoria:d.categoria||'', codigo:d.codigo||'', producto:d.nombre||'', marca:d.marca||'',
+        pesoKg:(d.peso==null?'':Number(d.peso)), precioKg:(d.precio_kg==null?'':Number(d.precio_kg)),
+        cantidad:(d.cantidad==null?'':Number(d.cantidad)), importe:(d.precio==null?'':Number(d.precio)),
+        descuentoPct:(d.descuento_pct==null?'':Number(d.descuento_pct)) }; });
+      rows.sort(function(a,b){ return new Date(a.fecha)-new Date(b.fecha); });
+      return {ok:true, filas:rows};
+    },
     getRoles: async function(){
       var r=await sb.from('roles').select('id,nombre,activo').order('id'); if(r.error) throw r.error;
       var rp=await sb.from('rol_permisos').select('rol_id,permiso'); var byRol={}; (rp.data||[]).forEach(function(x){ (byRol[x.rol_id]=byRol[x.rol_id]||[]).push(x.permiso); });
@@ -311,8 +331,13 @@
       var r=await sb.rpc('caja_resumen',{ p_caja_id:id }); if(r.error) throw r.error; return {ok:true, resumen:r.data};
     },
     getCajas: async function(params){
-      var m=await sucIdMap(); var q=sb.from('cajas').select('id,sucursal_id,cajero,apertura,abierta_at,cerrada,cerrada_at,esperado,cierre_efectivo,diferencia,a_reserva,queda_caja').order('abierta_at',{ascending:false}).limit(100);
-      if(params&&params.sucursal){ var sid=m[params.sucursal]; if(sid) q=q.eq('sucursal_id',sid); }
+      params=params||{};
+      var m=await sucIdMap(); var q=sb.from('cajas').select('id,sucursal_id,cajero,apertura,abierta_at,cerrada,cerrada_at,esperado,cierre_efectivo,diferencia,a_reserva,queda_caja').order('abierta_at',{ascending:false});
+      if(params.sucursal){ var sid=m[params.sucursal]; if(sid) q=q.eq('sucursal_id',sid); }
+      if(params.desde) q=q.gte('abierta_at', params.desde);
+      if(params.hasta) q=q.lte('abierta_at', params.hasta+'T23:59:59');
+      if(params.soloCerradas==='1') q=q.eq('cerrada', true);
+      q=q.limit(params.desde||params.hasta?5000:100);
       var r=await q; if(r.error) throw r.error;
       var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
       return {ok:true, cajas:(r.data||[]).map(function(c){ return { id:c.id, local:idToName[c.sucursal_id]||'', cajero:c.cajero||'', apertura:Number(c.apertura)||0, abiertaAt:c.abierta_at, cerrada:c.cerrada, cerradaAt:c.cerrada_at, esperado:Number(c.esperado)||0, contado:Number(c.cierre_efectivo)||0, diferencia:Number(c.diferencia)||0, aReserva:Number(c.a_reserva)||0, quedaCaja:Number(c.queda_caja)||0 }; })};

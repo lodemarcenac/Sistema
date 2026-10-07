@@ -78,6 +78,7 @@
       <button class="tab" data-t="pnl" onclick="switchTab('pnl')">💰 P&amp;L por local</button>
       <button class="tab" data-t="rank" onclick="switchTab('rank')">🏆 Rankings</button>
       <button class="tab" data-t="pivot" onclick="switchTab('pivot')">🧊 Explorador</button>
+      <button class="tab" data-t="export" onclick="switchTab('export')">⬇️ Descargas</button>
     </div>
 
     <!-- ======================= TABLERO DEL DÍA ======================= -->
@@ -152,6 +153,30 @@
         <div id="pivot-body"><div class="vacio">Elegí un período y tocá “Ver”.</div></div>
       </div>
     </div>
+
+    <!-- ======================= DESCARGAS ======================= -->
+    <div id="t-export" hidden>
+      <div class="filtros">
+        <div class="field"><label>Desde</label><input type="date" id="ex-desde"></div>
+        <div class="field"><label>Hasta</label><input type="date" id="ex-hasta"></div>
+        <div class="chips" style="padding-bottom:2px;">
+          <span class="chip mini" onclick="periodo('ex','mes')">Este mes</span>
+          <span class="chip mini" onclick="periodo('ex','mesant')">Mes anterior</span>
+          <span class="chip mini" onclick="periodo('ex','anio')">Año</span>
+        </div>
+      </div>
+      <p class="muted" style="margin:2px 0 14px;">Usan el <b>local</b> elegido arriba a la derecha (📍). Si está en <b>“Todos los locales”</b>, el archivo incluye una columna <b>Local</b> con todos.</p>
+      <div class="card">
+        <h3 style="margin:0 0 6px;">🛒 Ventas con detalle (por kg)</h3>
+        <p class="muted" style="margin:0 0 10px;">Un renglón por cada producto vendido: fecha, comprobante, cliente, forma de pago, categoría, producto, <b>peso en kg</b>, precio por kg, cantidad e importe. Incluye las ventas anuladas (columna Estado).</p>
+        <button class="btn" onclick="exportarVentasDet()">⬇️ Descargar ventas detalladas (Excel)</button>
+      </div>
+      <div class="card" style="margin-top:14px;">
+        <h3 style="margin:0 0 6px;">💵 Cierres de caja</h3>
+        <p class="muted" style="margin:0 0 10px;">Un renglón por cada caja del período: fecha, cajero, apertura, efectivo esperado y contado, diferencia, caja chica y caja guardada.</p>
+        <button class="btn" onclick="exportarCierres()">⬇️ Descargar cierres de caja (Excel)</button>
+      </div>
+    </div>
   </main>
 </div>
 
@@ -204,7 +229,7 @@ async function iniciar(){
   // defaults de fechas
   document.getElementById('td-fecha').value=hoyISO();
   WEEK_START=lunes(new Date());
-  periodo('pl','mes',true); periodo('rk','mes',true); periodo('pv','mes',true);
+  periodo('pl','mes',true); periodo('rk','mes',true); periodo('pv','mes',true); periodo('ex','mes',true);
   document.getElementById('sub').textContent='Costeo por último costo · '+new Date().toLocaleDateString('es-AR');
   renderTablero();
 }
@@ -212,7 +237,7 @@ async function iniciar(){
 function switchTab(name){
   TAB=name;
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); });
-  ['dia','pnl','rank','pivot'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); });
+  ['dia','pnl','rank','pivot','export'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); });
   renderActual();
 }
 function renderActual(){ if(TAB==='dia') renderTablero(); else if(TAB==='pnl') renderPnl(); else if(TAB==='rank') renderRank(); else if(TAB==='pivot') renderPivot(); }
@@ -433,6 +458,43 @@ function exportarRank(){
   var aoa=[['#','Código','Producto','Categoría','Kg','Importe','Tickets']];
   RANK_ROWS.forEach(function(r,i){ aoa.push([i+1, r.codigo, r.nombre, r.categoria, r.kg, r.importe, r.tickets]); });
   bajar(aoa,'Ranking','Ranking_'+document.getElementById('rk-desde').value+'_'+document.getElementById('rk-hasta').value+'.xlsx');
+}
+// AAAA-MM-DD HH:MM a partir de un timestamp.
+function fechaHora(s){ if(!s) return ''; var d=new Date(s); if(isNaN(d)) return s; var p=function(n){return (n<10?'0':'')+n;}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes()); }
+// --- Descargas (usan el local del selector 📍 y el período Desde/Hasta de la pestaña) ---
+async function exportarVentasDet(){
+  var suc=sucSel()?sucNombre():'';
+  var desde=document.getElementById('ex-desde').value, hasta=document.getElementById('ex-hasta').value;
+  if(!desde||!hasta){ toast('Elegí Desde y Hasta','error'); return; }
+  toast('Generando ventas… puede tardar unos segundos');
+  try{
+    var r=await window.sf('getVentasDetalle&sucursal='+encodeURIComponent(suc)+'&desde='+desde+'&hasta='+hasta);
+    if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+    var filas=r.filas||[];
+    if(!filas.length){ toast('No hay ventas en ese período','error'); return; }
+    var aoa=[['Fecha','Comprobante','Local','Cliente','Forma de pago','Estado','Categoría','Código','Producto','Marca','Peso (kg)','Precio x kg','Cantidad','Importe','Desc %']];
+    filas.forEach(function(f){ aoa.push([fechaHora(f.fecha), f.comprobante, f.local, f.cliente, f.formaPago, f.estado, f.categoria, f.codigo, f.producto, f.marca, f.pesoKg, f.precioKg, f.cantidad, f.importe, f.descuentoPct]); });
+    var tag=(suc||'TodosLocales').replace(/\s+/g,'');
+    bajar(aoa,'Ventas','Ventas_'+tag+'_'+desde+'_'+hasta+'.xlsx');
+    toast('Listo: '+filas.length+' renglones');
+  }catch(e){ toast('Error: '+(e.message||e),'error'); }
+}
+async function exportarCierres(){
+  var suc=sucSel()?sucNombre():'';
+  var desde=document.getElementById('ex-desde').value, hasta=document.getElementById('ex-hasta').value;
+  if(!desde||!hasta){ toast('Elegí Desde y Hasta','error'); return; }
+  toast('Generando cierres…');
+  try{
+    var r=await window.sf('getCajas&sucursal='+encodeURIComponent(suc)+'&desde='+desde+'&hasta='+hasta);
+    if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+    var cajas=(r.cajas||[]).slice().sort(function(a,b){ return new Date(a.abiertaAt)-new Date(b.abiertaAt); });
+    if(!cajas.length){ toast('No hay cajas en ese período','error'); return; }
+    var aoa=[['Apertura (fecha)','Cierre (fecha)','Local','Cajero','Monto apertura','Efectivo esperado','Efectivo contado','Diferencia','Caja chica','Caja guardada','Estado']];
+    cajas.forEach(function(c){ aoa.push([fechaHora(c.abiertaAt), c.cerradaAt?fechaHora(c.cerradaAt):'', c.local, c.cajero, c.apertura, c.esperado, c.contado, c.diferencia, c.quedaCaja, c.aReserva, c.cerrada?'Cerrada':'Abierta']); });
+    var tag=(suc||'TodosLocales').replace(/\s+/g,'');
+    bajar(aoa,'Cierres','Cierres_'+tag+'_'+desde+'_'+hasta+'.xlsx');
+    toast('Listo: '+cajas.length+' cierres');
+  }catch(e){ toast('Error: '+(e.message||e),'error'); }
 }
 </script>
 </body>
