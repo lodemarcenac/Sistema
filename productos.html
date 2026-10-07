@@ -104,6 +104,7 @@
       <input id="q" placeholder="Buscar por código o nombre..." oninput="render()">
       <label><input type="checkbox" id="soloAct" onchange="render()"> Solo activos</label>
       <label title="Permite editar a mano las listas derivadas (Mayorista/Colaborador). Normalmente se calculan solas desde Minorista."><input type="checkbox" id="unlockDeriv" onchange="render()"> <span id="lockIco">🔒</span> Editar derivadas (admin)</label>
+      <button class="mini-btn" type="button" onclick="exportarProductos()" style="margin-left:auto;" title="Baja un Excel con todos los productos: datos, costo, precios por lista y stock por sucursal.">⬇️ Exportar a Excel</button>
     </div>
     <div class="resumen" id="resumen"></div>
     <div class="card p0"><div class="tblwrap"><table id="tabla"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div></div>
@@ -226,6 +227,46 @@ async function iniciar(){
   render();
 }
 function toast(msg,tipo){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(tipo?' '+tipo:''); e.textContent=msg; c.appendChild(e); setTimeout(function(){ e.remove(); },2600); }
+
+// Exporta TODOS los productos a un .xlsx: datos base, costo + fecha de costo, margen,
+// stock mínimo, activo, un precio por cada lista y el stock de cada sucursal.
+// Usa PRODS (ya cargado con admin=1, incluye inactivos y costos) + getStock.
+async function exportarProductos(){
+  if(typeof XLSX==='undefined'){ toast('No cargó el lector de Excel, probá de nuevo','error'); return; }
+  var cods=Object.keys(PRODS||{});
+  if(!cods.length){ toast('No hay productos para exportar','error'); return; }
+  toast('Generando export…');
+  // Stock por sucursal
+  var stockMap={}, sucSet={};
+  try{
+    var rs=await window.sf('getStock');
+    if(rs && rs.ok){ (rs.stock||[]).forEach(function(x){ if(!stockMap[x.codigo]) stockMap[x.codigo]={}; stockMap[x.codigo][x.local]=x.cantidad; sucSet[x.local]=true; }); }
+  }catch(e){}
+  var sucs=(SUCSNOM||[]).slice();
+  Object.keys(sucSet).forEach(function(s){ if(sucs.indexOf(s)<0) sucs.push(s); });
+  var listas=(LISTAS||[]).slice();
+  // Orden: por categoría y luego nombre
+  cods.sort(function(a,b){ var pa=PRODS[a],pb=PRODS[b];
+    var ca=(pa.categoria||'').toLowerCase(),cb=(pb.categoria||'').toLowerCase(); if(ca!==cb) return ca<cb?-1:1;
+    return (pa.nombre||'').toLowerCase()<(pb.nombre||'').toLowerCase()?-1:1; });
+  var rows=cods.map(function(cod){
+    var p=PRODS[cod];
+    var row={ codigo:cod, nombre:p.nombre||'', marca:p.marca||'', descripcion:p.descripcion||'',
+      categoria:p.categoria||'', tipo:p.tipo||'', costo:(p.costo==null?'':p.costo),
+      fecha_costo:(p.fechas&&p.fechas.costo)||'', margen:(p.margenOverride==null?'':p.margenOverride),
+      stock_minimo:(p.stockMinimo==null?'':p.stockMinimo), activo:(p.activo?'SI':'NO') };
+    listas.forEach(function(l){ row[l]=(p.precio&&p.precio[l]!=null)?p.precio[l]:''; });
+    sucs.forEach(function(s){ row['Stock '+s]=(stockMap[cod]&&stockMap[cod][s]!=null)?stockMap[cod][s]:''; });
+    return row;
+  });
+  var headers=['codigo','nombre','marca','descripcion','categoria','tipo','costo','fecha_costo','margen','stock_minimo','activo']
+    .concat(listas).concat(sucs.map(function(s){ return 'Stock '+s; }));
+  var ws=XLSX.utils.json_to_sheet(rows,{header:headers});
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Productos');
+  var hoy=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,'productos_'+hoy+'.xlsx');
+  toast('Exportados '+rows.length+' productos');
+}
 // Al elegir la categoría, sugiere el próximo código interno = (mayor de ESA categoría) + 1,
 // ignorando los códigos de barras (EAN largos, >=7 dígitos). Garantiza que no se repita.
 // Si la categoría no tiene productos, usa el próximo libre global.
