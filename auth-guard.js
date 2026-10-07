@@ -137,11 +137,14 @@
 
   // --- Auto-actualización: detecta versión nueva publicada y ofrece recargar ---
   (function(){
-    var current=null;
+    // Versión de ESTE código (debe coincidir con app/version.json en cada deploy).
+    // Se compara contra la version.json del servidor: si difieren, el código que
+    // está corriendo quedó viejo (aunque el navegador haya cacheado los archivos).
+    var BUILD='2026-10-07.4';
     function check(){
       fetch('version.json?t='+Date.now(), {cache:'no-store'})
         .then(function(r){ return r.ok?r.json():null; })
-        .then(function(j){ if(!j) return; var v=j.version||j.v; if(current===null){ current=v; return; } if(v && v!==current) banner(); })
+        .then(function(j){ if(!j) return; var v=j.version||j.v; if(v && v!==BUILD) banner(); })
         .catch(function(){});
     }
     function banner(){
