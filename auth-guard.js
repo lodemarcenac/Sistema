@@ -9,22 +9,34 @@
 (function(){
   window.PERM = { cargado:false, esAdmin:false, permisos:[], locales:[], rol:null, puede:function(){ return true; } };
   // Evita el "parpadeo" del login al navegar: si ya hay sesión guardada, oculta el login de entrada.
-  try{ var _chk=function(st){ try{ for(var _i=0;_i<st.length;_i++){ if((st.key(_i)||'').indexOf('-auth-token')>=0) return true; } }catch(e){} return false; }; if(_chk(window.sessionStorage)||_chk(window.localStorage)){ var _st=document.createElement('style'); _st.id='hide-login-flash'; _st.textContent='#login{display:none!important;}'; (document.head||document.documentElement).appendChild(_st); } }catch(e){}
-  function mostrarLogin(){ var st=document.getElementById('hide-login-flash'); if(st) st.remove(); var lg=document.getElementById('login'); if(lg){ lg.hidden=false; lg.style.display=''; } }
+  function _chk(st){ try{ for(var _i=0;_i<st.length;_i++){ if((st.key(_i)||'').indexOf('-auth-token')>=0) return true; } }catch(e){} return false; }
+  var _haySesion=false; try{ _haySesion=_chk(window.sessionStorage)||_chk(window.localStorage); }catch(e){}
+  if(_haySesion){ try{ var _st=document.createElement('style'); _st.id='hide-login-flash'; _st.textContent='#login{display:none!important;}'; (document.head||document.documentElement).appendChild(_st); }catch(e){} }
+  var _selObs=null;
+  // Tapa "Cargando…" mientras se resuelven los permisos → evita ver por un instante
+  // una pantalla que no corresponde (ej. el Tablero a un usuario sin ese permiso).
+  function ocultarContenido(){ if(document.getElementById('auth-cargando')) return; try{ var c=document.createElement('div'); c.id='auth-cargando'; c.style.cssText='position:fixed;inset:0;z-index:99998;background:#fff;display:flex;align-items:center;justify-content:center;color:#8891a3;font:14px system-ui,sans-serif;'; c.textContent='Cargando…'; (document.body||document.documentElement).appendChild(c); setTimeout(mostrarContenido,8000); }catch(e){} }
+  function mostrarContenido(){ var c=document.getElementById('auth-cargando'); if(c&&c.parentNode) c.parentNode.removeChild(c); }
+  function mostrarLogin(){ mostrarContenido(); var st=document.getElementById('hide-login-flash'); if(st) st.remove(); var lg=document.getElementById('login'); if(lg){ lg.hidden=false; lg.style.display=''; } }
   var NAVMAP = { 'index.html':'tableros','reportes.html':'reportes','productos.html':'productos','clientes.html':'clientes','stock.html':'stock','compras.html':'compras','remitos.html':'remitos','cuentas.html':'cuentas','conciliacion.html':'conciliacion','caja.html':'caja','ventas.html':'ventas','configuracion.html':'configuracion','usuarios.html':'usuarios' };
   function mkPuede(esAdmin, permisos){ var set={}; (permisos||[]).forEach(function(p){ set[p]=true; }); return function(k){ return !!(esAdmin || set['*'] || set[k]); }; }
   async function applyGuard(){
     try{
       if(!window.sbClient || !window.sf) return;
-      var s=await window.sbClient.auth.getSession(); if(!(s.data && s.data.session)) return;
-      var r=await window.sf('getMiPerfil'); if(!r || !r.ok) return;
+      if(_haySesion) ocultarContenido();
+      var s=await window.sbClient.auth.getSession(); if(!(s.data && s.data.session)){ mostrarContenido(); return; }
+      ocultarContenido();
+      var r=await window.sf('getMiPerfil'); if(!r || !r.ok){ mostrarContenido(); return; }
       window.PERM={ cargado:true, esAdmin:!!r.esAdmin, permisos:r.permisos||[], locales:r.locales||[], rol:r.rol, nombre:r.nombre||'', usuario:r.usuario||'', email:r.email||'', bootstrap:!!r.bootstrap, puede:mkPuede(r.esAdmin, r.permisos) };
       window.puede=function(k){ return window.PERM.puede(k); };
-      if(homeRedirect()) return;  // 1ª vez tras loguearse: manda a la pantalla de inicio según el rol
+      if(homeRedirect()) return;  // 1ª vez tras loguearse: manda a la pantalla de inicio según el rol (la tapa queda hasta cargar la otra página)
       if(guardPagina()) return;   // si no tiene permiso para esta página, redirige (no sigue)
       filtrarNav(); filtrarLocales();
+      // Re-aplica el filtro del selector de local si la página rearma sus opciones (poblarSuc) después.
+      if(!_selObs){ var _sel=document.getElementById('selSuc'); if(_sel && window.MutationObserver){ _selObs=new MutationObserver(function(){ filtrarLocales(); }); _selObs.observe(_sel,{childList:true}); } }
       document.dispatchEvent(new Event('perm-listo'));
-    }catch(e){ /* ante cualquier error no bloqueamos el uso */ }
+      mostrarContenido();
+    }catch(e){ mostrarContenido(); /* ante cualquier error no bloqueamos el uso */ }
   }
   // Al loguearse (una vez por sesión del navegador), lleva a la pantalla de inicio
   // según el rol: admin/encargado -> Reportes (Tablero del día); vendedor -> Ventas.

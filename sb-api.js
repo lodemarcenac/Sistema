@@ -194,6 +194,7 @@
     },
     getGastos: async function(params){
       var q=sb.from('gastos').select('id,fecha,monto,descripcion,forma_pago,comprobante,sucursal_id,destinatario_id,categoria_gasto_id,proveedor_id,cat:categorias_gasto(nombre,grupo),prov:proveedores(nombre)').order('fecha',{ascending:false});
+      if(params&&params.sucursal){ var m=await sucIdMap(); var sid=m[params.sucursal]; if(sid) q=q.or('sucursal_id.eq.'+sid+',destinatario_id.eq.'+sid); }
       q=q.limit(params&&params.limit?parseInt(params.limit):300);
       var r=await q; if(r.error) throw r.error;
       return {ok:true, gastos:(r.data||[]).map(function(g){ return { id:g.id, fecha:g.fecha, monto:Number(g.monto)||0, descripcion:g.descripcion||'', formaPago:g.forma_pago||'', comprobante:g.comprobante||'', sucursalId:g.sucursal_id, destinatarioId:g.destinatario_id, categoriaId:g.categoria_gasto_id, proveedorId:g.proveedor_id, categoria:g.cat?g.cat.nombre:'', grupo:g.cat?g.cat.grupo:'', proveedor:g.prov?g.prov.nombre:'' }; })};
@@ -224,9 +225,12 @@
       return {ok:true, movimientos:movs, saldo:saldo};
     },
     getProveedoresDeLocal: async function(params){
-      var m=await sucIdMap(); var sid=params&&params.sucursal?m[params.sucursal]:null; if(!sid) return {ok:true, proveedores:[]};
-      var pl=await sb.from('proveedor_locales').select('proveedor_id').eq('sucursal_id',sid); if(pl.error) throw pl.error;
-      var ids=(pl.data||[]).map(function(x){return x.proveedor_id;}); if(!ids.length) return {ok:true, proveedores:[]};
+      var m=await sucIdMap(); var names=null;
+      if(params){ if(params.sucursales) names=String(params.sucursales).split(',').map(function(s){return s.trim();}).filter(Boolean); else if(params.sucursal) names=[params.sucursal]; }
+      if(!names||!names.length) return {ok:true, proveedores:[]};
+      var sids=names.map(function(n){return m[n];}).filter(function(x){return x!=null;}); if(!sids.length) return {ok:true, proveedores:[]};
+      var pl=await sb.from('proveedor_locales').select('proveedor_id').in('sucursal_id',sids); if(pl.error) throw pl.error;
+      var seen={}, ids=[]; (pl.data||[]).forEach(function(x){ if(!seen[x.proveedor_id]){ seen[x.proveedor_id]=true; ids.push(x.proveedor_id); } }); if(!ids.length) return {ok:true, proveedores:[]};
       var pr=await sb.from('proveedores').select('id,nombre,activo').in('id',ids).order('nombre'); if(pr.error) throw pr.error;
       return {ok:true, proveedores:(pr.data||[]).filter(function(p){return p.activo!==false;}).map(function(p){ return { id:p.id, nombre:p.nombre }; })};
     },

@@ -82,7 +82,10 @@
 <script src="nav.js"></script>
 <script>
 var sb=window.sbClient;
-var PRODS={}, LOCS=[], STK={};   // STK: codigo -> { local: cantidad }
+var PRODS={}, LOCS=[], LOCS_ALL=[], STK={};   // STK: codigo -> { local: cantidad }
+// Se VEN todas las columnas (para pedir/enviar entre locales), pero solo se pueden
+// MODIFICAR las de los locales asignados al usuario.
+function puedeEditarLoc(l){ if(!(window.PERM && window.PERM.cargado)) return true; var locs=window.PERM.locales||[]; if(!locs.length) return true; return locs.indexOf(l)>=0; }
 function fmt(n){ n=Number(n)||0; return (Math.round(n*1000)/1000).toLocaleString('es-AR'); }
 function toast(msg,tipo){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(tipo?' '+tipo:''); e.textContent=msg; c.appendChild(e); setTimeout(function(){ e.remove(); },2600); }
 
@@ -102,11 +105,13 @@ async function iniciar(){
   document.getElementById('login').hidden=true; document.getElementById('app').hidden=false;
   document.getElementById('resumen').textContent='Cargando…';
   var rp=await window.sf('getProductos'); if(!rp.ok){ toast('Error: '+rp.error,'error'); return; } PRODS=rp.productos||{};
-  var rs=await window.sf('getSucursales'); LOCS=(rs.ok?(rs.sucursales||[]).map(function(s){return s.nombre;}):[]);
+  var rs=await window.sf('getSucursales'); LOCS_ALL=(rs.ok?(rs.sucursales||[]).map(function(s){return s.nombre;}):[]); LOCS=LOCS_ALL;
   poblarExpLocs();
   await cargarStock();
   render();
 }
+// Cuando cargan los permisos, re-renderizar para bloquear la edición de locales ajenos.
+document.addEventListener('perm-listo', function(){ render(); });
 async function cargarStock(){
   STK={}; var r=await window.sf('getStock');
   if(r.ok){ (r.stock||[]).forEach(function(x){ STK[x.codigo]=STK[x.codigo]||{}; STK[x.codigo][x.local]=x.cantidad; }); }
@@ -132,7 +137,7 @@ function render(){
   document.getElementById('tbody').innerHTML=codes.map(function(cod){
     var p=PRODS[cod]; var min=p.stockMinimo; var tot=totalDe(cod); var bajo=(min>0 && tot<min);
     return '<tr class="'+(bajo?'bajo':'')+'"><td>'+cod+'</td><td>'+(p.nombre||'')+' <button class="mini-btn" title="Ver movimientos (kardex)" onclick="verKardex(\''+cod+'\')">📋</button></td>'+
-      LOCS.map(function(l){ return '<td class="num stk"><input type="number" step="0.001" value="'+(qtyDe(cod,l)||'')+'" onchange="ajustar(\''+cod+'\',\''+String(l).replace(/'/g,"\\'")+'\',this.value)"></td>'; }).join('')+
+      LOCS.map(function(l){ var ro=!puedeEditarLoc(l); return '<td class="num stk"><input type="number" step="0.001" value="'+(qtyDe(cod,l)||'')+'"'+(ro?' readonly title="Solo lectura: no es un local asignado a tu usuario" style="background:#f2f4f8;color:#8891a3;"':' onchange="ajustar(\''+cod+'\',\''+String(l).replace(/'/g,"\\'")+'\',this.value)"')+'></td>'; }).join('')+
       '<td class="num tot">'+fmt(tot)+'</td><td class="num">'+(min>0?fmt(min):'-')+'</td></tr>';
   }).join('');
 }
@@ -150,6 +155,7 @@ async function verKardex(cod){
   }).join('') : '<tr><td colspan="4" class="muted">Sin movimientos registrados.</td></tr>';
 }
 async function ajustar(cod,loc,val){
+  if(!puedeEditarLoc(loc)){ toast('No podés modificar el stock de un local que no tenés asignado','error'); render(); return; }
   var r=await window.sp('ajustarStock',{codigo:cod, local:loc, cantidad:val, tipo:'ajuste', motivo:'ajuste manual'});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   STK[cod]=STK[cod]||{}; STK[cod][loc]=(val===''?0:Number(val));

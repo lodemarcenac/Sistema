@@ -173,6 +173,7 @@
         <div class="tblwrap"><table class="data"><thead><tr><th>Nombre</th><th>CUIT</th><th>Teléfono</th><th>Email</th><th></th></tr></thead><tbody id="p-tbody"></tbody></table></div>
         <div class="abm-nueva" style="margin-top:12px;">
           <div><label>Nuevo proveedor</label><input id="np-nom" placeholder="Nombre"></div>
+          <div><label>Local / Administrador</label><select id="np-suc"></select></div>
           <div><label>CUIT</label><input id="np-cuit"></div>
           <div><label>Teléfono</label><input id="np-tel"></div>
           <div><label>Email</label><input id="np-email"></div>
@@ -224,11 +225,13 @@ async function iniciar(){
   renderProv();
 }
 function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; }
-function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarProveedoresLocal(); if(!COMPRA_ID){ cargarBorradores(); cargarConfirmadas(); } }
+function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarProveedoresLocal(); cargarGastos(); if(!COMPRA_ID){ cargarBorradores(); cargarConfirmadas(); } }
 async function cargarProveedoresLocal(){
-  var r=await window.sf('getProveedoresDeLocal&sucursal='+encodeURIComponent(sucActual)); PROVS_LOCAL=(r.ok?r.proveedores:[])||[];
-  document.getElementById('c-cuenta').innerHTML = PROVS_LOCAL.length ? ('<option value="">(elegir proveedor)</option>'+PROVS_LOCAL.map(function(p){ return '<option value="'+p.id+'">'+p.nombre+'</option>'; }).join('')) : '<option value="">(este local no tiene proveedores — usá ＋ o Configuración)</option>';
+  // Proveedores de TODAS las sucursales asignadas del usuario (no solo la seleccionada).
+  var r=await window.sf('getProveedoresDeLocal&sucursales='+encodeURIComponent(localesUsuario().join(','))); PROVS_LOCAL=(r.ok?r.proveedores:[])||[];
+  document.getElementById('c-cuenta').innerHTML = PROVS_LOCAL.length ? ('<option value="">(elegir proveedor)</option>'+PROVS_LOCAL.map(function(p){ return '<option value="'+p.id+'">'+p.nombre+'</option>'; }).join('')) : '<option value="">(sin proveedores — usá ＋ o Configuración)</option>';
   document.getElementById('g-prov').innerHTML='<option value="">(sin proveedor)</option>'+PROVS_LOCAL.map(function(p){ return '<option value="'+p.id+'">'+p.nombre+'</option>'; }).join('');
+  poblarProvSuc(); renderProv();
 }
 function poblarSelects(){
   var fp=FORMAS.map(function(f){ var lbl=/cuenta\s*corriente/i.test(f)?(f+' (deuda proveedor)'):f; return '<option value="'+String(f).replace(/"/g,'&quot;')+'">'+lbl+'</option>'; }).join('');
@@ -263,6 +266,7 @@ function onFormaCompra(){ toggleCaja('c-fp','c-caja-wrap'); }
 function puedeCosto(){ return !(window.PERM && window.PERM.cargado) || window.PERM.puede('compras.editar_costo'); }
 function aplicarPermCosto(){ var cu=document.getElementById('ci-cu'); if(!cu) return; var ro=!puedeCosto(); cu.readOnly=ro; cu.style.background=ro?'#f2f4f8':''; cu.title=ro?'No tenés permiso para editar el costo en compras (se usa el último costo guardado)':''; }
 document.addEventListener('perm-listo', aplicarPermCosto);
+document.addEventListener('perm-listo', function(){ cargarProveedoresLocal(); });   // proveedores + np-suc según los locales del usuario
 // Al elegir un producto en la fila de carga, precarga su último costo conocido.
 function ciProd(input){ var cod=(input.value||'').trim(); if(PRODS[cod] && PRODS[cod].costo!=null){ document.getElementById('ci-cu').value=PRODS[cod].costo; } }
 
@@ -387,7 +391,7 @@ async function anularConfirmada(id){
 }
 
 // ---- GASTOS ----
-async function cargarGastos(){ var r=await window.sf('getGastos&limit=300'); GASTOS=(r.ok?r.gastos:[])||[]; renderGastos(); }
+async function cargarGastos(){ var r=await window.sf('getGastos&limit=300&sucursal='+encodeURIComponent(sucActual)); GASTOS=(r.ok?r.gastos:[])||[]; renderGastos(); }
 function renderGastos(){
   var q=(document.getElementById('g-buscar').value||'').trim().toLowerCase();
   var desde=document.getElementById('g-desde').value, hasta=document.getElementById('g-hasta').value;
@@ -520,7 +524,10 @@ async function registrarElabUI(){
 
 // ---- PROVEEDORES ----
 function renderProv(){
-  document.getElementById('p-tbody').innerHTML=PROVS.map(function(p,i){
+  // Solo los proveedores asignados al local actual (no todos los cargados).
+  var ids={}; (PROVS_LOCAL||[]).forEach(function(p){ ids[p.id]=true; });
+  var lista=PROVS.filter(function(p){ return ids[p.id]; });
+  document.getElementById('p-tbody').innerHTML=lista.map(function(p,i){
     return '<tr><td><input value="'+(p.nombre||'').replace(/"/g,'&quot;')+'" onchange="editarProv('+p.id+',\'nombre\',this.value)" style="border:none;background:none;width:100%;font-family:inherit;"></td>'+
       '<td><input value="'+(p.cuit||'').replace(/"/g,'&quot;')+'" onchange="editarProv('+p.id+',\'cuit\',this.value)" style="border:none;background:none;width:100%;font-family:inherit;"></td>'+
       '<td><input value="'+(p.telefono||'').replace(/"/g,'&quot;')+'" onchange="editarProv('+p.id+',\'telefono\',this.value)" style="border:none;background:none;width:100%;font-family:inherit;"></td>'+
@@ -530,6 +537,11 @@ function renderProv(){
 }
 // Locales del usuario (para asignar proveedores nuevos). Admin/sin restricción = todos.
 function localesUsuario(){ if(window.PERM && window.PERM.cargado && (window.PERM.locales||[]).length) return window.PERM.locales.slice(); return SUCS.slice(); }
+function poblarProvSuc(){ var sel=document.getElementById('np-suc'); if(!sel) return; var locs=localesUsuario(); var cur=sel.value;
+  sel.innerHTML=locs.map(function(s){return '<option>'+s+'</option>';}).join('');
+  sel.value=(cur && locs.indexOf(cur)>=0)?cur:((locs.indexOf(sucActual)>=0)?sucActual:(locs[0]||''));
+  sel.disabled=(locs.length<=1);   // si tiene un solo local, ya viene puesto y no se cambia
+}
 function nuevoProvRapido(){
   switchTab('prov');
   var el=document.getElementById('np-nom'); if(el){ el.focus(); el.scrollIntoView({behavior:'smooth',block:'center'}); }
@@ -541,11 +553,12 @@ async function editarProv(id,campo,val){
 }
 async function crearProvUI(){
   var nom=document.getElementById('np-nom').value.trim(); if(!nom){ toast('Poné el nombre','error'); return; }
-  var r=await window.sp('guardarProveedor',{nombre:nom, cuit:document.getElementById('np-cuit').value, telefono:document.getElementById('np-tel').value, email:document.getElementById('np-email').value, locales:localesUsuario()});
+  var adminSuc=(document.getElementById('np-suc')&&document.getElementById('np-suc').value)||sucActual;
+  var r=await window.sp('guardarProveedor',{nombre:nom, cuit:document.getElementById('np-cuit').value, telefono:document.getElementById('np-tel').value, email:document.getElementById('np-email').value, locales:[adminSuc]});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   ['np-nom','np-cuit','np-tel','np-email'].forEach(function(id){document.getElementById(id).value='';});
   var rpr=await window.sf('getProveedores'); PROVS=(rpr.ok?rpr.proveedores:[])||[];
-  await cargarProveedoresLocal(); renderProv(); toast('Proveedor agregado y asignado a tus locales');
+  await cargarProveedoresLocal(); renderProv(); toast('Proveedor agregado (local: '+adminSuc+')');
 }
 async function borrarProv(id,nom){ if(!confirm('¿Eliminar el proveedor "'+nom+'"?')) return; var r=await window.sp('eliminarProveedor',{id:id}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } toast(r.soft?'Proveedor desactivado (tenía movimientos)':'Proveedor eliminado'); var rpr=await window.sf('getProveedores'); PROVS=(rpr.ok?rpr.proveedores:[])||[]; await cargarProveedoresLocal(); renderProv(); }
 </script>

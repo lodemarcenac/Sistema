@@ -75,8 +75,8 @@
     <details class="alta">
       <summary>➕ Nuevo producto</summary>
       <div class="alta-grid">
-        <div><label>Categoría</label><input id="a-cat" list="cats-list" placeholder="Ej: Cortes Vaca"><datalist id="cats-list"></datalist></div>
-        <div><label>Código interno</label><input id="a-cod" placeholder="Ej: 00042"></div>
+        <div><label>Categoría</label><input id="a-cat" list="cats-list" placeholder="Ej: Cortes Vaca" onchange="sugerirCodigo()"><datalist id="cats-list"></datalist></div>
+        <div><label>Código interno <span style="text-transform:none;font-weight:400;color:var(--muted);">(se sugiere solo)</span></label><input id="a-cod" placeholder="Elegí la categoría"></div>
         <div><label>Nombre</label><input id="a-nom" placeholder="Ej: Bife angosto"></div>
         <div><label>Tipo</label><select id="a-tipo"><option value="pesable">Pesable (kg)</option><option value="unidad">Por unidad</option></select></div>
         <div><label>Costo</label><input id="a-costo" type="number" step="0.01" placeholder="0" oninput="sugerirAlta()"></div>
@@ -226,6 +226,23 @@ async function iniciar(){
   render();
 }
 function toast(msg,tipo){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(tipo?' '+tipo:''); e.textContent=msg; c.appendChild(e); setTimeout(function(){ e.remove(); },2600); }
+// Al elegir la categoría, sugiere el próximo código interno = (mayor de ESA categoría) + 1,
+// ignorando los códigos de barras (EAN largos, >=7 dígitos). Garantiza que no se repita.
+// Si la categoría no tiene productos, usa el próximo libre global.
+function sugerirCodigo(){
+  var cat=(document.getElementById('a-cat').value||'').trim().toLowerCase();
+  var codInput=document.getElementById('a-cod'); if(!codInput) return;
+  if(!cat){ return; }
+  var usados={}, maxCat=0, maxGlobal=0;
+  Object.keys(PRODS).forEach(function(c){
+    var cod=String(c).trim(); if(!/^\d+$/.test(cod) || cod.length>=7) return;   // obvia no-numéricos y códigos de barras
+    var n=parseInt(cod,10); usados[n]=true; if(n>maxGlobal) maxGlobal=n;
+    if((PRODS[c].categoria||'').trim().toLowerCase()===cat && n>maxCat) maxCat=n;
+  });
+  var cand=(maxCat>0?maxCat:maxGlobal)+1;
+  while(usados[cand]) cand++;   // si ya existe (choca con otra categoría), busca el próximo libre
+  codInput.value=String(cand);
+}
 function poblarAlta(){
   // Categorías: las de la tabla (CATS, aunque no tengan productos) + las que usan los productos.
   var cats=(CATS||[]).map(function(c){return c.nombre;}).filter(Boolean)

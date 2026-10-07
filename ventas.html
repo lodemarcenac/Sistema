@@ -640,7 +640,7 @@ async function cobrar(){
   evaluarCombos(); evaluarPromosForma();
   var total=totalActual();
   var pagosLimpios=metodosDisponibles().filter(function(m){ return Number(pagosMonto[m])>0; }).map(function(m){ return {metodo:m, monto:+Number(pagosMonto[m]).toFixed(2), cta:esCta(m)}; });
-  if(!pagosLimpios.length){ var m0=metodosDisponibles().find(function(m){return !esCta(m);})||'Efectivo'; pagosLimpios=[{metodo:m0, monto:total, cta:false}]; }
+  if(!pagosLimpios.length){ toast('Elegí la forma de pago','error'); return; }   // sin forma de pago no se cobra (ya no asume Efectivo)
   var pagado=pagosLimpios.reduce(function(s,p){return s+p.monto;},0);
   if(pagado + 0.5 < total){ toast('El pago no cubre el total','error'); return; }
   var hayCta=pagosLimpios.some(function(p){ return p.cta; });
