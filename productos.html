@@ -254,12 +254,12 @@ async function exportarProductos(){
     var row={ codigo:cod, nombre:p.nombre||'', marca:p.marca||'', descripcion:p.descripcion||'',
       categoria:p.categoria||'', tipo:p.tipo||'', costo:(p.costo==null?'':p.costo),
       fecha_costo:(p.fechas&&p.fechas.costo)||'', margen:(p.margenOverride==null?'':p.margenOverride),
-      stock_minimo:(p.stockMinimo==null?'':p.stockMinimo), activo:(p.activo?'SI':'NO') };
+      stock_minimo:(p.stockMinimo==null?'':p.stockMinimo), estado:(p.activo?'Activo':'Baja') };
     listas.forEach(function(l){ row[l]=(p.precio&&p.precio[l]!=null)?p.precio[l]:''; });
     sucs.forEach(function(s){ row['Stock '+s]=(stockMap[cod]&&stockMap[cod][s]!=null)?stockMap[cod][s]:''; });
     return row;
   });
-  var headers=['codigo','nombre','marca','descripcion','categoria','tipo','costo','fecha_costo','margen','stock_minimo','activo']
+  var headers=['codigo','nombre','marca','descripcion','categoria','tipo','costo','fecha_costo','margen','stock_minimo','estado']
     .concat(listas).concat(sucs.map(function(s){ return 'Stock '+s; }));
   var ws=XLSX.utils.json_to_sheet(rows,{header:headers});
   var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Productos');

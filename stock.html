@@ -49,7 +49,7 @@
       <p class="hint">1) <b>Descargá la base</b> (viene con los códigos y los locales exactos, en 0). 2) Completá las cantidades en ese mismo Excel. 3) <b>Importalo</b>: setea el stock tal cual el archivo. Así evitás errores de código o de nombre de local.</p>
       <div id="exp-locs" style="margin:4px 0 12px;font-size:var(--fs-sm);"></div>
       <button class="btn" onclick="exportarExcel()">⬇️ Descargar base de stock (Excel)</button>
-      <label class="btn-sec" style="display:inline-block;cursor:pointer;">⬆️ Importar Excel completado
+      <label class="btn-sec" id="imp-label" style="display:inline-block;cursor:pointer;">⬆️ Importar Excel completado
         <input type="file" id="imp-file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarExcel(event)">
       </label>
       <span class="muted" id="imp-res"></span>
@@ -84,8 +84,10 @@
 var sb=window.sbClient;
 var PRODS={}, LOCS=[], LOCS_ALL=[], STK={};   // STK: codigo -> { local: cantidad }
 // Se VEN todas las columnas (para pedir/enviar entre locales), pero solo se pueden
-// MODIFICAR las de los locales asignados al usuario.
+// MODIFICAR las de los locales asignados al usuario Y si el rol tiene permiso "Ajustar stock".
 function puedeEditarLoc(l){ if(!(window.PERM && window.PERM.cargado)) return true; var locs=window.PERM.locales||[]; if(!locs.length) return true; return locs.indexOf(l)>=0; }
+function puedeAccionStock(k){ return !(window.PERM && window.PERM.cargado) || window.PERM.puede(k); }
+function puedeAjustar(l){ return puedeAccionStock('stock.ajustar') && puedeEditarLoc(l); }
 function fmt(n){ n=Number(n)||0; return (Math.round(n*1000)/1000).toLocaleString('es-AR'); }
 function toast(msg,tipo){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(tipo?' '+tipo:''); e.textContent=msg; c.appendChild(e); setTimeout(function(){ e.remove(); },2600); }
 
@@ -111,7 +113,7 @@ async function iniciar(){
   render();
 }
 // Cuando cargan los permisos, re-renderizar para bloquear la edición de locales ajenos.
-document.addEventListener('perm-listo', function(){ render(); });
+document.addEventListener('perm-listo', function(){ render(); var il=document.getElementById('imp-label'); if(il && !puedeAccionStock('stock.importar')) il.style.display='none'; });
 async function cargarStock(){
   STK={}; var r=await window.sf('getStock');
   if(r.ok){ (r.stock||[]).forEach(function(x){ STK[x.codigo]=STK[x.codigo]||{}; STK[x.codigo][x.local]=x.cantidad; }); }
@@ -137,7 +139,7 @@ function render(){
   document.getElementById('tbody').innerHTML=codes.map(function(cod){
     var p=PRODS[cod]; var min=p.stockMinimo; var tot=totalDe(cod); var bajo=(min>0 && tot<min);
     return '<tr class="'+(bajo?'bajo':'')+'"><td>'+cod+'</td><td>'+(p.nombre||'')+' <button class="mini-btn" title="Ver movimientos (kardex)" onclick="verKardex(\''+cod+'\')">📋</button></td>'+
-      LOCS.map(function(l){ var ro=!puedeEditarLoc(l); return '<td class="num stk"><input type="number" step="0.001" value="'+(qtyDe(cod,l)||'')+'"'+(ro?' readonly title="Solo lectura: no es un local asignado a tu usuario" style="background:#f2f4f8;color:#8891a3;"':' onchange="ajustar(\''+cod+'\',\''+String(l).replace(/'/g,"\\'")+'\',this.value)"')+'></td>'; }).join('')+
+      LOCS.map(function(l){ var ro=!puedeAjustar(l); var tit=!puedeAccionStock('stock.ajustar')?'Solo lectura: no tenés permiso para ajustar stock':'Solo lectura: no es un local asignado a tu usuario'; return '<td class="num stk"><input type="number" step="0.001" value="'+(qtyDe(cod,l)||'')+'"'+(ro?' readonly title="'+tit+'" style="background:#f2f4f8;color:#8891a3;"':' onchange="ajustar(\''+cod+'\',\''+String(l).replace(/'/g,"\\'")+'\',this.value)"')+'></td>'; }).join('')+
       '<td class="num tot">'+fmt(tot)+'</td><td class="num">'+(min>0?fmt(min):'-')+'</td></tr>';
   }).join('');
 }
@@ -155,6 +157,7 @@ async function verKardex(cod){
   }).join('') : '<tr><td colspan="4" class="muted">Sin movimientos registrados.</td></tr>';
 }
 async function ajustar(cod,loc,val){
+  if(!puedeAccionStock('stock.ajustar')){ toast('No tenés permiso para ajustar stock','error'); render(); return; }
   if(!puedeEditarLoc(loc)){ toast('No podés modificar el stock de un local que no tenés asignado','error'); render(); return; }
   var r=await window.sp('ajustarStock',{codigo:cod, local:loc, cantidad:val, tipo:'ajuste', motivo:'ajuste manual'});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
@@ -187,6 +190,7 @@ function exportarExcel(){
 
 // ---- IMPORT ----
 function importarExcel(ev){
+  if(!puedeAccionStock('stock.importar')){ toast('No tenés permiso para importar stock','error'); ev.target.value=''; return; }
   var file=ev.target.files[0]; if(!file) return;
   var reader=new FileReader();
   reader.onload=async function(e){

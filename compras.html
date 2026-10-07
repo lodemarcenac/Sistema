@@ -268,7 +268,7 @@ function aplicarPermCosto(){ var cu=document.getElementById('ci-cu'); if(!cu) re
 document.addEventListener('perm-listo', aplicarPermCosto);
 document.addEventListener('perm-listo', function(){ cargarProveedoresLocal(); });   // proveedores + np-suc según los locales del usuario
 // Al elegir un producto en la fila de carga, precarga su último costo conocido.
-function ciProd(input){ var cod=(input.value||'').trim(); if(PRODS[cod] && PRODS[cod].costo!=null){ document.getElementById('ci-cu').value=PRODS[cod].costo; } }
+function ciProd(input){ var cod=(input.value||'').trim(); var p=PRODS[cod]; var cant=document.getElementById('ci-cant'); if(p){ if(p.costo!=null) document.getElementById('ci-cu').value=p.costo; if(cant) cant.step=(p.tipo==='unidad'?'1':'0.001'); } }
 
 // Etapa 1: crear la compra (borrador) con el total de la factura/remito
 async function crearCompraUI(){
@@ -309,6 +309,7 @@ async function agregarItemUI(){
   var cod=(document.getElementById('ci-cod').value||'').trim();
   var cant=document.getElementById('ci-cant').value, cu=document.getElementById('ci-cu').value;
   if(!cod || !(Number(cant)>0)){ toast('Poné producto y cantidad','error'); return; }
+  if(PRODS[cod] && PRODS[cod].tipo==='unidad') cant=Math.round(Number(cant)||0);   // unidad = entero
   var r=await window.sp('agregarItemCompra',{ compra_id:COMPRA_ID, codigo:cod, cantidad:cant, costo_unit:cu });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   document.getElementById('ci-cod').value=''; document.getElementById('ci-cant').value=''; document.getElementById('ci-cu').value='';

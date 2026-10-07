@@ -222,7 +222,7 @@ function renderRem(){
     return '<tr><td>'+it.nombre+' <span style="color:#8891a3">('+it.cod+')</span></td>'+
       '<td class="num">'+fmt$(costoDe(it.cod))+'</td>'+
       '<td class="num"><span style="display:inline-flex;align-items:center;gap:5px;justify-content:flex-end;">'+
-        '<input type="number" step="'+(es_u?'1':'0.001')+'" min="0" value="'+(Number(it.cantidad)>0?it.cantidad:'')+'" placeholder="0" oninput="editarCantRem('+i+',this.value)" style="width:78px;padding:4px 6px;text-align:right;border:1px solid var(--border-inp);border-radius:5px;font-family:inherit;">'+
+        '<input type="number" step="'+(es_u?'1':'0.001')+'" min="'+(es_u?'1':'0')+'" value="'+(Number(it.cantidad)>0?it.cantidad:'')+'" placeholder="0" oninput="editarCantRem('+i+',this.value)" style="width:78px;padding:4px 6px;text-align:right;border:1px solid var(--border-inp);border-radius:5px;font-family:inherit;">'+
         '<span class="muted" style="font-size:.78rem;min-width:22px;text-align:left;">'+(es_u?'u':'kg')+'</span></span></td>'+
       '<td class="num" id="rem-tot-'+i+'">'+fmt$(tot)+'</td>'+
       '<td><button class="x-btn" title="Quitar" onclick="quitarRem('+i+')">✕</button></td></tr>';
@@ -231,7 +231,8 @@ function renderRem(){
 }
 function editarCantRem(i,val){
   if(!carritoRem[i]) return;
-  carritoRem[i].cantidad=(val===''?0:Number(val));
+  var esU=(unidadDe(carritoRem[i].cod)==='u');
+  carritoRem[i].cantidad=(val===''?0:(esU?Math.max(0,Math.round(Number(val)||0)):Number(val)));   // unidad = entero
   var cell=document.getElementById('rem-tot-'+i);
   if(cell) cell.textContent=fmt$((Number(carritoRem[i].cantidad)||0)*precioRemDe(carritoRem[i].cod));
   actualizarTotalRem();

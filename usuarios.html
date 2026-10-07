@@ -21,13 +21,17 @@
   .perm-h{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;margin:10px 0 2px;grid-column:1/-1;}
   .rol-card{border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;background:var(--surface);}
   .locs label{display:inline-flex;align-items:center;gap:5px;margin-right:14px;font-size:var(--fs-sm);}
-  .mod-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin:10px 0;}
+  .mod-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:10px;margin:10px 0;}
   .mod-perm{border:1px solid var(--line);border-radius:var(--radius-sm);padding:9px 12px;background:#fff;}
   .mod-head{display:flex;align-items:center;gap:8px;font-size:var(--fs-sm);font-weight:700;}
-  .mod-subs{margin:7px 0 0 23px;display:flex;flex-direction:column;gap:5px;}
-  .mod-subs.off{opacity:.38;pointer-events:none;}
-  .mod-subs label{display:flex;align-items:center;gap:7px;font-size:var(--fs-sm);}
-  .mod-sub-h{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.03em;color:var(--muted);font-weight:700;margin-top:4px;}
+  .mod-hint{font-weight:400;font-size:var(--fs-xs);}
+  .mod-subs{margin:7px 0 0 4px;display:flex;flex-direction:column;gap:8px;}
+  .mod-subs.off{opacity:.4;pointer-events:none;}
+  .vista{border-left:2px solid var(--line);padding-left:9px;}
+  .ver{display:flex;align-items:center;gap:7px;font-size:var(--fs-sm);font-weight:600;}
+  .acc-h{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.03em;color:var(--muted);font-weight:700;}
+  .acc-list{display:flex;flex-direction:column;gap:4px;margin:4px 0 0 22px;}
+  .acc{display:flex;align-items:center;gap:7px;font-size:var(--fs-sm);}
 </style>
 </head>
 <body>
@@ -109,48 +113,47 @@
 <script>
 var sb=window.sbClient;
 var ROLES=[], PERFILES=[], SUCS=[], uEditId=null;
-// Catálogo de permisos agrupado por MÓDULO. Cada módulo tiene su llave (lo que
-// se ve en el menú y habilita la página) y, debajo, lo que lo compone:
-//   tipo 'v' = qué puede VER dentro del módulo (sub-vistas / pestañas)
-//   tipo 'a' = qué ACCIONES puede hacer dentro del módulo
-// Una sub-llave sólo tiene efecto si el módulo (su llave base) está habilitado.
+// Catálogo de permisos por MÓDULO. Cada módulo tiene su llave `k` (tildarla = el
+// módulo aparece en el menú / se puede entrar a la página). Debajo puede llevar:
+//   vistas: secciones que se pueden VER por separado; cada una tiene su tilde de
+//           "Ver …" (ver) y, anidadas debajo, sus acciones [llave, etiqueta].
+//   acc:    acciones sueltas del módulo (cuando no hay sub-vistas; se ve todo con
+//           sólo tildar el módulo), como lista de [llave, etiqueta].
+// Una sub-llave (modulo.algo) sólo tiene efecto si el módulo base está tildado.
 var MODULOS=[
-  {k:'tableros', n:'Tableros', subs:[]},
-  {k:'reportes', n:'Reportes', subs:[]},
-  {k:'ventas', n:'Ventas', subs:[
-    ['ventas.descuento','Hacer descuentos (por producto o total)','a'],
-    ['ventas.anular','Anular / editar venta del día','a'],
-    ['ventas.anular_dia_anterior','Anular venta de un día anterior','a']
+  {k:'tableros', n:'Tableros'},
+  {k:'reportes', n:'Reportes'},
+  {k:'ventas', n:'Ventas', acc:[
+    ['ventas.descuento','Hacer descuentos (por producto o total)'],
+    ['ventas.anular','Anular / editar venta del día'],
+    ['ventas.anular_dia_anterior','Anular venta de un día anterior']
   ]},
-  {k:'caja', n:'Caja', subs:[]},
-  {k:'productos', n:'Productos', subs:[
-    ['productos.editar_precio','Editar precios','a'],
-    ['productos.editar_costo','Editar costos','a'],
-    ['productos.editar_nombre','Editar nombre de productos','a']
+  {k:'caja', n:'Caja'},
+  {k:'productos', n:'Productos', acc:[
+    ['productos.editar_precio','Editar precios'],
+    ['productos.editar_costo','Editar costos'],
+    ['productos.editar_nombre','Editar nombre de productos']
   ]},
-  {k:'clientes', n:'Clientes y Listas', subs:[
-    ['clientes.ver_clientes','Ver clientes','v'],
-    ['clientes.ver_ctacte','Ver cuentas corrientes','v'],
-    ['clientes.ver_listas','Ver listas de precio','v'],
-    ['clientes.editar','Modificar clientes (alta y edición)','a'],
-    ['clientes.ctacte_pago','Registrar pago en cuenta corriente','a'],
-    ['clientes.editar_listas','Modificar listas de precio','a']
+  {k:'clientes', n:'Clientes y Listas', vistas:[
+    {t:'Clientes', ver:'clientes.ver_clientes', acc:[['clientes.editar','Modificar clientes (alta y edición)']]},
+    {t:'Cuentas corrientes', ver:'clientes.ver_ctacte', acc:[['clientes.ctacte_pago','Registrar pago']]},
+    {t:'Listas de precio', ver:'clientes.ver_listas', acc:[['clientes.editar_listas','Modificar listas de precio']]}
   ]},
-  {k:'stock', n:'Stock', subs:[
-    ['stock.ajustar','Ajustar stock','a'],
-    ['stock.importar','Importar stock','a']
+  {k:'stock', n:'Stock', acc:[
+    ['stock.ajustar','Ajustar stock'],
+    ['stock.importar','Importar stock (Excel)']
   ]},
-  {k:'compras', n:'Compras y Gastos', subs:[
-    ['compras.editar_costo','Editar costo en compras','a'],
-    ['compras.anular','Editar / anular compras confirmadas','a']
+  {k:'compras', n:'Compras y Gastos', acc:[
+    ['compras.editar_costo','Editar costo en compras'],
+    ['compras.anular','Editar / anular compras confirmadas']
   ]},
-  {k:'remitos', n:'Remitos internos', subs:[]},
-  {k:'cuentas', n:'Deudas a Pagar', subs:[
-    ['cuentas.pago','Registrar pagos de deuda','a']
+  {k:'remitos', n:'Remitos internos'},
+  {k:'cuentas', n:'Deudas a Pagar', acc:[
+    ['cuentas.pago','Registrar pagos de deuda']
   ]},
-  {k:'conciliacion', n:'Conciliación Clover', subs:[]},
-  {k:'configuracion', n:'Configuración', subs:[]},
-  {k:'usuarios', n:'Usuarios y roles', subs:[]}
+  {k:'conciliacion', n:'Conciliación Clover'},
+  {k:'configuracion', n:'Configuración'},
+  {k:'usuarios', n:'Usuarios y roles'}
 ];
 function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
 
@@ -242,19 +245,25 @@ function renderRoles(){
     if(esAdmin){ return '<div class="rol-card"><h3>'+r.nombre+' <span class="pill p">acceso total</span></h3><p class="muted" style="font-size:.85rem;">Este rol puede todo y no se edita.</p></div>'; }
     var perms=(r.permisos||[]);
     function chk(k){ return perms.indexOf(k)>=0?'checked':''; }
-    function box(k,lbl,extra){ return '<label><input type="checkbox" class="rp-'+r.id+'" value="'+k+'" '+chk(k)+(extra||'')+'> '+lbl+'</label>'; }
+    function acc(k,lbl){ return '<label class="acc"><input type="checkbox" class="rp-'+r.id+'" value="'+k+'" '+chk(k)+'> '+lbl+'</label>'; }
+    function accList(arr){ return (arr&&arr.length)?'<div class="acc-list">'+arr.map(function(a){ return acc(a[0],a[1]); }).join('')+'</div>':''; }
     var modsHtml=MODULOS.map(function(m){
       var on=perms.indexOf(m.k)>=0;
-      var vSubs=m.subs.filter(function(s){ return s[2]==='v'; });
-      var aSubs=m.subs.filter(function(s){ return s[2]!=='v'; });
-      var subsHtml='';
-      if(vSubs.length){ subsHtml+='<div class="mod-sub-h">👁️ Qué ve</div>'+vSubs.map(function(s){ return box(s[0],s[1]); }).join(''); }
-      if(aSubs.length){ subsHtml+='<div class="mod-sub-h">✏️ Qué puede hacer</div>'+aSubs.map(function(s){ return box(s[0],s[1]); }).join(''); }
-      var subsBlock = subsHtml ? '<div class="mod-subs'+(on?'':' off')+'" data-mod="'+m.k+'" data-rol="'+r.id+'">'+subsHtml+'</div>' : '';
-      var head='<label class="mod-head"><input type="checkbox" class="rp-'+r.id+'" value="'+m.k+'" '+chk(m.k)+' onchange="togMod(this,\''+m.k+'\','+r.id+')"> '+m.n+'</label>';
-      return '<div class="mod-perm">'+head+subsBlock+'</div>';
+      var head='<label class="mod-head"><input type="checkbox" class="rp-'+r.id+'" value="'+m.k+'" '+chk(m.k)+' onchange="togMod(this,\''+m.k+'\','+r.id+')"> '+m.n+' <span class="muted mod-hint">(aparece en el menú)</span></label>';
+      var inner='';
+      if(m.vistas && m.vistas.length){
+        // Cada vista: un tilde "Ver …" y, debajo, sus acciones.
+        inner=m.vistas.map(function(v){
+          var verLbl='<label class="ver"><input type="checkbox" class="rp-'+r.id+'" value="'+v.ver+'" '+chk(v.ver)+'> 👁️ Ver '+v.t+'</label>';
+          return '<div class="vista">'+verLbl+accList(v.acc)+'</div>';
+        }).join('');
+      } else if(m.acc && m.acc.length){
+        inner='<div class="acc-h">Acciones</div>'+accList(m.acc);
+      }
+      var body = inner ? '<div class="mod-subs'+(on?'':' off')+'" data-mod="'+m.k+'" data-rol="'+r.id+'">'+inner+'</div>' : '';
+      return '<div class="mod-perm">'+head+body+'</div>';
     }).join('');
-    var body='<p class="muted" style="font-size:.82rem;margin:4px 0 0;">Marcá el <b>módulo</b> para que aparezca en el menú; debajo elegís qué ve y qué puede hacer dentro. Las opciones de adentro sólo valen si el módulo está tildado.</p><div class="mod-list">'+modsHtml+'</div>';
+    var body='<p class="muted" style="font-size:.82rem;margin:4px 0 0;">Tildá el <b>módulo</b> para que aparezca en el menú. Debajo, cada <b>Ver …</b> habilita una sección y, anidadas, sus <b>acciones</b>. Las opciones de adentro sólo valen si el módulo está tildado.</p><div class="mod-list">'+modsHtml+'</div>';
     return '<div class="rol-card"><div style="display:flex;justify-content:space-between;align-items:center;"><h3>'+r.nombre+'</h3><button class="x-btn" title="Eliminar rol" onclick="borrarRol('+r.id+',\''+String(r.nombre).replace(/'/g,"\\'")+'\')">✕</button></div>'+body+
       '<button class="btn" onclick="guardarPermisos('+r.id+')">Guardar permisos</button></div>';
   }).join('');
