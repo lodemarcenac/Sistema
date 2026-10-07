@@ -61,7 +61,7 @@
       <div class="barra"><input id="q" placeholder="Buscar cliente por nombre o lista…" oninput="renderClientes()"></div>
       <div class="resumen muted" id="resumen"></div>
       <div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Nombre</th><th>Lista</th><th>Administrador (local)</th><th></th></tr></thead><tbody id="cli-tbody"></tbody></table></div></div>
-      <div class="card" style="margin-top:14px;">
+      <div class="card" style="margin-top:14px;" id="nc-card">
         <h3>Nuevo cliente</h3>
         <div class="abm-nueva" style="border-top:none;padding-top:6px;">
           <div><label>Nombre</label><input id="nc-nom" placeholder="Nombre del cliente"></div>
@@ -88,7 +88,7 @@
           <h3 style="margin:0;" id="ccx-nom">Cliente</h3>
           <div style="display:flex;gap:8px;align-items:center;"><span class="saldo" id="ccx-saldo"></span><button class="btn-sec" onclick="exportarCC()">📥 Exportar Excel</button></div>
         </div>
-        <div class="abm-nueva" style="border-top:none;padding-top:8px;">
+        <div class="abm-nueva" style="border-top:none;padding-top:8px;" id="ccx-pago">
           <div><label>Registrar pago $</label><input id="ccx-monto" type="number" step="0.01"></div>
           <div><label>Forma</label><select id="ccx-fp"></select></div>
           <button class="btn-alta" onclick="pagarCCx()">Registrar pago</button>
@@ -102,7 +102,7 @@
         <h3>Listas de precio</h3>
         <p class="resumen" style="margin-bottom:14px;"><b>Base</b> = se pone a mano / margen (Minorista). <b>Derivada</b> = % de Minorista (se recalcula sola). <b>Especial</b> = manual por producto. Se guardan al salir del campo.</p>
         <div class="tblwrap"><table class="data"><thead><tr><th>Lista</th><th>Tipo</th><th>% de Minorista</th><th></th></tr></thead><tbody id="lis-tbody"></tbody></table></div>
-        <div class="abm-nueva">
+        <div class="abm-nueva" id="nl-card">
           <div><label>Nueva lista</label><input id="nl-nom" placeholder="Ej: Distribuidor"></div>
           <div><label>Tipo</label><select id="nl-tipo"><option value="derivada">Derivada</option><option value="especial">Especial</option><option value="base">Base</option></select></div>
           <div><label>% (si derivada)</label><input id="nl-rel" type="number" step="1"></div>
@@ -125,6 +125,47 @@ var sb=window.sbClient;
 var CLIENTES=[], LISTAS=[], SUCS=[], LISTAS_FULL=[], FORMAS=['Efectivo','Tarjeta','Virtual'], SALDOSCLI=[], ccxSel=null, ccxMovs=[], ccxNom='';
 function toast(msg,tipo){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(tipo?' '+tipo:''); e.textContent=msg; c.appendChild(e); setTimeout(function(){ e.remove(); },2600); }
 
+// ---- PERMISOS (sub-vistas y acciones del módulo Clientes y Listas) ----
+function _permReady(){ return !!(window.PERM && window.PERM.cargado); }
+function _esAdmin(){ return !_permReady() || window.PERM.esAdmin; }
+function _has(k){ return _permReady() && window.PERM.puede(k); }
+// ¿El rol usa el modelo nuevo (tildó al menos una sub-opción de clientes)?
+// Si no, es un rol viejo con sólo el módulo "clientes" => acceso completo (compat).
+function cliGranular(){
+  if(_esAdmin()) return false;
+  return _has('clientes.ver_clientes')||_has('clientes.ver_ctacte')||_has('clientes.ver_listas')||
+         _has('clientes.editar')||_has('clientes.ctacte_pago')||_has('clientes.editar_listas');
+}
+function verTab(t){
+  if(_esAdmin() || !cliGranular()) return true;
+  if(t==='clientes') return _has('clientes.ver_clientes');
+  if(t==='ctacte')   return _has('clientes.ver_ctacte');
+  if(t==='listas')   return _has('clientes.ver_listas');
+  return true;
+}
+function puedeEditarCli(){ return _esAdmin() || !cliGranular() || _has('clientes.editar'); }
+function puedePagoCC(){ return _esAdmin() || !cliGranular() || _has('clientes.ctacte_pago'); }
+function puedeEditarListas(){ return _esAdmin() || !cliGranular() || _has('clientes.editar_listas'); }
+
+// Aplica visibilidad de pestañas y de los formularios de edición según el rol.
+function applyPermsUI(){
+  var vis={ clientes:verTab('clientes'), ctacte:verTab('ctacte'), listas:verTab('listas') };
+  document.querySelectorAll('.tab').forEach(function(b){ var t=b.getAttribute('data-t'); b.style.display=(vis[t]?'':'none'); });
+  // Si la pestaña activa no es visible, saltar a la primera que sí lo sea.
+  var cur=document.querySelector('.tab.on'); var curT=cur?cur.getAttribute('data-t'):null;
+  if(!curT || !vis[curT]){ var first=['clientes','ctacte','listas'].filter(function(t){return vis[t];})[0]||'clientes'; switchTab(first); }
+  // Formularios de alta/edición.
+  var ncCard=document.getElementById('nc-card'); if(ncCard) ncCard.style.display=puedeEditarCli()?'':'none';
+  var ccPago=document.getElementById('ccx-pago'); if(ccPago) ccPago.style.display=puedePagoCC()?'':'none';
+  var nlCard=document.getElementById('nl-card'); if(nlCard) nlCard.style.display=puedeEditarListas()?'':'none';
+  // Re-dibujar el contenido visible con el gating correcto (PERM puede haber
+  // cargado después del primer render).
+  if(!document.getElementById('t-clientes').hidden) renderClientes();
+  else if(!document.getElementById('t-ctacte').hidden) renderCtaCte();
+  else if(!document.getElementById('t-listas').hidden) renderListas();
+}
+document.addEventListener('perm-listo', applyPermsUI);
+
 document.getElementById('login-form').addEventListener('submit', async function(e){
   e.preventDefault();
   var btn=document.getElementById('li-btn'), err=document.getElementById('li-err');
@@ -145,9 +186,10 @@ async function iniciar(){
   var rc=await window.sf('getClientes'); if(rc.ok) CLIENTES=rc.clientes||[];
   var rcfg=await window.sf('getConfigGeneral'); if(rcfg.ok && rcfg.config && rcfg.config.formas_pago){ try{ var af=JSON.parse(rcfg.config.formas_pago); if(af.length) FORMAS=af.map(function(f){return f.nombre||f;}); }catch(e){} }
   document.getElementById('ccx-fp').innerHTML=FORMAS.map(function(f){return '<option>'+f+'</option>';}).join('');
-  poblarSelects(); renderClientes();
+  poblarSelects(); renderClientes(); applyPermsUI();
 }
 function switchTab(name){
+  if(!verTab(name)){ name=['clientes','ctacte','listas'].filter(function(t){return verTab(t);})[0]||name; }
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); });
   document.getElementById('t-clientes').hidden=(name!=='clientes');
   document.getElementById('t-ctacte').hidden=(name!=='ctacte');
@@ -189,6 +231,7 @@ async function verClienteCC(id,nom){
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
 }
 async function pagarCCx(){
+  if(!puedePagoCC()){ toast('No tenés permiso para registrar pagos','error'); return; }
   if(!ccxSel){ toast('Elegí un cliente','error'); return; }
   var monto=document.getElementById('ccx-monto').value; if(!(Number(monto)>0)){ toast('Poné un monto','error'); return; }
   var r=await window.sp('registrarPagoCC',{ clienteId:ccxSel, sucursal:(window.PERM&&window.PERM.locales&&window.PERM.locales[0])||'', monto:monto, formaPago:document.getElementById('ccx-fp').value, concepto:'Pago cta cte' });
@@ -217,14 +260,23 @@ function renderClientes(){
   document.getElementById('resumen').textContent=arr.length+' cliente'+(arr.length!==1?'s':'');
   var optsL='<option value="">(sin lista)</option>'+LISTAS.map(function(l){return '<option>'+l+'</option>';}).join('');
   var optsS='<option value="">(sin administrador)</option>'+SUCS.map(function(s){return '<option>'+s+'</option>';}).join('');
+  var edit=puedeEditarCli();
   document.getElementById('cli-tbody').innerHTML=arr.map(function(c){
-    var lsel='<select class="cell" onchange="editarCli(\''+c.realId+'\',\'lista\',this.value)">'+optsL.replace('<option>'+c.lista+'</option>','<option selected>'+c.lista+'</option>')+'</select>';
-    var ssel='<select class="cell" onchange="editarCli(\''+c.realId+'\',\'administrador\',this.value)">'+optsS.replace('<option>'+c.administrador+'</option>','<option selected>'+c.administrador+'</option>')+'</select>';
-    return '<tr><td>'+c.nombre+'</td><td>'+lsel+'</td><td>'+ssel+'</td>'+
-      '<td><button class="x-btn" title="Eliminar cliente" onclick="borrarCli(\''+c.realId+'\',\''+String(c.nombre).replace(/'/g,"\\'")+'\')">✕</button></td></tr>';
+    var lsel, ssel, del;
+    if(edit){
+      lsel='<select class="cell" onchange="editarCli(\''+c.realId+'\',\'lista\',this.value)">'+optsL.replace('<option>'+c.lista+'</option>','<option selected>'+c.lista+'</option>')+'</select>';
+      ssel='<select class="cell" onchange="editarCli(\''+c.realId+'\',\'administrador\',this.value)">'+optsS.replace('<option>'+c.administrador+'</option>','<option selected>'+c.administrador+'</option>')+'</select>';
+      del='<button class="x-btn" title="Eliminar cliente" onclick="borrarCli(\''+c.realId+'\',\''+String(c.nombre).replace(/'/g,"\\'")+'\')">✕</button>';
+    } else {
+      lsel=(c.lista||'<span class="muted">—</span>');
+      ssel=(c.administrador||'<span class="muted">—</span>');
+      del='';
+    }
+    return '<tr><td>'+c.nombre+'</td><td>'+lsel+'</td><td>'+ssel+'</td><td>'+del+'</td></tr>';
   }).join('') || '<tr><td colspan="4" class="muted">Sin clientes.</td></tr>';
 }
 async function editarCli(realId,campo,val){
+  if(!puedeEditarCli()){ toast('No tenés permiso para modificar clientes','error'); return; }
   var c=CLIENTES.find(function(x){return String(x.realId)===String(realId);}); if(!c) return;
   var payload={ realId:c.realId, nombre:c.nombre, lista:c.lista, administrador:c.administrador };
   payload[campo]=val;
@@ -233,6 +285,7 @@ async function editarCli(realId,campo,val){
   c[campo]=val; toast('Cliente actualizado');
 }
 async function crearClienteUI(){
+  if(!puedeEditarCli()){ toast('No tenés permiso para modificar clientes','error'); return; }
   var nom=(document.getElementById('nc-nom').value||'').trim(); if(!nom){ toast('Poné el nombre','error'); return; }
   var r=await window.sp('guardarCliente',{ nombre:nom, lista:document.getElementById('nc-lista').value, administrador:document.getElementById('nc-adm').value });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
@@ -240,6 +293,7 @@ async function crearClienteUI(){
   var rc=await window.sf('getClientes'); if(rc.ok) CLIENTES=rc.clientes||[]; renderClientes();
 }
 async function borrarCli(realId,nombre){
+  if(!puedeEditarCli()){ toast('No tenés permiso para modificar clientes','error'); return; }
   if(!confirm('¿Eliminar el cliente "'+nombre+'"?')) return;
   var r=await window.sp('eliminarCliente',{realId:realId});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
@@ -251,16 +305,25 @@ async function renderListas(){
   var r=await window.sf('getListas'); LISTAS_FULL=(r.ok?r.listas:[])||[];
   var tb=document.getElementById('lis-tbody');
   if(!r.ok){ tb.innerHTML='<tr><td colspan="3">Error: '+r.error+'</td></tr>'; return; }
+  var edit=puedeEditarListas();
   tb.innerHTML=LISTAS_FULL.map(function(l,i){
-    var opts=['base','derivada','especial'].map(function(t){ return '<option value="'+t+'"'+(l.tipo===t?' selected':'')+'>'+t+'</option>'; }).join('');
     var fija=(l.nombre==='Minorista'||l.nombre==='Mayorista');
-    return '<tr><td>'+l.nombre+'</td>'+
-      '<td><select class="cell" id="lt-'+i+'" onchange="guardarListCell('+i+')">'+opts+'</select></td>'+
-      '<td><input class="cell" type="number" step="1" value="'+(l.tipo==='derivada'?l.relacion:'')+'" id="lr-'+i+'" onchange="guardarListCell('+i+')"'+(l.tipo==='derivada'?'':' disabled')+'></td>'+
-      '<td>'+(fija?'<span class="muted" title="No se puede borrar">—</span>':'<button class="x-btn" title="Eliminar lista" onclick="eliminarListaUI(\''+String(l.nombre).replace(/'/g,"\\'")+'\')">✕</button>')+'</td></tr>';
+    var tipoCell, relCell, delCell;
+    if(edit){
+      var opts=['base','derivada','especial'].map(function(t){ return '<option value="'+t+'"'+(l.tipo===t?' selected':'')+'>'+t+'</option>'; }).join('');
+      tipoCell='<select class="cell" id="lt-'+i+'" onchange="guardarListCell('+i+')">'+opts+'</select>';
+      relCell='<input class="cell" type="number" step="1" value="'+(l.tipo==='derivada'?l.relacion:'')+'" id="lr-'+i+'" onchange="guardarListCell('+i+')"'+(l.tipo==='derivada'?'':' disabled')+'>';
+      delCell=(fija?'<span class="muted" title="No se puede borrar">—</span>':'<button class="x-btn" title="Eliminar lista" onclick="eliminarListaUI(\''+String(l.nombre).replace(/'/g,"\\'")+'\')">✕</button>');
+    } else {
+      tipoCell=l.tipo||'';
+      relCell=(l.tipo==='derivada'?(l.relacion+'%'):'<span class="muted">—</span>');
+      delCell='';
+    }
+    return '<tr><td>'+l.nombre+'</td><td>'+tipoCell+'</td><td>'+relCell+'</td><td>'+delCell+'</td></tr>';
   }).join('');
 }
 async function eliminarListaUI(nombre){
+  if(!puedeEditarListas()){ toast('No tenés permiso para modificar listas','error'); return; }
   if(!confirm('¿Eliminar la lista "'+nombre+'"? Se quitan sus precios en los productos.')) return;
   var r=await window.sp('eliminarLista',{nombre:nombre});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
@@ -268,6 +331,7 @@ async function eliminarListaUI(nombre){
   toast('Lista eliminada'); renderListas();
 }
 async function guardarListCell(i){
+  if(!puedeEditarListas()){ toast('No tenés permiso para modificar listas','error'); return; }
   var l=LISTAS_FULL[i]; if(!l) return;
   var tipo=document.getElementById('lt-'+i).value, rel=document.getElementById('lr-'+i).value;
   var r=await window.sp('guardarLista',{nombre:l.nombre, tipo:tipo, relacion:rel});
@@ -275,6 +339,7 @@ async function guardarListCell(i){
   l.tipo=tipo; l.relacion=Number(rel)||0; toast('Lista guardada'); renderListas();
 }
 async function crearListaUI(){
+  if(!puedeEditarListas()){ toast('No tenés permiso para modificar listas','error'); return; }
   var nom=(document.getElementById('nl-nom').value||'').trim(); if(!nom){ toast('Poné el nombre','error'); return; }
   var r=await window.sp('guardarLista',{nombre:nom, tipo:document.getElementById('nl-tipo').value, relacion:document.getElementById('nl-rel').value});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }

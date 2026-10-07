@@ -21,6 +21,13 @@
   .perm-h{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;margin:10px 0 2px;grid-column:1/-1;}
   .rol-card{border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;background:var(--surface);}
   .locs label{display:inline-flex;align-items:center;gap:5px;margin-right:14px;font-size:var(--fs-sm);}
+  .mod-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin:10px 0;}
+  .mod-perm{border:1px solid var(--line);border-radius:var(--radius-sm);padding:9px 12px;background:#fff;}
+  .mod-head{display:flex;align-items:center;gap:8px;font-size:var(--fs-sm);font-weight:700;}
+  .mod-subs{margin:7px 0 0 23px;display:flex;flex-direction:column;gap:5px;}
+  .mod-subs.off{opacity:.38;pointer-events:none;}
+  .mod-subs label{display:flex;align-items:center;gap:7px;font-size:var(--fs-sm);}
+  .mod-sub-h{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.03em;color:var(--muted);font-weight:700;margin-top:4px;}
 </style>
 </head>
 <body>
@@ -102,8 +109,49 @@
 <script>
 var sb=window.sbClient;
 var ROLES=[], PERFILES=[], SUCS=[], uEditId=null;
-var CAT_MODULOS=[['tableros','Tableros'],['reportes','Reportes'],['productos','Productos'],['clientes','Clientes y Listas'],['stock','Stock'],['compras','Compras'],['remitos','Remitos'],['cuentas','Cuentas'],['conciliacion','Conciliación Clover'],['caja','Caja'],['ventas','Ventas'],['configuracion','Configuración'],['usuarios','Usuarios y roles']];
-var CAT_ACCIONES=[['ventas.descuento','Hacer Descuento (producto o total compra)'],['ventas.anular','Anular / Editar venta del día'],['ventas.anular_dia_anterior','Anular venta de día anterior'],['productos.editar_precio','Editar precios'],['productos.editar_costo','Editar costos'],['productos.editar_nombre','Editar nombre de productos'],['compras.editar_costo','Editar costo en compras'],['compras.anular','Editar/anular compras confirmadas'],['stock.ajustar','Ajustar stock'],['stock.importar','Importar stock'],['cuentas.pago','Registrar pagos de cuenta']];
+// Catálogo de permisos agrupado por MÓDULO. Cada módulo tiene su llave (lo que
+// se ve en el menú y habilita la página) y, debajo, lo que lo compone:
+//   tipo 'v' = qué puede VER dentro del módulo (sub-vistas / pestañas)
+//   tipo 'a' = qué ACCIONES puede hacer dentro del módulo
+// Una sub-llave sólo tiene efecto si el módulo (su llave base) está habilitado.
+var MODULOS=[
+  {k:'tableros', n:'Tableros', subs:[]},
+  {k:'reportes', n:'Reportes', subs:[]},
+  {k:'ventas', n:'Ventas', subs:[
+    ['ventas.descuento','Hacer descuentos (por producto o total)','a'],
+    ['ventas.anular','Anular / editar venta del día','a'],
+    ['ventas.anular_dia_anterior','Anular venta de un día anterior','a']
+  ]},
+  {k:'caja', n:'Caja', subs:[]},
+  {k:'productos', n:'Productos', subs:[
+    ['productos.editar_precio','Editar precios','a'],
+    ['productos.editar_costo','Editar costos','a'],
+    ['productos.editar_nombre','Editar nombre de productos','a']
+  ]},
+  {k:'clientes', n:'Clientes y Listas', subs:[
+    ['clientes.ver_clientes','Ver clientes','v'],
+    ['clientes.ver_ctacte','Ver cuentas corrientes','v'],
+    ['clientes.ver_listas','Ver listas de precio','v'],
+    ['clientes.editar','Modificar clientes (alta y edición)','a'],
+    ['clientes.ctacte_pago','Registrar pago en cuenta corriente','a'],
+    ['clientes.editar_listas','Modificar listas de precio','a']
+  ]},
+  {k:'stock', n:'Stock', subs:[
+    ['stock.ajustar','Ajustar stock','a'],
+    ['stock.importar','Importar stock','a']
+  ]},
+  {k:'compras', n:'Compras y Gastos', subs:[
+    ['compras.editar_costo','Editar costo en compras','a'],
+    ['compras.anular','Editar / anular compras confirmadas','a']
+  ]},
+  {k:'remitos', n:'Remitos internos', subs:[]},
+  {k:'cuentas', n:'Deudas a Pagar', subs:[
+    ['cuentas.pago','Registrar pagos de deuda','a']
+  ]},
+  {k:'conciliacion', n:'Conciliación Clover', subs:[]},
+  {k:'configuracion', n:'Configuración', subs:[]},
+  {k:'usuarios', n:'Usuarios y roles', subs:[]}
+];
 function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
 
 document.getElementById('login-form').addEventListener('submit', async function(e){
@@ -192,16 +240,34 @@ function renderRoles(){
   document.getElementById('roles-cont').innerHTML=ROLES.map(function(r){
     var esAdmin=(r.permisos||[]).indexOf('*')>=0;
     if(esAdmin){ return '<div class="rol-card"><h3>'+r.nombre+' <span class="pill p">acceso total</span></h3><p class="muted" style="font-size:.85rem;">Este rol puede todo y no se edita.</p></div>'; }
-    var body='<div class="perm-grid"><div class="perm-h">Módulos (qué ve en el menú)</div>'+
-      CAT_MODULOS.map(function(m){ return '<label><input type="checkbox" class="rp-'+r.id+'" value="'+m[0]+'" '+((r.permisos||[]).indexOf(m[0])>=0?'checked':'')+'> '+m[1]+'</label>'; }).join('')+
-      '<div class="perm-h">Acciones puntuales</div>'+
-      CAT_ACCIONES.map(function(a){ return '<label><input type="checkbox" class="rp-'+r.id+'" value="'+a[0]+'" '+((r.permisos||[]).indexOf(a[0])>=0?'checked':'')+'> '+a[1]+'</label>'; }).join('')+'</div>';
+    var perms=(r.permisos||[]);
+    function chk(k){ return perms.indexOf(k)>=0?'checked':''; }
+    function box(k,lbl,extra){ return '<label><input type="checkbox" class="rp-'+r.id+'" value="'+k+'" '+chk(k)+(extra||'')+'> '+lbl+'</label>'; }
+    var modsHtml=MODULOS.map(function(m){
+      var on=perms.indexOf(m.k)>=0;
+      var vSubs=m.subs.filter(function(s){ return s[2]==='v'; });
+      var aSubs=m.subs.filter(function(s){ return s[2]!=='v'; });
+      var subsHtml='';
+      if(vSubs.length){ subsHtml+='<div class="mod-sub-h">👁️ Qué ve</div>'+vSubs.map(function(s){ return box(s[0],s[1]); }).join(''); }
+      if(aSubs.length){ subsHtml+='<div class="mod-sub-h">✏️ Qué puede hacer</div>'+aSubs.map(function(s){ return box(s[0],s[1]); }).join(''); }
+      var subsBlock = subsHtml ? '<div class="mod-subs'+(on?'':' off')+'" data-mod="'+m.k+'" data-rol="'+r.id+'">'+subsHtml+'</div>' : '';
+      var head='<label class="mod-head"><input type="checkbox" class="rp-'+r.id+'" value="'+m.k+'" '+chk(m.k)+' onchange="togMod(this,\''+m.k+'\','+r.id+')"> '+m.n+'</label>';
+      return '<div class="mod-perm">'+head+subsBlock+'</div>';
+    }).join('');
+    var body='<p class="muted" style="font-size:.82rem;margin:4px 0 0;">Marcá el <b>módulo</b> para que aparezca en el menú; debajo elegís qué ve y qué puede hacer dentro. Las opciones de adentro sólo valen si el módulo está tildado.</p><div class="mod-list">'+modsHtml+'</div>';
     return '<div class="rol-card"><div style="display:flex;justify-content:space-between;align-items:center;"><h3>'+r.nombre+'</h3><button class="x-btn" title="Eliminar rol" onclick="borrarRol('+r.id+',\''+String(r.nombre).replace(/'/g,"\\'")+'\')">✕</button></div>'+body+
       '<button class="btn" onclick="guardarPermisos('+r.id+')">Guardar permisos</button></div>';
   }).join('');
 }
+// Habilita/deshabilita visualmente las sub-opciones cuando se tilda/destilda el módulo.
+function togMod(cb,modK,rolId){
+  var box=document.querySelector('.mod-subs[data-mod="'+modK+'"][data-rol="'+rolId+'"]');
+  if(box) box.classList.toggle('off', !cb.checked);
+}
 async function guardarPermisos(rolId){
-  var permisos=[]; document.querySelectorAll('.rp-'+rolId+':checked').forEach(function(c){ permisos.push(c.value); });
+  var set={}; document.querySelectorAll('.rp-'+rolId+':checked').forEach(function(c){ set[c.value]=true; });
+  // Una sub-opción (modulo.algo) sólo se guarda si su módulo base está habilitado.
+  var permisos=Object.keys(set).filter(function(k){ var i=k.indexOf('.'); return i<0 || set[k.slice(0,i)]; });
   var r=await window.sp('setRolPermisos',{rolId:rolId, permisos:permisos}); if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   var rr=await window.sf('getRoles'); ROLES=(rr.ok?rr.roles:[])||[]; toast('Permisos guardados'); renderRoles();
 }
