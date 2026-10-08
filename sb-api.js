@@ -717,7 +717,10 @@
     guardarGasto: async function(p){
       var m=await sucIdMap();
       var pay={ sucursal_id:(p.sucursal?m[p.sucursal]:(p.sucursalId||null)), destinatario_id:(p.destinatario?m[p.destinatario]:(p.destinatarioId||null)), categoria_gasto_id:(p.categoriaId||null), proveedor_id:(p.proveedorId||null), monto:(p.monto===''||p.monto==null?0:Number(p.monto)), forma_pago:(p.formaPago||null), fondo:fondoDeForma(p.formaPago), comprobante:(p.comprobante||null), descripcion:(p.descripcion||null) };
-      if(p.fecha) pay.fecha=p.fecha;
+      // Una fecha sin hora (YYYY-MM-DD) se ancla al MEDIODÍA para que caiga en el
+      // mismo día calendario tanto en UTC como en hora argentina (evita que al
+      // guardarse como 00:00 UTC se muestre el día anterior).
+      if(p.fecha) pay.fecha=(String(p.fecha).length===10?p.fecha+'T12:00:00':p.fecha);
       if(p.id){ var r=await sb.from('gastos').update(pay).eq('id',p.id); if(r.error) throw r.error; return {ok:true,id:p.id}; }
       var ins=await sb.from('gastos').insert(pay).select('id').single(); if(ins.error) throw ins.error; return {ok:true,id:ins.data.id};
     },
