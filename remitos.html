@@ -178,7 +178,12 @@ async function iniciar(){
   cargarRemitos();
   document.getElementById('r-scan').focus();
 }
-function aplicarBalanza(){ var b=BALANZAS[sucActual]; if(b){ balCfg={ prefijo:String(b.prefijo||'20'), dato:String(b.dato||'peso'), codlen:parseInt(b.codlen)||5, datolen:parseInt(b.datolen)||5 }; } }
+function aplicarBalanza(){
+  var b=BALANZAS[sucActual];
+  if(!b && sucActual){ var k=Object.keys(BALANZAS).filter(function(x){ return x.trim().toLowerCase()===String(sucActual).trim().toLowerCase(); })[0]; if(k) b=BALANZAS[k]; }
+  balCfg = b ? { prefijo:String(b.prefijo||'20'), dato:String(b.dato||'peso'), codlen:parseInt(b.codlen)||5, datolen:parseInt(b.datolen)||5 }
+             : { prefijo:'20', dato:'peso', codlen:5, datolen:5 };
+}
 function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; document.getElementById('e-origen-txt').textContent=sucActual; }
 function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); document.getElementById('e-origen-txt').textContent=sucActual; aplicarBalanza(); poblarDestino(); cargarRemitos(); }
 function poblarDestino(){ document.getElementById('e-destino').innerHTML=SUCS.filter(function(s){return s!==sucActual;}).map(function(s){return '<option>'+s+'</option>';}).join(''); }

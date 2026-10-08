@@ -335,8 +335,18 @@ function poblarSuc(){
   aplicarBalanza();
 }
 function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); aplicarBalanza(); cargarOfertasRefresh(); verificarCaja(); }
-var balCfg={ prefijo:'20', dato:'precio', codlen:5, datolen:5 };
-function aplicarBalanza(){ var b=BALANZAS[sucActual]; if(b){ balCfg={ prefijo:String(b.prefijo||'20'), dato:String(b.dato||'precio'), codlen:parseInt(b.codlen)||5, datolen:parseInt(b.datolen)||5 }; } }
+// Default SEGURO: 'peso' (todas las balanzas Systel embeben el peso). Si un local
+// quedara sin config, igual lee el peso en vez de interpretarlo como precio.
+var balCfg={ prefijo:'20', dato:'peso', codlen:5, datolen:5 };
+function aplicarBalanza(){
+  var b=BALANZAS[sucActual];
+  if(!b && sucActual){ // match tolerante a espacios / mayúsculas en el nombre del local
+    var k=Object.keys(BALANZAS).filter(function(x){ return x.trim().toLowerCase()===String(sucActual).trim().toLowerCase(); })[0];
+    if(k) b=BALANZAS[k];
+  }
+  balCfg = b ? { prefijo:String(b.prefijo||'20'), dato:String(b.dato||'peso'), codlen:parseInt(b.codlen)||5, datolen:parseInt(b.datolen)||5 }
+             : { prefijo:'20', dato:'peso', codlen:5, datolen:5 };
+}
 async function cargarOfertasRefresh(){ var ro=await window.sf('getOfertas'); if(ro.ok) cargarOfertas(ro.ofertas||[]); var rc=await window.sf('getCombos'); if(rc.ok) cargarCombos(rc.combos||[]); render(); }
 
 // ---- OFERTAS ----
