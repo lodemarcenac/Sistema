@@ -393,19 +393,23 @@ async function anularConfirmada(id){
 
 // ---- GASTOS ----
 async function cargarGastos(){ var r=await window.sf('getGastos&limit=300&sucursal='+encodeURIComponent(sucActual)); GASTOS=(r.ok?r.gastos:[])||[]; renderGastos(); }
+// Día calendario en hora argentina: arISO -> 'AAAA-MM-DD' (para filtrar/ordenar),
+// arDisp -> 'DD/MM/AAAA' (para mostrar). Coinciden entre sí y con el día elegido.
+function arISO(s){ return s?new Date(s).toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'}):''; }
+function arDisp(s){ return s?new Date(s).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; }
 function renderGastos(){
   var q=(document.getElementById('g-buscar').value||'').trim().toLowerCase();
   var desde=document.getElementById('g-desde').value, hasta=document.getElementById('g-hasta').value;
   var arr=GASTOS.filter(function(g){
     if(q && (g.descripcion+' '+g.categoria+' '+g.proveedor).toLowerCase().indexOf(q)<0) return false;
-    var f=g.fecha?g.fecha.slice(0,10):'';
+    var f=arISO(g.fecha);
     if(desde && f<desde) return false;
     if(hasta && f>hasta) return false;
     return true;
   });
   arr.sort(function(a,b){ return String(a.descripcion||'').localeCompare(String(b.descripcion||'')); });
   document.getElementById('g-tbody').innerHTML=arr.map(function(g){
-    var f=g.fecha?new Date(g.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
+    var f=arDisp(g.fecha);
     return '<tr style="cursor:pointer;" onclick="toggleGasto('+g.id+')"><td style="width:18px;color:var(--muted);">▸</td><td>'+(g.descripcion||'(sin detalle)')+'</td><td>'+(g.categoria||'')+(g.grupo?' <span class="muted">('+g.grupo+')</span>':'')+'</td><td>'+(SUCID[g.destinatarioId]||'')+'</td><td>'+(g.proveedor||'')+'</td>'+
       '<td class="num">'+fmt$(g.monto)+'</td><td>'+(g.formaPago||'')+'</td><td>'+f+'</td>'+
       '<td style="white-space:nowrap;" onclick="event.stopPropagation();"><button class="mini-btn" onclick="editarGasto('+g.id+')">Editar</button><button class="x-btn" title="Eliminar" onclick="borrarGasto('+g.id+')">✕</button></td></tr>'+
