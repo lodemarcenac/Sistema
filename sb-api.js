@@ -471,6 +471,25 @@
       var r=await sb.from('productos').update({ activo:!!p.activo }).eq('codigo_interno',String(p.codigo));
       if(r.error) throw r.error; return {ok:true};
     },
+    // Borrado DEFINITIVO de un producto. Limpia primero lo de catálogo/stock
+    // (precios, stock, snapshots, ofertas, componentes de combo). Si el producto
+    // tiene movimientos (ventas/compras/remitos/elaboraciones) la base lo frena:
+    // en ese caso devolvemos un mensaje claro para que se dé de baja.
+    eliminarProducto: async function(p){
+      var cod=String(p.codigo||''); var pid=await prodIdPorCod(cod);
+      if(!pid) throw new Error('Producto no encontrado: '+cod);
+      await sb.from('producto_precios').delete().eq('producto_id',pid);
+      await sb.from('ofertas').delete().eq('producto_id',pid);
+      await sb.from('combo_componentes').delete().eq('producto_id',pid);
+      await sb.from('stock_snapshots').delete().eq('producto_id',pid);
+      await sb.from('stock_movimientos').delete().eq('producto_id',pid);
+      await sb.from('stock').delete().eq('producto_id',pid);
+      var r=await sb.from('productos').delete().eq('id',pid);
+      if(r.error){
+        throw new Error('No se puede borrar: el producto tiene movimientos (ventas, compras o remitos). Dalo de baja en su lugar. ['+(r.error.message||r.error.code||'')+']');
+      }
+      return {ok:true};
+    },
     crearProducto: async function(p){
       var cid=await catIdOrCreate(p.categoria||'');
       var ins=await sb.from('productos').insert({ codigo_interno:String(p.codigo), nombre:p.nombre||'', marca:p.marca||'', categoria_id:cid, tipo:(p.tipo==='unidad'?'unidad':'pesable'), costo:(p.costo===''||p.costo==null?null:Number(p.costo)), margen_override:(p.margen===''||p.margen==null?null:Number(p.margen)), activo:true, fecha_costo:(p.costo?hoy():null) }).select('id').single();

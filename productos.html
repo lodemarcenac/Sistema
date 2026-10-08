@@ -24,6 +24,12 @@
   th{background:var(--surface-2);color:#6b7688;font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.04em;}
   td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
   tr.inactivo td{color:#aeb4c0;font-style:italic;}
+  /* Catálogo: caja con scroll propio (horizontal y vertical) para que la barra
+     de desplazamiento quede siempre a la vista aunque haya muchos productos. */
+  .tblwrap-cat{max-height:calc(100vh - 250px);overflow:auto;}
+  #tabla thead th{position:sticky;top:0;z-index:1;}
+  td.acc-col{white-space:nowrap;}
+  td.acc-col .x-btn{margin-left:6px;color:var(--bad,#c0392b);}
   details.alta{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:8px 16px;margin-bottom:14px;box-shadow:var(--shadow);}
   details.alta summary{cursor:pointer;font-weight:700;color:var(--brand);padding:6px 0;}
   /* Formularios: MISMO estilo (grid) para alta, categorías/listas y promos */
@@ -107,7 +113,7 @@
       <button class="mini-btn" type="button" onclick="exportarProductos()" style="margin-left:auto;" title="Baja un Excel con todos los productos: datos, costo, precios por lista y stock por sucursal.">⬇️ Exportar a Excel</button>
     </div>
     <div class="resumen" id="resumen"></div>
-    <div class="card p0"><div class="tblwrap"><table id="tabla"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div></div>
+    <div class="card p0"><div class="tblwrap tblwrap-cat"><table id="tabla"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div></div>
     <div class="vacio" id="vacio" hidden>Sin productos.</div>
     </div><!-- /t-catalogo -->
 
@@ -609,6 +615,13 @@ async function toggleActivo(cod){
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   p.activo=nuevo; toast(nuevo?'Producto reactivado':'Producto dado de baja'); render();
 }
+async function eliminarProductoUI(cod){
+  var p=PRODS[cod]; if(!p) return;
+  if(!confirm('¿BORRAR definitivamente "'+(p.nombre||cod)+'"?\n\nSe elimina del catálogo junto con sus precios y stock. Esto no se puede deshacer.\n\n(Si el producto tiene ventas o compras cargadas, no se va a poder borrar: en ese caso dalo de baja.)')) return;
+  var r=await window.sp('eliminarProducto',{codigo:cod});
+  if(!r.ok){ toast(r.error||'No se pudo borrar','error'); return; }
+  delete PRODS[cod]; toast('Producto borrado'); render();
+}
 async function crearProductoUI(){
   var cod=(document.getElementById('a-cod').value||'').trim(), nom=(document.getElementById('a-nom').value||'').trim();
   if(!cod||!nom){ toast('Poné código y nombre','error'); return; }
@@ -661,7 +674,9 @@ function render(){
         var handler = esBase ? ('editarMinorista(\''+cod+'\',this.value)') : ('editarPrecio(\''+cod+'\',\''+lq+'\',this.value)');
         return '<td class="num"><input class="cell'+(ro?' ro':'')+'" type="number" step="0.01" value="'+val+'" '+(ro?'readonly title="Derivada: se calcula desde Minorista"':('onchange="'+handler+'"'))+'></td>';
       }).join('')+
-      '<td>'+(p.activo===false?'Inactivo':'Activo')+'<button class="mini-btn" onclick="toggleActivo(\''+cod+'\')">'+(p.activo===false?'Reactivar':'Baja')+'</button></td></tr>';
+      '<td class="acc-col">'+(p.activo===false?'Inactivo':'Activo')+
+        '<button class="mini-btn" onclick="toggleActivo(\''+cod+'\')">'+(p.activo===false?'Reactivar':'Baja')+'</button>'+
+        '<button class="x-btn" title="Borrar definitivamente" onclick="eliminarProductoUI(\''+cod+'\')">✕</button></td></tr>';
   }).join('');
 }
 </script>

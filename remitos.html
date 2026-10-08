@@ -19,6 +19,9 @@
   .abm-nueva input,.abm-nueva select,.linea input{width:100%;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;background:#fff;}
   .linea{display:grid;grid-template-columns:2fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;}
   .ac-pop{position:absolute;background:#fff;border:1px solid var(--border-inp);border-radius:var(--radius-sm);max-height:260px;overflow:auto;z-index:200;box-shadow:var(--shadow-pop);}
+  /* La caja de los modales (detalle / procesar / redirigir) scrollea cuando el
+     remito es largo, así no se corta arriba/abajo fuera de la pantalla. */
+  .ov > div{max-height:calc(100vh - 32px);overflow:auto;}
   .ac-pop div{padding:8px 12px;cursor:pointer;font-size:var(--fs-sm);border-bottom:1px solid var(--line-2);}
   .ac-pop div:hover{background:var(--brand-soft);}
   .pill-est{font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:20px;}
