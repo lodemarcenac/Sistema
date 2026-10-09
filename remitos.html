@@ -87,11 +87,13 @@
 
     <div id="t-pend" hidden>
       <p class="resumen" style="margin-bottom:10px;">Estos remitos ya <b>salieron del origen</b> y están <b>en tránsito</b> hasta que el destino los reciba. El destino puede <b>recibir</b> (total o parcial; el faltante vuelve al origen) o <b>rechazar</b> (vuelve todo al origen, sin deuda). <b>Origen o destino</b> pueden <b>redirigir</b> a otro local. El origen puede <b>anular</b> el envío (vuelve todo al origen).</p>
+      <div style="margin-bottom:10px;"><select id="pend-alc" class="rem-alc" onchange="setAlcanceRem(this.value)" style="padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></select></div>
       <div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Número</th><th>Origen</th><th>Destino</th><th>Fecha</th><th class="num">Total (c/plus)</th><th></th></tr></thead><tbody id="pend-tbody"></tbody></table></div></div>
     </div>
 
     <div id="t-hist" hidden>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px;">
+        <select id="h-alc" class="rem-alc" onchange="setAlcanceRem(this.value)" style="padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></select>
         <input id="h-q" placeholder="Buscar número / concepto…" oninput="renderHist()" style="flex:1;min-width:160px;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;">
         <select id="h-estado" onchange="renderHist()" style="padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"><option value="">Todos los estados</option><option value="pendiente">🚚 En tránsito</option><option value="recibido parcial">Parcial</option><option value="recibido">Recibido</option><option value="rechazado">Rechazado</option><option value="anulado">Anulado</option></select>
         <select id="h-origen" onchange="renderHist()" style="padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></select>
@@ -353,12 +355,23 @@ async function cargarRemitos(){
 }
 // Si los permisos llegan después del primer render, recargar con el alcance correcto.
 document.addEventListener('perm-listo', function(){ cargarRemitos(); });
+// Alcance de Pendientes/Historial: por defecto solo el local seleccionado (origen o destino).
+var remVerTodos=false;
+function delLocalRem(r){ return SUCID[r.origenId]===sucActual || SUCID[r.destinoId]===sucActual; }
+function setAlcanceRem(v){ remVerTodos=(v==='todos'); poblarAlcanceRem(); renderPend(); renderHist(); }
+function poblarAlcanceRem(){
+  document.querySelectorAll('.rem-alc').forEach(function(sel){
+    sel.innerHTML='<option value="local">Solo '+sucActual+'</option><option value="todos">Todos los locales</option>';
+    sel.value=remVerTodos?'todos':'local';
+  });
+}
 function poblarFiltrosHist(){
+  poblarAlcanceRem();
   var opts=function(id){ var sel=document.getElementById(id); if(!sel) return; var cur=sel.value; sel.innerHTML='<option value="">'+(id==='h-origen'?'Todos los orígenes':'Todos los destinos')+'</option>'+SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sel.value=cur; };
   opts('h-origen'); opts('h-destino');
 }
 function renderPend(){
-  var arr=REMITOS.filter(function(r){ return r.estado!=='recibido' && r.estado!=='rechazado' && r.estado!=='anulado' && r.estado!=='recibido parcial'; });
+  var arr=REMITOS.filter(function(r){ return (remVerTodos || delLocalRem(r)) && r.estado!=='recibido' && r.estado!=='rechazado' && r.estado!=='anulado' && r.estado!=='recibido parcial'; });
   document.getElementById('pend-tbody').innerHTML=arr.map(function(r){
     var f=r.emision?new Date(r.emision).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
     var puedeRecibir=(SUCID[r.destinoId]===sucActual);
@@ -375,7 +388,8 @@ function renderHist(){
   var q=(document.getElementById('h-q').value||'').trim().toLowerCase();
   var fe=document.getElementById('h-estado').value, fo=document.getElementById('h-origen').value, fd=document.getElementById('h-destino').value;
   var arr=REMITOS.filter(function(r){
-    if(q && (r.numero+' '+(r.concepto||'')).toLowerCase().indexOf(q)<0) return false;
+    if(!remVerTodos && !delLocalRem(r)) return false;
+    if(q &&(r.numero+' '+(r.concepto||'')).toLowerCase().indexOf(q)<0) return false;
     if(fe && r.estado!==fe) return false;
     if(fo && (SUCID[r.origenId]||'')!==fo) return false;
     if(fd && (SUCID[r.destinoId]||'')!==fd) return false;
