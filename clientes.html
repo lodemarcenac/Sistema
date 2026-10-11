@@ -93,7 +93,7 @@
           <div><label>Forma</label><select id="ccx-fp"></select></div>
           <button class="btn-alta" onclick="pagarCCx()">Registrar pago</button>
         </div>
-        <div class="tblwrap" style="margin-top:12px;"><table class="data"><thead><tr><th>Fecha</th><th>Concepto</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th></tr></thead><tbody id="ccx-movs"></tbody></table></div>
+        <div class="tblwrap" style="margin-top:12px;"><table class="data"><thead><tr><th>Fecha</th><th>Concepto</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th><th></th></tr></thead><tbody id="ccx-movs"></tbody></table></div>
       </div>
     </div>
 
@@ -114,6 +114,7 @@
 </div>
 
 <div class="toast-c" id="toast-c"></div>
+<div id="ccx-ticket" style="position:fixed;left:-9999px;top:-9999px;white-space:pre;"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -122,7 +123,7 @@
 <script src="nav.js"></script>
 <script>
 var sb=window.sbClient;
-var CLIENTES=[], LISTAS=[], SUCS=[], LISTAS_FULL=[], FORMAS=['Efectivo','Tarjeta','Virtual'], SALDOSCLI=[], ccxSel=null, ccxMovs=[], ccxNom='';
+var CLIENTES=[], LISTAS=[], SUCS=[], LISTAS_FULL=[], FORMAS=['Efectivo','Tarjeta','Virtual'], SALDOSCLI=[], ccxSel=null, ccxMovs=[], ccxNom='', ccxMovsVista=[], ccxVentaCache={};
 function toast(msg,tipo){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(tipo?' '+tipo:''); e.textContent=msg; c.appendChild(e); setTimeout(function(){ e.remove(); },2600); }
 
 // ---- PERMISOS (sub-vistas y acciones del módulo Clientes y Listas) ----
@@ -218,17 +219,120 @@ function ccxBuscar(){
 }
 function pickCC(realId,nom){ document.getElementById('ccx-sug').hidden=true; document.getElementById('ccx-buscar').value=nom; verClienteCC(Number(realId),nom); }
 async function verClienteCC(id,nom){
-  ccxSel=id; ccxNom=nom;
+  ccxSel=id; ccxNom=nom; ccxVentaCache={};
   var r=await window.sf('getMovimientosCC&id='+id); ccxMovs=(r.ok?r.movimientos:[])||[];
   document.getElementById('ccx-detalle').hidden=false;
   document.getElementById('ccx-nom').textContent=nom;
   var s=(r.ok?r.saldo:0); var el=document.getElementById('ccx-saldo');
   el.className='saldo '+(s>0.5?'debe':(s<-0.5?'favor':'cero')); el.textContent=(s>0.5?('Debe '+fmt$(s)):(s<-0.5?(fmt$(-s)+' a favor'):'$0'));
-  document.getElementById('ccx-movs').innerHTML=(ccxMovs.slice().reverse().map(function(m){
+  ccxMovsVista=ccxMovs.slice().reverse();
+  document.getElementById('ccx-movs').innerHTML=(ccxMovsVista.map(function(m,i){
     var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; var esPago=/pago/i.test(m.tipo);
-    return '<tr><td>'+f+'</td><td>'+(m.concepto||'')+'</td><td>'+(m.comprobante||'')+'</td><td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td></tr>';
-  }).join('')) || '<tr><td colspan="6" class="muted">Sin movimientos.</td></tr>';
+    var esVenta=(!esPago && !!m.comprobante);   // cargo con comprobante = venta a cta cte
+    var acc=esVenta?('<button class="mini-btn" onclick="toggleVentaCC('+i+')">Ver detalle</button>'):'';
+    return '<tr'+(esVenta?' style="cursor:pointer;" onclick="toggleVentaCC('+i+')"':'')+'><td>'+f+'</td><td>'+(m.concepto||'')+'</td><td>'+(m.comprobante||'')+'</td><td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td><td style="white-space:nowrap;" onclick="event.stopPropagation()">'+acc+'</td></tr>'+
+      (esVenta?('<tr id="ccx-det-'+i+'" hidden><td colspan="7" style="background:var(--bg-soft,#f6f8fb);padding:0;"><div id="ccx-det-box-'+i+'" style="padding:12px 14px;"></div></td></tr>'):'');
+  }).join('')) || '<tr><td colspan="7" class="muted">Sin movimientos.</td></tr>';
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
+}
+
+// ---- Detalle expandible de una venta a cta cte (composición + dónde se hizo + imprimir) ----
+function puedeModificarVentaCC(sucursalNombre){
+  if(!(window.PERM && window.PERM.cargado)) return true;         // sin PERM cargado = no bloquear
+  if(window.PERM.esAdmin) return true;                           // administrador: siempre
+  var locs=(window.PERM.locales||[]).map(function(x){return String(x).trim().toLowerCase();});
+  return !!sucursalNombre && locs.indexOf(String(sucursalNombre).trim().toLowerCase())>=0;  // solo el local que la hizo
+}
+async function toggleVentaCC(i){
+  var row=document.getElementById('ccx-det-'+i), box=document.getElementById('ccx-det-box-'+i);
+  if(!row||!box) return;
+  if(!row.hidden){ row.hidden=true; return; }
+  row.hidden=false; box.innerHTML='<p class="muted" style="margin:0;">Cargando…</p>';
+  var m=ccxMovsVista[i]||{};
+  var r=await window.sf('getVentaDetallePorComprobante&comprobante='+encodeURIComponent(m.comprobante||''));
+  if(!r.ok){ box.innerHTML='<p class="muted" style="margin:0;">No se pudo cargar el detalle: '+(r.error||'?')+'</p>'; return; }
+  ccxVentaCache[i]=r;
+  var v=r.venta||{}, det=r.detalle||[];
+  var sucNom=(v.sucursal&&v.sucursal.nombre)||m.sucursal||'';
+  var filas=det.map(function(it){
+    var esPes=(it.peso!=null && Number(it.peso)>0);
+    var q=esPes?(Number(it.peso).toFixed(3)+' kg × '+fmt$(it.precio_kg)):((Number(it.cantidad)||1)+' u × '+fmt$(Number(it.precio)/(Number(it.cantidad)||1)));
+    return '<tr><td>'+(it.nombre||'')+'</td><td class="num">'+q+(Number(it.descuento_pct)>0?(' <span class="muted">(-'+it.descuento_pct+'%)</span>'):'')+'</td><td class="num">'+fmt$(it.precio)+'</td></tr>';
+  }).join('');
+  var puedeMod=puedeModificarVentaCC(sucNom);
+  var anularBtn=puedeMod?('<button class="btn-sec" style="color:var(--bad);border-color:#f0c9c9;" onclick="anularVentaCC('+i+','+(v.id||0)+')">Anular venta</button>')
+                        :('<span class="muted" style="font-size:.78rem;">Solo '+(sucNom||'el local que la hizo')+' o un administrador pueden modificarla</span>');
+  box.innerHTML=''+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">'+
+      '<div><b>'+(v.comprobante||'')+'</b> <span class="muted">· Hecho en <b>'+(sucNom||'—')+'</b></span></div>'+
+      '<div style="display:flex;gap:8px;">'+
+        '<button class="mini-btn" onclick="imprimirVentaCC('+i+')">🖨 Imprimir ticket</button>'+
+        anularBtn+
+      '</div>'+
+    '</div>'+
+    '<div class="tblwrap"><table class="data"><thead><tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Importe</th></tr></thead><tbody>'+
+      (filas || '<tr><td colspan="3" class="muted">Sin renglones.</td></tr>')+
+      (det.length?('<tr><td colspan="2" class="num" style="font-weight:700;">Total</td><td class="num" style="font-weight:700;color:var(--brand);">'+fmt$(v.total)+'</td></tr>'):'')+
+    '</tbody></table></div>';
+}
+function imprimirVentaCC(i){
+  var r=ccxVentaCache[i]; if(!r||!r.venta){ toast('Abrí el detalle primero','error'); return; }
+  document.getElementById('ccx-ticket').textContent=armarTicketDetalle(r.venta, r.detalle, r.pagos);
+  imprimirTicketCC();
+}
+async function anularVentaCC(i, ventaId){
+  var r0=ccxVentaCache[i]; var sucNom=(r0&&r0.venta&&r0.venta.sucursal&&r0.venta.sucursal.nombre)||(ccxMovsVista[i]&&ccxMovsVista[i].sucursal)||'';
+  if(!puedeModificarVentaCC(sucNom)){ toast('Solo el local que la hizo o un administrador pueden anularla','error'); return; }
+  if(window.PERM && window.PERM.cargado && !window.PERM.esAdmin && !window.PERM.puede('ventas.anular')){ toast('No tenés permiso para anular ventas','error'); return; }
+  if(!ventaId){ toast('No se pudo identificar la venta','error'); return; }
+  if(!confirm('¿Anular esta venta? Se devuelve el stock y se revierte la cuenta corriente.')) return;
+  var r=await window.sp('anularVenta',{id:ventaId});
+  if(!r.ok && /AUTORIZACION_REQUERIDA/.test(r.error||'')){
+    if(!confirm('La venta es de un día anterior. ¿Autorizás igual la anulación?')) return;
+    r=await window.sp('anularVenta',{id:ventaId, autorizado:true});
+  }
+  if(!r.ok){ toast('Error: '+(r.error||'?'),'error'); return; }
+  toast('Venta anulada'); verClienteCC(ccxSel,ccxNom); renderCtaCte();
+}
+
+// ---- Impresión de ticket (mismo formato que Ventas, 70mm) ----
+var ANCHO_TICKET=40;
+function centrar(t){ t=String(t); var pad=Math.max(0,Math.floor((ANCHO_TICKET-t.length)/2)); return new Array(pad+1).join(' ')+t; }
+function linea(izq,der){ izq=String(izq); der=String(der); var esp=Math.max(1,ANCHO_TICKET-izq.length-der.length); return izq+new Array(esp+1).join(' ')+der; }
+function armarTicketDetalle(v,det,pagos){
+  var s=v.sucursal||{}; var L=[];
+  L.push(centrar('CARNICERÍA')); L.push(centrar(s.nombre||''));
+  if(s.direccion) L.push(centrar(s.direccion)); if(s.telefono) L.push(centrar('Tel: '+s.telefono));
+  L.push(''); L.push(v.comprobante||'');
+  L.push(new Date(v.fecha).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}));
+  L.push('Cliente: '+(v.cliente_nombre||'Consumidor final'));
+  if(v.estado==='anulada') L.push(centrar('*** ANULADA ***'));
+  L.push('----------------------------------------');
+  (det||[]).forEach(function(it){
+    var esPes=(it.peso!=null && Number(it.peso)>0);
+    var q=esPes?(Number(it.peso).toFixed(3)+'kg x '+fmt$(it.precio_kg)):((it.cantidad||1)+'u x '+fmt$(it.precio/(it.cantidad||1)));
+    L.push(it.nombre||''); L.push(linea('  '+q+((it.descuento_pct>0)?(' (-'+it.descuento_pct+'%)'):''), fmt$(it.precio)));
+  });
+  L.push('----------------------------------------');
+  if(v.descuento_pct>0){ L.push(linea('Bruto:',fmt$(v.total_bruto))); L.push(linea('Descuento ('+v.descuento_pct+'%):','-'+fmt$(v.descuento_monto))); }
+  L.push(linea('TOTAL:', fmt$(v.total)));
+  (pagos||[]).forEach(function(p){ L.push(linea('  '+p.metodo+':', fmt$(p.monto))); });
+  return L.join('\n');
+}
+function imprimirTicketCC(){
+  var txt=document.getElementById('ccx-ticket').textContent;
+  var estilos='@page { margin:0; size:70mm auto; }'+
+    '* { margin:0; padding:0; box-sizing:border-box; }'+
+    'html, body { width:70mm; }'+
+    'body { font-family:\'Courier New\',Courier,monospace; font-size:10pt; line-height:1.25; width:70mm; padding:2mm 1mm; background:#fff; color:#000; white-space:pre; letter-spacing:-0.2px; }'+
+    '@media print { html, body { width:70mm; margin:0; } body { padding:0 1mm; } }';
+  var cuerpo=txt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  var docHtml='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ticket</title><style>'+estilos+'</style></head><body>'+cuerpo+'</body></html>';
+  var ifr=document.getElementById('print-frame-cc'); if(ifr) ifr.remove();
+  ifr=document.createElement('iframe'); ifr.id='print-frame-cc'; ifr.style.position='fixed'; ifr.style.right='0'; ifr.style.bottom='0'; ifr.style.width='0'; ifr.style.height='0'; ifr.style.border='0';
+  document.body.appendChild(ifr);
+  var d=ifr.contentWindow.document; d.open(); d.write(docHtml); d.close();
+  setTimeout(function(){ try{ ifr.contentWindow.focus(); ifr.contentWindow.print(); }catch(e){ console.warn(e); } }, 250);
 }
 async function pagarCCx(){
   if(!puedePagoCC()){ toast('No tenés permiso para registrar pagos','error'); return; }
@@ -240,8 +344,8 @@ async function pagarCCx(){
 }
 function exportarCC(){
   if(!ccxMovs.length){ toast('No hay movimientos para exportar','error'); return; }
-  var aoa=[['Fecha','Concepto','Comprobante','Cargo','Pago','Saldo']];
-  ccxMovs.forEach(function(m){ var esPago=/pago/i.test(m.tipo); aoa.push([ (m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''), m.concepto||'', m.comprobante||'', (esPago?'':Number(m.monto)), (esPago?Number(m.monto):''), Number(m.saldo) ]); });
+  var aoa=[['Fecha','Concepto','Comprobante','Local','Cargo','Pago','Saldo']];
+  ccxMovs.forEach(function(m){ var esPago=/pago/i.test(m.tipo); aoa.push([ (m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''), m.concepto||'', m.comprobante||'', m.sucursal||'', (esPago?'':Number(m.monto)), (esPago?Number(m.monto):''), Number(m.saldo) ]); });
   var ws=XLSX.utils.aoa_to_sheet(aoa); var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'CtaCte');
   XLSX.writeFile(wb, 'ctacte_'+String(ccxNom).replace(/[^\w]+/g,'-')+'.xlsx');
 }

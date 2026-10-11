@@ -47,7 +47,11 @@
   })();
   window.sbClient = sb;
 
-  function hoyISO(){ return new Date().toISOString().slice(0,10); }
+  function hoyISO(){ return new Date().toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'}); }
+  // Bordes de un rango de días en hora de Argentina (las fechas se guardan en UTC):
+  // convierte 'YYYY-MM-DD' al instante correcto para comparar contra timestamptz.
+  function desdeAR(d){ return d+'T00:00:00-03:00'; }
+  function hastaAR(d){ return d+'T23:59:59-03:00'; }
   function parseAction(a){ // "getProductos&admin=1" -> {base, params:{admin:'1'}}
     var parts=String(a||'').split('&'); var base=parts.shift(); var params={};
     parts.forEach(function(p){ var kv=p.split('='); params[kv[0]]=decodeURIComponent(kv[1]||''); });
@@ -148,8 +152,8 @@
       params=params||{};
       var q=sb.from('ventas').select('id,comprobante,fecha,cliente_nombre,total,forma_pago,estado,sucursal:sucursales(nombre)').order('fecha',{ascending:false});
       if(params.sucursal){ var m=await sucIdMap(); var sid=m[params.sucursal]; if(sid) q=q.eq('sucursal_id',sid); }
-      if(params.desde) q=q.gte('fecha', params.desde);
-      if(params.hasta) q=q.lte('fecha', params.hasta+'T23:59:59');
+      if(params.desde) q=q.gte('fecha', desdeAR(params.desde));
+      if(params.hasta) q=q.lte('fecha', hastaAR(params.hasta));
       q=q.limit(params.limit?parseInt(params.limit):50);
       var res=await q; if(res.error) throw res.error;
       var arr=(res.data||[]).map(function(v){ return { id:v.id, comprobante:v.comprobante, fecha:v.fecha, cliente:v.cliente_nombre, total:Number(v.total), formaPago:v.forma_pago, estado:v.estado, sucursal:v.sucursal?v.sucursal.nombre:'' }; });
@@ -169,8 +173,8 @@
       params=params||{};
       var q=sb.from('ventas_detalle').select('nombre,categoria,marca,codigo,peso,precio_kg,precio,cantidad,precio_lista,descuento_pct,venta:ventas!inner(comprobante,fecha,cliente_nombre,forma_pago,estado,sucursal_id)').limit(100000);
       if(params.sucursal){ var m=await sucIdMap(); var sid=m[params.sucursal]; if(sid) q=q.eq('venta.sucursal_id', sid); }
-      if(params.desde) q=q.gte('venta.fecha', params.desde);
-      if(params.hasta) q=q.lte('venta.fecha', params.hasta+'T23:59:59');
+      if(params.desde) q=q.gte('venta.fecha', desdeAR(params.desde));
+      if(params.hasta) q=q.lte('venta.fecha', hastaAR(params.hasta));
       if(params.excluirAnuladas==='1') q=q.eq('venta.estado','ok');
       var r=await q; if(r.error) throw r.error;
       var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
@@ -231,9 +235,22 @@
     },
     getMovimientosCC: async function(params){
       var id=params&&params.id; if(!id) return {ok:true, movimientos:[], saldo:0};
-      var r=await sb.from('cuenta_corriente').select('fecha,tipo,monto,concepto,comprobante,forma_pago').eq('cliente_id',id).order('fecha'); if(r.error) throw r.error;
-      var saldo=0; var movs=(r.data||[]).map(function(m){ var v=Number(m.monto)||0; if(/pago/i.test(m.tipo)) saldo-=v; else saldo+=v; return { fecha:m.fecha, tipo:m.tipo, monto:v, concepto:m.concepto||'', comprobante:m.comprobante||'', formaPago:m.forma_pago||'', saldo:saldo }; });
+      var r=await sb.from('cuenta_corriente').select('fecha,tipo,monto,concepto,comprobante,forma_pago,sucursal_id,ref').eq('cliente_id',id).order('fecha'); if(r.error) throw r.error;
+      var idToName={}; try{ var sn=await sb.from('sucursales').select('id,nombre'); (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; }); }catch(e){}
+      var saldo=0; var movs=(r.data||[]).map(function(m){ var v=Number(m.monto)||0; if(/pago/i.test(m.tipo)) saldo-=v; else saldo+=v; return { fecha:m.fecha, tipo:m.tipo, monto:v, concepto:m.concepto||'', comprobante:m.comprobante||'', formaPago:m.forma_pago||'', sucursalId:m.sucursal_id||null, sucursal:(m.sucursal_id?idToName[m.sucursal_id]||'':''), ref:m.ref||'', saldo:saldo }; });
       return {ok:true, movimientos:movs, saldo:saldo};
+    },
+    // Detalle de una venta a partir de su comprobante (SIGLA-AAAAMMDD-NNNN).
+    // Se usa en la cuenta corriente para ver/expandir qué compone cada venta a cta cte.
+    getVentaDetallePorComprobante: async function(params){
+      var comp=params&&params.comprobante; if(!comp) throw new Error('Falta comprobante');
+      var v=await sb.from('ventas').select('*,sucursal:sucursales(nombre,direccion,telefono,sigla)').eq('comprobante',comp).order('id',{ascending:false}).limit(1).maybeSingle();
+      if(v.error) throw v.error;
+      if(!v.data) return {ok:false, error:'No se encontró la venta '+comp};
+      var id=v.data.id;
+      var d=await sb.from('ventas_detalle').select('*').eq('venta_id',id); if(d.error) throw d.error;
+      var pg=await sb.from('pagos').select('*').eq('venta_id',id); if(pg.error) throw pg.error;
+      return {ok:true, venta:v.data, detalle:d.data||[], pagos:pg.data||[]};
     },
     getMovProveedor: async function(params){
       var id=params&&params.id; if(!id) return {ok:true, movimientos:[], saldo:0};
@@ -334,8 +351,8 @@
       params=params||{};
       var m=await sucIdMap(); var q=sb.from('cajas').select('id,sucursal_id,cajero,apertura,abierta_at,cerrada,cerrada_at,esperado,cierre_efectivo,diferencia,a_reserva,queda_caja').order('abierta_at',{ascending:false});
       if(params.sucursal){ var sid=m[params.sucursal]; if(sid) q=q.eq('sucursal_id',sid); }
-      if(params.desde) q=q.gte('abierta_at', params.desde);
-      if(params.hasta) q=q.lte('abierta_at', params.hasta+'T23:59:59');
+      if(params.desde) q=q.gte('abierta_at', desdeAR(params.desde));
+      if(params.hasta) q=q.lte('abierta_at', hastaAR(params.hasta));
       if(params.soloCerradas==='1') q=q.eq('cerrada', true);
       q=q.limit(params.desde||params.hasta?5000:100);
       var r=await q; if(r.error) throw r.error;
@@ -422,15 +439,15 @@
       var m=await sucIdMap(); var sid=params&&params.sucursal?m[params.sucursal]:null;
       var q=sb.from('compras').select('id,comprobante,total,fecha,proveedor:proveedores(nombre),detalle:compras_detalle(cantidad,costo_unit,costo,producto:productos(nombre,codigo_interno))').eq('estado','completa');
       if(sid) q=q.eq('sucursal_id',sid);
-      if(params&&params.desde) q=q.gte('fecha',params.desde);
-      if(params&&params.hasta) q=q.lte('fecha',params.hasta+'T23:59:59');
+      if(params&&params.desde) q=q.gte('fecha',desdeAR(params.desde));
+      if(params&&params.hasta) q=q.lte('fecha',hastaAR(params.hasta));
       var r=await q.order('fecha',{ascending:false}).limit(500); if(r.error) throw r.error;
       return {ok:true, compras:(r.data||[]).map(function(c){ return { id:c.id, comprobante:c.comprobante||'', total:Number(c.total)||0, fecha:c.fecha, proveedor:(c.proveedor?c.proveedor.nombre:''), items:(c.detalle||[]).map(function(d){ return { nombre:(d.producto?(d.producto.nombre||d.producto.codigo_interno):'(s/producto)'), cantidad:Number(d.cantidad)||0, costo_unit:Number(d.costo_unit)||0, costo:Number(d.costo)||0 }; }) }; })};
     }
   };
 
   // ---------------- ESCRITURAS ----------------
-  function hoy(){ return new Date().toISOString().slice(0,10); }
+  function hoy(){ return new Date().toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'}); }
   var _listaId=null, _catId=null;
   async function listaIdMap(){ if(_listaId) return _listaId; var r=await sb.from('listas_precio').select('id,nombre'); _listaId={}; (r.data||[]).forEach(function(l){ _listaId[l.nombre]=l.id; }); return _listaId; }
   async function catIdMap(){ if(_catId) return _catId; var r=await sb.from('categorias').select('id,nombre'); _catId={}; (r.data||[]).forEach(function(c){ _catId[c.nombre]=c.id; }); return _catId; }

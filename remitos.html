@@ -186,7 +186,23 @@ function aplicarBalanza(){
   balCfg = b ? { prefijo:String(b.prefijo||'20'), dato:String(b.dato||'peso'), codlen:parseInt(b.codlen)||5, datolen:parseInt(b.datolen)||5 }
              : { prefijo:'20', dato:'peso', codlen:5, datolen:5 };
 }
-function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; document.getElementById('e-origen-txt').textContent=sucActual; }
+// Locales entre los que este usuario puede PARARSE (emitir). Admin: todos.
+// No-admin con locales asignados: solo los suyos — así no emite desde un local
+// fuera de su alcance y después no puede ver el remito (ni desde "su" local).
+function localesPermitidosRem(){
+  if(esAdminRem()) return SUCS.slice();
+  var locs=(window.PERM&&window.PERM.locales)||[];
+  var permitidos=SUCS.filter(function(s){ return locs.indexOf(s)>=0; });
+  return permitidos.length?permitidos:SUCS.slice();   // sin asignación conocida: no restringir
+}
+function poblarSuc(){
+  var permitidos=localesPermitidosRem();
+  var sel=document.getElementById('selSuc'); sel.innerHTML=permitidos.map(function(s){return '<option>'+s+'</option>';}).join('');
+  var guardada=localStorage.getItem('pvSucursalPort')||'';
+  sucActual=(permitidos.indexOf(guardada)>=0?guardada:(permitidos[0]||''));
+  if(sucActual){ sel.value=sucActual; localStorage.setItem('pvSucursalPort',sucActual); }
+  document.getElementById('e-origen-txt').textContent=sucActual;
+}
 function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); document.getElementById('e-origen-txt').textContent=sucActual; aplicarBalanza(); poblarDestino(); cargarRemitos(); }
 function poblarDestino(){ document.getElementById('e-destino').innerHTML=SUCS.filter(function(s){return s!==sucActual;}).map(function(s){return '<option>'+s+'</option>';}).join(''); }
 function switchTab(name){ document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); }); ['emitir','pend','hist'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); }); if(name==='pend'||name==='hist') cargarRemitos(); }
@@ -289,13 +305,25 @@ async function emitirUI(){
 function unidadDe(cod){ var p=PRODS[cod]; return (p && p.tipo==='unidad')?'u':'kg'; }
 function unidadRem(d){ return (d && d.tipo==='unidad')?'u':'kg'; }   // unidad de una línea de detalle de remito
 function fmtFechaCorta(iso){ try{ return new Date(iso).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}); }catch(e){ return ''; } }
+var estilosRem='@page{size:80mm auto;margin:0;} *{box-sizing:border-box;} body{font-family:monospace;font-size:12px;width:72mm;margin:0 auto;padding:6px;color:#000;background:#fff;} h2{font-size:13px;text-align:center;margin:2px 0;} table{width:100%;border-collapse:collapse;} th,td{padding:2px 0;vertical-align:top;} .r{text-align:right;} .c{text-align:center;} .l{border-top:1px dashed #000;margin:6px 0;} .firma{margin-top:30px;border-top:1px solid #000;text-align:center;font-size:11px;padding-top:3px;} .tit{text-align:center;font-weight:bold;} .tit.big{font-size:20px;letter-spacing:3px;margin-bottom:2px;} .rem{padding-bottom:6px;}';
+// Imprime UN documento (una copia) en su propio trabajo de impresión. Devuelve
+// una promesa que se resuelve cuando ya disparó print(), para encadenar la copia.
+function _printRemDoc(docHtml, id){
+  return new Promise(function(res){
+    var ifr=document.getElementById(id); if(ifr) ifr.remove();
+    ifr=document.createElement('iframe'); ifr.id=id; ifr.style.position='fixed'; ifr.style.right='0'; ifr.style.bottom='0'; ifr.style.width='0'; ifr.style.height='0'; ifr.style.border='0';
+    document.body.appendChild(ifr);
+    var dd=ifr.contentWindow.document; dd.open(); dd.write(docHtml); dd.close();
+    setTimeout(function(){ try{ ifr.contentWindow.focus(); ifr.contentWindow.print(); }catch(e){ console.warn(e); } res(); }, 300);
+  });
+}
 function imprimirRemito(d){
   var num=d.numero?('N° '+d.numero):(d.id||'');
   var lineas=d.lineas||[];
   var filas=lineas.map(function(l){ return '<tr><td>'+(l.nombre||l.codigo||'')+'</td><td class="r">'+l.cantidad+' '+unidadDe(l.codigo)+'</td></tr>'; }).join('');
   var totU=0, totKg=0; lineas.forEach(function(l){ if(unidadDe(l.codigo)==='u') totU+=Number(l.cantidad)||0; else totKg+=Number(l.cantidad)||0; });
   var totTxt='Ítems: '+lineas.length+(totU?(' · '+(+totU.toFixed(3))+' u'):'')+(totKg?(' · '+(+totKg.toFixed(3))+' kg'):'');
-  function copia(label,big,pb){ return '<div class="rem'+(pb?' pb':'')+'">'+
+  function copia(label,big){ return '<div class="rem">'+
     '<div class="tit'+(big?' big':'')+'">'+label+'</div><h2>REMITO DE TRASLADO</h2>'+
     '<div class="c"><b>'+num+'</b></div><div class="l"></div>'+
     '<div>Fecha: '+fmtFechaCorta(d.fecha||new Date().toISOString())+'</div>'+
@@ -304,13 +332,13 @@ function imprimirRemito(d){
     '<table><thead><tr><th style="text-align:left;">Producto</th><th class="r">Cant.</th></tr></thead><tbody>'+filas+'</tbody></table>'+
     '<div class="l"></div><div>'+totTxt+'</div>'+
     '<div class="firma">Firma / aclaración recepción</div></div>'; }
-  var estilos='@page{size:80mm auto;margin:0;} *{box-sizing:border-box;} body{font-family:monospace;font-size:12px;width:72mm;margin:0 auto;padding:6px;color:#000;background:#fff;} h2{font-size:13px;text-align:center;margin:2px 0;} table{width:100%;border-collapse:collapse;} th,td{padding:2px 0;vertical-align:top;} .r{text-align:right;} .c{text-align:center;} .l{border-top:1px dashed #000;margin:6px 0;} .firma{margin-top:30px;border-top:1px solid #000;text-align:center;font-size:11px;padding-top:3px;} .tit{text-align:center;font-weight:bold;} .tit.big{font-size:20px;letter-spacing:3px;margin-bottom:2px;} .rem{padding-bottom:6px;} .pb{page-break-after:always;break-after:page;}';
-  var docHtml='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Remito '+num+'</title><style>'+estilos+'</style></head><body>'+copia('ORIGINAL',true,true)+copia('COPIA',false,false)+'</body></html>';
-  var ifr=document.getElementById('print-frame-rem'); if(ifr) ifr.remove();
-  ifr=document.createElement('iframe'); ifr.id='print-frame-rem'; ifr.style.position='fixed'; ifr.style.right='0'; ifr.style.bottom='0'; ifr.style.width='0'; ifr.style.height='0'; ifr.style.border='0';
-  document.body.appendChild(ifr);
-  var dd=ifr.contentWindow.document; dd.open(); dd.write(docHtml); dd.close();
-  setTimeout(function(){ try{ ifr.contentWindow.focus(); ifr.contentWindow.print(); }catch(e){ console.warn(e); } }, 300);
+  function doc(inner){ return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Remito '+num+'</title><style>'+estilosRem+'</style></head><body>'+inner+'</body></html>'; }
+  // Dos trabajos separados (ORIGINAL y COPIA) para que la comandera corte solo
+  // después de cada uno. Un único trabajo con salto de página NO se corta en el
+  // medio: la comandera corta al final del trabajo, no en el salto.
+  _printRemDoc(doc(copia('ORIGINAL',true)), 'print-frame-rem').then(function(){
+    setTimeout(function(){ _printRemDoc(doc(copia('COPIA',false)), 'print-frame-rem2'); }, 900);
+  });
 }
 async function imprimirRemitoId(id){
   var rem=REMITOS.find(function(x){return x.id===id;})||{};
@@ -346,15 +374,16 @@ function remScopeQS(){
   // Sin locales asignados: solo el local seleccionado.
   if(esAdminRem()) return '';
   var locs=(window.PERM&&window.PERM.locales)||[];
-  if(locs.length) return '&sucursales='+encodeURIComponent(locs.join(','));
+  if(locs.length){ var all=locs.slice(); if(sucActual && all.indexOf(sucActual)<0) all.push(sucActual); return '&sucursales='+encodeURIComponent(all.join(',')); }
   return '&sucursal='+encodeURIComponent(sucActual);
 }
 async function cargarRemitos(){
   var r=await window.sf('getRemitos'+remScopeQS());
   REMITOS=(r.ok?r.remitos:[])||[]; poblarFiltrosHist(); renderPend(); renderHist(); renderHoy();
 }
-// Si los permisos llegan después del primer render, recargar con el alcance correcto.
-document.addEventListener('perm-listo', function(){ cargarRemitos(); });
+// Si los permisos llegan después del primer render, re-poblar el selector de local
+// (ya restringido a los locales del usuario) y recargar con el alcance correcto.
+document.addEventListener('perm-listo', function(){ poblarSuc(); aplicarBalanza(); poblarDestino(); cargarRemitos(); });
 // Alcance de Pendientes/Historial: por defecto solo el local seleccionado (origen o destino).
 var remVerTodos=false;
 function delLocalRem(r){ return SUCID[r.origenId]===sucActual || SUCID[r.destinoId]===sucActual; }

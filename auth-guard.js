@@ -145,7 +145,7 @@
     // Versión de ESTE código (debe coincidir con app/version.json en cada deploy).
     // Se compara contra la version.json del servidor: si difieren, el código que
     // está corriendo quedó viejo (aunque el navegador haya cacheado los archivos).
-    var BUILD='2026-10-09.1';
+    var BUILD='2026-10-10.2';
     function check(){
       fetch('version.json?t='+Date.now(), {cache:'no-store'})
         .then(function(r){ return r.ok?r.json():null; })
