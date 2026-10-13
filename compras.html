@@ -558,7 +558,7 @@ function renderProv(){
   }).join('') || '<tr><td colspan="5" class="muted">Sin proveedores.</td></tr>';
 }
 // Locales del usuario (para asignar proveedores nuevos). Admin/sin restricción = todos.
-function localesUsuario(){ if(window.PERM && window.PERM.cargado && (window.PERM.locales||[]).length) return window.PERM.locales.slice(); return SUCS.slice(); }
+function localesUsuario(){ if(window.PERM && window.PERM.cargado && !window.PERM.esAdmin && (window.PERM.locales||[]).length) return window.PERM.locales.slice(); return SUCS.slice(); }
 function poblarProvSuc(){ var sel=document.getElementById('np-suc'); if(!sel) return; var locs=localesUsuario(); var cur=sel.value;
   sel.innerHTML=locs.map(function(s){return '<option>'+s+'</option>';}).join('');
   sel.value=(cur && locs.indexOf(cur)>=0)?cur:((locs.indexOf(sucActual)>=0)?sucActual:(locs[0]||''));
