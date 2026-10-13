@@ -58,7 +58,6 @@
       <button class="tab" data-s="balanzas" onclick="switchSec('balanzas')">⚖️ Balanzas</button>
       <button class="tab" data-s="gastos" onclick="switchSec('gastos')">🧾 Compras y Gastos</button>
       <button class="tab" data-s="clover" onclick="switchSec('clover')">💳 Clover</button>
-      <button class="tab" data-s="reparto" onclick="switchSec('reparto')">🧮 Reparto gastos</button>
       <button class="tab" data-s="prov" onclick="switchSec('prov')">🏪 Proveedores</button>
     </div>
 
@@ -120,9 +119,16 @@
         </div>
       </div>
       <div class="card">
-        <h3>Reparto de gastos entre locales</h3>
-        <p class="hint">Para las categorías que se reparten, poné el <b>% que asume cada local</b> (idealmente suma 100% por categoría). Vacío = no se reparte. Se guarda al salir de la celda.</p>
+        <h3>Reparto de gastos entre locales (por categoría)</h3>
+        <p class="hint"><b>Este es el reparto que manda</b> al cargar un gasto: poné el <b>% que asume cada local</b> para cada categoría (idealmente suma 100%). Vacío = esa categoría no tiene reparto propio y usa el <b>general</b> (pestaña 🧮 Reparto gastos). Se guarda al salir de la celda.</p>
         <div class="tblwrap"><table class="cfg" id="rep-tabla"><thead id="rep-head"></thead><tbody id="rep-tbody"></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Reparto general entre locales (respaldo)</h3>
+        <p class="hint">Es el <b>respaldo</b>: se usa solo cuando la categoría del gasto <b>no tiene reparto propio</b> arriba. Porcentaje de cada local al repartir a <b>varios locales</b>, idealmente suma 100%. Al cargar un gasto siempre podés ajustar montos y destildar locales.</p>
+        <div class="tblwrap"><table class="cfg"><thead><tr><th>Local</th><th>% por defecto</th></tr></thead><tbody id="rep-def-tbody"></tbody></table></div>
+        <div style="margin-top:8px;font-weight:600;" id="rep-def-sum"></div>
+        <div style="margin-top:12px;"><button class="btn" onclick="guardarRepartoDef()">Guardar reparto general</button></div>
       </div>
     </div>
 
@@ -135,16 +141,6 @@
       </div>
     </div>
 
-    <!-- REPARTO GASTOS (por defecto, global) -->
-    <div id="s-reparto" hidden>
-      <div class="card">
-        <h3>Reparto de gastos entre locales (por defecto)</h3>
-        <p class="hint">Porcentaje de cada local que se usa cuando un gasto se reparte a <b>varios locales</b>. Idealmente suma 100%. Al cargar un gasto podés ajustar los montos y destildar locales.</p>
-        <div class="tblwrap"><table class="cfg"><thead><tr><th>Local</th><th>% por defecto</th></tr></thead><tbody id="rep-def-tbody"></tbody></table></div>
-        <div style="margin-top:8px;font-weight:600;" id="rep-def-sum"></div>
-        <div style="margin-top:12px;"><button class="btn" onclick="guardarRepartoDef()">Guardar reparto</button></div>
-      </div>
-    </div>
 
     <!-- CLOVER -->
     <div id="s-clover" hidden>
@@ -229,10 +225,9 @@ async function iniciar(){
 }
 function switchSec(name){
   document.querySelectorAll('.sec-tabs .tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-s')===name); });
-  ['pagos','locales','balanzas','gastos','clover','reparto','prov'].forEach(function(s){ document.getElementById('s-'+s).hidden=(s!==name); });
+  ['pagos','locales','balanzas','gastos','clover','prov'].forEach(function(s){ document.getElementById('s-'+s).hidden=(s!==name); });
   if(name==='gastos') renderGastos();
   if(name==='clover') cargarClover();
-  if(name==='reparto') renderRepDef();
   if(name==='prov') cargarCfgProv();
 }
 // ---- PROVEEDORES POR LOCAL ----
@@ -445,7 +440,7 @@ async function delBal(i,nombre){
 }
 
 // ---- COMPRAS Y GASTOS ----
-function renderGastos(){ renderGruposGasto(); renderCG(); renderReparto(); }
+function renderGastos(){ renderGruposGasto(); renderCG(); renderReparto(); renderRepDef(); }
 async function persistGrupos(){ try{ await window.sp('guardarConfig',{ clave:'grupos_gasto', valor:JSON.stringify(GRUPOS) }); }catch(e){} }
 function grupoOptions(sel){
   sel=String(sel||'');
