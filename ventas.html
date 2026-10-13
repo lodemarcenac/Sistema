@@ -279,7 +279,7 @@ async function iniciar(){
   var rs=await window.sf('getDestinatarios'); if(rs.ok){ SUCS=rs.destinatarios||[]; SIGLAS=rs.siglas||{}; }
   var rsf=await window.sf('getSucursales'); if(rsf.ok){ (rsf.sucursales||[]).forEach(function(s){ SUCINFO[s.nombre]={ direccion:s.direccion||'', telefono:s.telefono||'', sigla:s.sigla||'' }; }); }
   var rb=await window.sf('getBalanzas'); if(rb.ok){ BALANZAS=rb.balanzas||{}; }
-  var rcfg=await window.sf('getConfigGeneral'); if(rcfg.ok && rcfg.config && rcfg.config.formas_pago){ try{ var arr=JSON.parse(rcfg.config.formas_pago); if(Array.isArray(arr) && arr.length) FORMAS=arr.map(function(f){ return {nombre:String(f.nombre||f), cta:!!f.cta, facturar:!!f.facturar}; }); }catch(e){} }
+  var rcfg=await window.sf('getConfigGeneral'); if(rcfg.ok && rcfg.config && rcfg.config.formas_pago){ try{ var arr=JSON.parse(rcfg.config.formas_pago); if(Array.isArray(arr) && arr.length) FORMAS=arr.map(function(f){ return {nombre:String(f.nombre||f), cta:!!f.cta, facturar:!!f.facturar, cobro:(f.cobro!==false)}; }).filter(function(f){ return f.cobro; }); }catch(e){} }
   poblarSuc();
   var ro=await window.sf('getOfertas'); if(ro.ok) cargarOfertas(ro.ofertas||[]);
   var rco=await window.sf('getCombos'); if(rco.ok) cargarCombos(rco.combos||[]);

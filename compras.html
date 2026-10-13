@@ -127,7 +127,7 @@
           <div style="grid-column:1/-1;"><label>Detalle del gasto</label><input id="g-desc" placeholder="Ej: Luz, alquiler, flete…"></div>
           <div><label>Fecha</label><input id="g-fecha" type="date"></div>
           <div style="grid-column:span 2;min-width:220px;"><label>Categoría</label><select id="g-cat" onchange="onCatGasto()"></select><span id="g-cat-grupo" class="muted" style="display:block;font-size:var(--fs-xs);margin-top:3px;min-height:1em;"></span></div>
-          <div style="grid-column:span 2;min-width:220px;"><label>Proveedor (opc)</label><div style="display:flex;gap:6px;"><select id="g-prov" style="flex:1;"></select><button class="btn" type="button" onclick="nuevoProvRapido()" title="Cargar un proveedor nuevo" style="padding:7px 12px;font-weight:800;font-size:1.05rem;line-height:1;">＋</button></div></div>
+          <div style="grid-column:1/-1;"><label>Proveedor (opc)</label><div style="display:flex;gap:6px;"><select id="g-prov" style="flex:1;min-width:0;"></select><button class="btn" type="button" onclick="nuevoProvRapido()" title="Cargar un proveedor nuevo" style="flex:0 0 auto;padding:7px 12px;font-weight:800;font-size:1.05rem;line-height:1;">＋</button></div></div>
           <div><label>Monto $</label><input id="g-monto" type="number" step="0.01" oninput="onMontoGasto()"></div>
           <div style="grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:10px;">
             <label style="font-size:var(--fs-xs);color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin:0;">Imputar a</label>
@@ -198,7 +198,7 @@
 var sb=window.sbClient;
 var PRODS={}, SUCS=[], PROVS=[], CG=[], FORMAS=['Efectivo','Tarjeta','Virtual','Cuenta Corriente'];
 var sucActual='', GASTOS=[], gastoEditId=null, SUCID={};
-var PROVS_LOCAL=[], REP_DEF={};
+var PROVS_LOCAL=[], REP_DEF={}, REPCAT={};  // REP_DEF: reparto general por local; REPCAT: {catId:{localNombre:pct}} por categoría (manda este)
 function fmt$(n){ return '$'+Math.round(Number(n)||0).toLocaleString('es-AR'); }
 function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
 
@@ -216,8 +216,9 @@ async function iniciar(){
   var rs=await window.sf('getSucursales'); var suc=(rs.ok?(rs.sucursales||[]):[]); SUCS=suc.map(function(s){return s.nombre;}); SUCID={}; suc.forEach(function(s){ SUCID[s.id]=s.nombre; });
   var rpr=await window.sf('getProveedores'); PROVS=(rpr.ok?rpr.proveedores:[])||[];
   var rcg=await window.sf('getCategoriasGasto'); CG=(rcg.ok?rcg.categorias:[])||[];
-  var rc=await window.sf('getConfigGeneral'); if(rc.ok && rc.config && rc.config.formas_pago){ try{ var a=JSON.parse(rc.config.formas_pago); if(a.length) FORMAS=a.map(function(f){return f.nombre||f;}); }catch(e){} }
+  var rc=await window.sf('getConfigGeneral'); if(rc.ok && rc.config && rc.config.formas_pago){ try{ var a=JSON.parse(rc.config.formas_pago); if(a.length) FORMAS=a.filter(function(f){return (f&&typeof f==='object')?(f.pago!==false):true;}).map(function(f){return f.nombre||f;}); }catch(e){} }
   if(rc.ok && rc.config && rc.config.reparto_default){ try{ REP_DEF=JSON.parse(rc.config.reparto_default)||{}; }catch(e){ REP_DEF={}; } }
+  var rr=await window.sf('getReparto'); REPCAT={}; if(rr.ok){ (rr.reparto||[]).forEach(function(x){ var nom=SUCID[x.sucursalId]; if(!nom) return; REPCAT[x.categoriaId]=REPCAT[x.categoriaId]||{}; REPCAT[x.categoriaId][nom]=Number(x.porcentaje)||0; }); }
   poblarSuc(); poblarSelects(); await cargarProveedoresLocal();
   document.getElementById('g-fecha').value=new Date().toLocaleDateString('en-CA');
   addLineaElab('e-insumos'); addLineaElab('e-salidas');
@@ -246,6 +247,7 @@ function onCatGasto(){
   var id=document.getElementById('g-cat').value;
   var c=CG.filter(function(x){return String(x.id)===String(id);})[0];
   el.textContent=(c&&c.grupo)?('Grupo: '+c.grupo):'';
+  if(document.getElementById('g-multi') && document.getElementById('g-multi').checked) renderImput();
 }
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); });
@@ -429,6 +431,13 @@ function toggleGasto(id){ var r=document.getElementById('gx-'+id); if(r) r.hidde
 function toggleCaja(fpId, wrapId){ var f=document.getElementById(fpId), w=document.getElementById(wrapId); if(f&&w) w.hidden=!/efectivo/i.test(f.value); }
 function efectivaForma(fpId, cajaId){ var f=document.getElementById(fpId).value; if(/efectivo/i.test(f)){ var c=document.getElementById(cajaId); return c?c.value:f; } return f; }
 function onMontoGasto(){ if(document.getElementById('g-multi').checked) renderImput(); }
+// Devuelve el reparto a aplicar (por local): el de la categoría elegida si tiene; si no, el general por defecto.
+function repartoActivo(){
+  var catId=document.getElementById('g-cat').value;
+  var porCat=catId && REPCAT[catId];
+  if(porCat){ for(var k in porCat){ if(Number(porCat[k])>0) return {mapa:porCat, origen:'cat'}; } }
+  return {mapa:REP_DEF, origen:'def'};
+}
 function renderImput(){
   var cont=document.getElementById('g-imput'); if(!cont) return;
   if(!document.getElementById('g-multi').checked){
@@ -439,22 +448,23 @@ function renderImput(){
   var total=Number(document.getElementById('g-monto').value)||0, prevM={}, prevC=null;
   cont.querySelectorAll('.gi-monto').forEach(function(i){ prevM[i.getAttribute('data-loc')]=i.value; });
   if(cont.querySelector('.gi-loc')){ prevC={}; cont.querySelectorAll('.gi-loc').forEach(function(c){ prevC[c.value]=c.checked; }); }
+  var rep=repartoActivo().mapa;
   cont.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;">'+SUCS.map(function(s){ var sv=String(s).replace(/"/g,'&quot;');
-    var chk = prevC ? !!prevC[s] : true, pct = Number(REP_DEF[s])||0;
+    var chk = prevC ? !!prevC[s] : true, pct = Number(rep[s])||0;
     var monto = (prevM[s]!=null && prevM[s]!=='') ? prevM[s] : ((total && pct) ? (Math.round(total*pct/100*100)/100) : '');
     return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:var(--fs-xs);white-space:nowrap;">'+
       '<input type="checkbox" class="gi-loc" value="'+sv+'" '+(chk?'checked':'')+' onchange="sumImput()"> '+s+(pct?' <span class="muted">'+pct+'%</span>':'')+
       ' <input class="gi-monto" data-loc="'+sv+'" type="number" step="0.01" value="'+monto+'" oninput="sumImput()" style="width:82px;padding:3px 5px;border:1px solid var(--border-inp);border-radius:5px;font-family:inherit;text-align:right;font-size:var(--fs-xs);">'+
       '</span>';
   }).join('')+'</div>'+
-  '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;"><button class="btn-sec" type="button" onclick="aplicarRepartoDefecto()" style="font-size:var(--fs-xs);padding:4px 10px;">Aplicar reparto por defecto</button><span id="gi-sum" style="font-weight:600;font-size:var(--fs-xs);"></span></div>';
+  '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;"><button class="btn-sec" type="button" onclick="aplicarRepartoDefecto()" style="font-size:var(--fs-xs);padding:4px 10px;">'+(repartoActivo().origen==='cat'?'Aplicar reparto de la categoría':'Aplicar reparto por defecto')+'</button><span class="muted" style="font-size:var(--fs-xs);">'+(repartoActivo().origen==='cat'?'(según la categoría elegida)':'(reparto general — la categoría no tiene uno propio)')+'</span><span id="gi-sum" style="font-weight:600;font-size:var(--fs-xs);"></span></div>';
   sumImput();
 }
 function aplicarRepartoDefecto(){
-  var total=Number(document.getElementById('g-monto').value)||0, cont=document.getElementById('g-imput'), sumPct=0;
-  cont.querySelectorAll('.gi-loc:checked').forEach(function(c){ sumPct+=(Number(REP_DEF[c.value])||0); });
+  var total=Number(document.getElementById('g-monto').value)||0, cont=document.getElementById('g-imput'), sumPct=0, rep=repartoActivo().mapa;
+  cont.querySelectorAll('.gi-loc:checked').forEach(function(c){ sumPct+=(Number(rep[c.value])||0); });
   var base=sumPct>0?sumPct:100;
-  cont.querySelectorAll('.gi-monto').forEach(function(i){ var l=i.getAttribute('data-loc'); var on=cont.querySelector('.gi-loc[value="'+l.replace(/"/g,'&quot;')+'"]'); if(on&&on.checked){ var pct=Number(REP_DEF[l])||0; i.value=total?(Math.round(total*pct/base*100)/100):''; } else { i.value=''; } });
+  cont.querySelectorAll('.gi-monto').forEach(function(i){ var l=i.getAttribute('data-loc'); var on=cont.querySelector('.gi-loc[value="'+l.replace(/"/g,'&quot;')+'"]'); if(on&&on.checked){ var pct=Number(rep[l])||0; i.value=total?(Math.round(total*pct/base*100)/100):''; } else { i.value=''; } });
   sumImput();
 }
 function sumImput(){

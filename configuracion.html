@@ -65,7 +65,7 @@
     <div id="s-pagos">
       <div class="card">
         <h3>Formas de pago</h3>
-        <p class="hint">Las que ves en la pantalla de Ventas. <b>Cuenta corriente</b> = genera deuda (solo aparece con un cliente elegido). <b>Facturar (ARCA)</b> = a futuro se facturarán automáticamente por AFIP (por ahora solo se guarda la preferencia).</p>
+        <p class="hint">Definí dónde aparece cada forma: <b>Cobro (ventas)</b> = disponible al cobrar en Ventas; <b>Pago (compras/gastos)</b> = disponible al pagar en Compras y Gastos. Una forma puede ser de las dos, de una sola, o de ninguna. <b>Cuenta corriente</b> = genera deuda (solo aparece con un cliente elegido). <b>Facturar (ARCA)</b> = a futuro se facturarán automáticamente por AFIP (por ahora solo se guarda la preferencia).</p>
         <div id="fp-list"></div>
         <button class="btn-sec" onclick="addFP()" style="margin-top:10px;">+ Agregar forma de pago</button>
         <div style="margin-top:16px;"><button class="btn" onclick="guardarFP()">Guardar formas de pago</button></div>
@@ -182,7 +182,7 @@
 <script src="nav.js"></script>
 <script>
 var sb=window.sbClient;
-var FORMAS=[{nombre:'Efectivo',cta:false,facturar:false},{nombre:'Tarjeta',cta:false,facturar:false},{nombre:'Virtual',cta:false,facturar:false},{nombre:'Cuenta Corriente',cta:true,facturar:false}];
+var FORMAS=[{nombre:'Efectivo',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Tarjeta',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Virtual',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Cuenta Corriente',cta:true,facturar:false,cobro:true,pago:true}];
 var SUCS=[];      // {id,nombre,sigla,direccion,telefono}
 var BALS={};      // nombre -> {prefijo,dato,codlen,datolen}
 var CG=[];        // categorías de gasto {id,nombre,grupo}
@@ -209,7 +209,7 @@ async function iniciar(){
   document.getElementById('login').hidden=true;
   document.getElementById('app').hidden=false;
   var r=await window.sf('getConfigGeneral');
-  if(r.ok && r.config && r.config.formas_pago){ try{ var arr=JSON.parse(r.config.formas_pago); if(Array.isArray(arr)&&arr.length) FORMAS=arr.map(function(f){ return {nombre:String(f.nombre||f), cta:!!f.cta, facturar:!!f.facturar}; }); }catch(e){} }
+  if(r.ok && r.config && r.config.formas_pago){ try{ var arr=JSON.parse(r.config.formas_pago); if(Array.isArray(arr)&&arr.length) FORMAS=arr.map(function(f){ return {nombre:String(f.nombre||f), cta:!!f.cta, facturar:!!f.facturar, cobro:(f.cobro!==false), pago:(f.pago!==false)}; }); }catch(e){} }
   if(r.ok && r.config){ var em=document.getElementById('cfg-email-admin'); if(em) em.value=r.config.email_admin||''; }
   if(r.ok && r.config && r.config.reparto_default){ try{ REP_DEF=JSON.parse(r.config.reparto_default)||{}; }catch(e){ REP_DEF={}; } }
   var rs=await window.sf('getSucursales'); if(rs.ok) SUCS=rs.sucursales||[];
@@ -351,6 +351,8 @@ function renderFP(){
   document.getElementById('fp-list').innerHTML=FORMAS.map(function(f,i){
     return '<div class="fp-row">'+
       '<input type="text" value="'+String(f.nombre).replace(/"/g,'&quot;')+'" onchange="setFPnom('+i+',this.value)">'+
+      '<label title="Aparece como forma de cobro en Ventas"><input type="checkbox" '+(f.cobro!==false?'checked':'')+' onchange="setFPcobro('+i+',this.checked)"> Cobro (ventas)</label>'+
+      '<label title="Aparece como forma de pago en Compras y Gastos"><input type="checkbox" '+(f.pago!==false?'checked':'')+' onchange="setFPpago('+i+',this.checked)"> Pago (compras/gastos)</label>'+
       '<label><input type="checkbox" '+(f.cta?'checked':'')+' onchange="setFPcta('+i+',this.checked)"> Cuenta corriente</label>'+
       '<label title="A futuro ARCA/AFIP factura estas automáticamente"><input type="checkbox" '+(f.facturar?'checked':'')+' onchange="setFPfac('+i+',this.checked)"> Facturar (ARCA)</label>'+
       '<button class="x" onclick="delFP('+i+')" title="Quitar">✕</button></div>';
@@ -359,10 +361,12 @@ function renderFP(){
 function setFPnom(i,v){ FORMAS[i].nombre=v; }
 function setFPcta(i,v){ FORMAS[i].cta=v; }
 function setFPfac(i,v){ FORMAS[i].facturar=v; }
+function setFPcobro(i,v){ FORMAS[i].cobro=v; }
+function setFPpago(i,v){ FORMAS[i].pago=v; }
 function delFP(i){ FORMAS.splice(i,1); renderFP(); }
-function addFP(){ FORMAS.push({nombre:'',cta:false,facturar:false}); renderFP(); }
+function addFP(){ FORMAS.push({nombre:'',cta:false,facturar:false,cobro:true,pago:true}); renderFP(); }
 async function guardarFP(){
-  var limpio=FORMAS.map(function(f){ return {nombre:String(f.nombre||'').trim(), cta:!!f.cta, facturar:!!f.facturar}; }).filter(function(f){ return f.nombre; });
+  var limpio=FORMAS.map(function(f){ return {nombre:String(f.nombre||'').trim(), cta:!!f.cta, facturar:!!f.facturar, cobro:(f.cobro!==false), pago:(f.pago!==false)}; }).filter(function(f){ return f.nombre; });
   if(!limpio.length){ toast('Poné al menos una forma de pago','error'); return; }
   var r=await window.sp('guardarConfig',{ clave:'formas_pago', valor:JSON.stringify(limpio) });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
