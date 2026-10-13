@@ -126,8 +126,8 @@
         <div class="abm-nueva">
           <div style="grid-column:1/-1;"><label>Detalle del gasto</label><input id="g-desc" placeholder="Ej: Luz, alquiler, flete…"></div>
           <div><label>Fecha</label><input id="g-fecha" type="date"></div>
-          <div><label>Categoría</label><select id="g-cat"></select></div>
-          <div><label>Proveedor (opc)</label><div style="display:flex;gap:6px;"><select id="g-prov" style="flex:1;"></select><button class="btn" type="button" onclick="nuevoProvRapido()" title="Cargar un proveedor nuevo" style="padding:7px 12px;font-weight:800;font-size:1.05rem;line-height:1;">＋</button></div></div>
+          <div style="grid-column:span 2;min-width:220px;"><label>Categoría</label><select id="g-cat" onchange="onCatGasto()"></select><span id="g-cat-grupo" class="muted" style="display:block;font-size:var(--fs-xs);margin-top:3px;min-height:1em;"></span></div>
+          <div style="grid-column:span 2;min-width:220px;"><label>Proveedor (opc)</label><div style="display:flex;gap:6px;"><select id="g-prov" style="flex:1;"></select><button class="btn" type="button" onclick="nuevoProvRapido()" title="Cargar un proveedor nuevo" style="padding:7px 12px;font-weight:800;font-size:1.05rem;line-height:1;">＋</button></div></div>
           <div><label>Monto $</label><input id="g-monto" type="number" step="0.01" oninput="onMontoGasto()"></div>
           <div style="grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:10px;">
             <label style="font-size:var(--fs-xs);color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin:0;">Imputar a</label>
@@ -238,7 +238,14 @@ function poblarSelects(){
   document.getElementById('c-fp').innerHTML=fp; document.getElementById('g-fp').innerHTML=fp;
   onFormaCompra(); toggleCaja('g-fp','g-caja-wrap');
   renderImput();
-  document.getElementById('g-cat').innerHTML='<option value="">(elegir categoría)</option>'+CG.map(function(c){return '<option value="'+c.id+'">'+c.nombre+(c.grupo?(' — '+c.grupo):'')+'</option>';}).join('');
+  document.getElementById('g-cat').innerHTML='<option value="">(elegir categoría)</option>'+CG.map(function(c){return '<option value="'+c.id+'">'+c.nombre+'</option>';}).join('');
+  onCatGasto();
+}
+function onCatGasto(){
+  var el=document.getElementById('g-cat-grupo'); if(!el) return;
+  var id=document.getElementById('g-cat').value;
+  var c=CG.filter(function(x){return String(x.id)===String(id);})[0];
+  el.textContent=(c&&c.grupo)?('Grupo: '+c.grupo):'';
 }
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); });
@@ -497,7 +504,7 @@ function editarGasto(id){
   var g=GASTOS.find(function(x){return x.id===id;}); if(!g) return;
   gastoEditId=id; document.getElementById('g-titulo').textContent='Editar gasto'; document.getElementById('g-cancel').hidden=false;
   document.getElementById('g-fecha').value=g.fecha?g.fecha.slice(0,10):'';
-  document.getElementById('g-cat').value=g.categoriaId||''; document.getElementById('g-prov').value=g.proveedorId||'';
+  document.getElementById('g-cat').value=g.categoriaId||''; onCatGasto(); document.getElementById('g-prov').value=g.proveedorId||'';
   document.getElementById('g-monto').value=g.monto; document.getElementById('g-comp').value=g.comprobante||''; document.getElementById('g-desc').value=g.descripcion||'';
   var fpv=g.formaPago||'';
   if(/caja|efectivo/i.test(fpv)){ var ef=(FORMAS.filter(function(f){return /efectivo/i.test(f);})[0]||'Efectivo'); document.getElementById('g-fp').value=ef; toggleCaja('g-fp','g-caja-wrap'); var gc=document.getElementById('g-caja'); if(gc) gc.value=(/guard/i.test(fpv)?'Caja guardada':'Caja del día'); }

@@ -101,12 +101,21 @@
     <!-- COMPRAS Y GASTOS -->
     <div id="s-gastos" hidden>
       <div class="card">
+        <h3>Grupos de gasto (nivel mayor)</h3>
+        <p class="hint">El <b>grupo</b> agrupa las categorías para los reportes (ej. Compras, Estructura, Carnicería, Almacén). Definilos acá una sola vez y después elegí el grupo de cada categoría desde la lista — así evitás errores de escritura. Al cargar un gasto solo se elige la categoría y el grupo viaja solo.</p>
+        <div id="gg-pills" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
+        <div class="fp-row" style="border:none;margin-top:8px;">
+          <input type="text" id="gg-nom" placeholder="Nuevo grupo (ej. Compras)" onkeydown="if(event.key==='Enter')addGrupoGasto()">
+          <button class="btn" onclick="addGrupoGasto()">Agregar grupo</button>
+        </div>
+      </div>
+      <div class="card">
         <h3>Categorías de gasto</h3>
-        <p class="hint">Cada gasto se imputa a una <b>categoría</b> (detalle), y cada categoría pertenece a un <b>grupo</b> (nivel mayor, ej. Estructura, Carnicería, Almacén). Se guarda al salir del campo.</p>
+        <p class="hint">Cada gasto se imputa a una <b>categoría</b> (detalle), y cada categoría pertenece a un <b>grupo</b> (nivel mayor). Elegí el grupo desde la lista de arriba. Se guarda al salir del campo.</p>
         <div class="tblwrap"><table class="cfg"><thead><tr><th>Categoría</th><th>Grupo</th><th></th></tr></thead><tbody id="cg-tbody"></tbody></table></div>
         <div class="fp-row" style="border:none;margin-top:8px;">
           <input type="text" id="cg-nom" placeholder="Nueva categoría (ej. Luz)">
-          <input type="text" id="cg-grupo" placeholder="Grupo (ej. Estructura)">
+          <select id="cg-grupo"></select>
           <button class="btn" onclick="addCG()">Agregar</button>
         </div>
       </div>
@@ -181,6 +190,7 @@ var FORMAS=[{nombre:'Efectivo',cta:false,facturar:false},{nombre:'Tarjeta',cta:f
 var SUCS=[];      // {id,nombre,sigla,direccion,telefono}
 var BALS={};      // nombre -> {prefijo,dato,codlen,datolen}
 var CG=[];        // categorías de gasto {id,nombre,grupo}
+var GRUPOS=[];    // grupos de gasto (nivel mayor), lista de nombres
 var REP={};       // reparto: catId -> { sucId: porcentaje }
 var CV_ESTADO={}, CV_ARANC=[];   // Clover: estado de cuentas (sin token) + aranceles
 var REP_DEF={};   // reparto de gastos por defecto: { localNombre: % }
@@ -209,6 +219,11 @@ async function iniciar(){
   var rs=await window.sf('getSucursales'); if(rs.ok) SUCS=rs.sucursales||[];
   var rb=await window.sf('getBalanzas'); if(rb.ok) BALS=rb.balanzas||{};
   var rcg=await window.sf('getCategoriasGasto'); if(rcg.ok) CG=rcg.categorias||[];
+  GRUPOS=[]; if(r.ok && r.config && r.config.grupos_gasto){ try{ var gg=JSON.parse(r.config.grupos_gasto); if(Array.isArray(gg)) GRUPOS=gg.map(function(x){return String(x||'').trim();}).filter(Boolean); }catch(e){} }
+  // Unir con los grupos ya usados por las categorías (para no perder lo cargado) + 'Compras' por defecto.
+  var union=GRUPOS.slice(); CG.forEach(function(c){ if(c.grupo && union.indexOf(c.grupo)<0) union.push(c.grupo); });
+  if(!union.length) union=['Compras','Estructura','Carnicería','Almacén']; else if(union.indexOf('Compras')<0) union.unshift('Compras');
+  if(union.length!==GRUPOS.length || union.some(function(g,i){return g!==GRUPOS[i];})){ GRUPOS=union; persistGrupos(); }
   var rrep=await window.sf('getReparto'); REP={}; if(rrep.ok){ (rrep.reparto||[]).forEach(function(x){ REP[x.categoriaId]=REP[x.categoriaId]||{}; REP[x.categoriaId][x.sucursalId]=x.porcentaje; }); }
   renderFP(); renderLoc(); renderBal();
 }
@@ -430,12 +445,40 @@ async function delBal(i,nombre){
 }
 
 // ---- COMPRAS Y GASTOS ----
-function renderGastos(){ renderCG(); renderReparto(); }
+function renderGastos(){ renderGruposGasto(); renderCG(); renderReparto(); }
+async function persistGrupos(){ try{ await window.sp('guardarConfig',{ clave:'grupos_gasto', valor:JSON.stringify(GRUPOS) }); }catch(e){} }
+function grupoOptions(sel){
+  sel=String(sel||'');
+  var extra=(sel && GRUPOS.indexOf(sel)<0) ? '<option value="'+escAttr(sel)+'" selected>'+escAttr(sel)+' (en desuso)</option>' : '';
+  return '<option value="">(sin grupo)</option>'+extra+GRUPOS.map(function(g){
+    return '<option value="'+escAttr(g)+'"'+(g===sel?' selected':'')+'>'+escAttr(g)+'</option>';
+  }).join('');
+}
+function renderGruposGasto(){
+  var cont=document.getElementById('gg-pills'); if(!cont) return;
+  cont.innerHTML = GRUPOS.length ? GRUPOS.map(function(g){
+    return '<span style="display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--line-2);border-radius:999px;padding:5px 12px;font-size:var(--fs-sm);font-weight:600;">'+
+      escAttr(g)+'<button class="x-btn" title="Eliminar grupo" onclick="delGrupoGasto(\''+escAttr(g).replace(/'/g,"\\'")+'\')" style="line-height:1;">✕</button></span>';
+  }).join('') : '<span class="muted">Todavía no hay grupos.</span>';
+  // Select del alta de categoría
+  var selNew=document.getElementById('cg-grupo'); if(selNew) selNew.innerHTML=grupoOptions(selNew.value);
+}
+async function addGrupoGasto(){
+  var inp=document.getElementById('gg-nom'); var nom=(inp.value||'').trim();
+  if(!nom){ toast('Poné el nombre del grupo','error'); return; }
+  if(GRUPOS.some(function(g){return g.toLowerCase()===nom.toLowerCase();})){ toast('Ese grupo ya existe','error'); inp.value=''; return; }
+  GRUPOS.push(nom); await persistGrupos(); inp.value=''; renderGruposGasto(); renderCG(); toast('Grupo agregado');
+}
+async function delGrupoGasto(nom){
+  var enUso=CG.filter(function(c){return c.grupo===nom;});
+  if(enUso.length && !confirm('El grupo "'+nom+'" lo usan '+enUso.length+' categoría(s). Si lo eliminás, esas categorías quedan sin grupo. ¿Continuar?')) return;
+  GRUPOS=GRUPOS.filter(function(g){return g!==nom;}); await persistGrupos(); renderGruposGasto(); renderCG(); toast('Grupo eliminado');
+}
 function renderCG(){
   document.getElementById('cg-tbody').innerHTML=CG.map(function(c,i){
     return '<tr>'+
       '<td><input type="text" value="'+(c.nombre||'').replace(/"/g,'&quot;')+'" id="cg-n-'+i+'" onchange="guardarCG('+i+')"></td>'+
-      '<td><input type="text" value="'+(c.grupo||'').replace(/"/g,'&quot;')+'" id="cg-g-'+i+'" onchange="guardarCG('+i+')"></td>'+
+      '<td><select id="cg-g-'+i+'" onchange="guardarCG('+i+')">'+grupoOptions(c.grupo)+'</select></td>'+
       '<td><button class="x-btn" title="Eliminar categoría" onclick="delCG('+i+')">✕</button></td></tr>';
   }).join('') || '<tr><td colspan="3" style="color:var(--muted)">Sin categorías.</td></tr>';
 }
