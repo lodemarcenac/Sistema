@@ -61,8 +61,13 @@
     for(var i=0;i<orden.length;i++){ var m=NAVMAP[orden[i]]; if(m && orden[i]!==here && window.PERM.puede(m)){ location.replace(orden[i]); return true; } }
     return false;   // no tiene ninguna página permitida: no redirige (evita loop)
   }
+  // Páginas analíticas que NO se restringen por local: conservan "Todos los
+  // locales" y el listado completo para cualquier usuario (ver/reportar, no operar).
+  var _SIN_RESTRICCION_LOCAL = { 'reportes.html':1, 'conciliacion.html':1 };
   function filtrarLocales(){
     if(!window.PERM.cargado || window.PERM.esAdmin) return;
+    var _pg=(location.pathname.split('/').pop()||'index.html').toLowerCase();
+    if(_SIN_RESTRICCION_LOCAL[_pg]) return;   // reportes/conciliación: dejar "Todos"
     var locs=window.PERM.locales||[]; if(!locs.length) return;   // sin locales asignados = no se limita
     var sel=document.getElementById('selSuc'); if(!sel) return;
     var before=sel.value;   // valor que la página ya tomó en su variable sucActual
@@ -145,7 +150,7 @@
     // Versión de ESTE código (debe coincidir con app/version.json en cada deploy).
     // Se compara contra la version.json del servidor: si difieren, el código que
     // está corriendo quedó viejo (aunque el navegador haya cacheado los archivos).
-    var BUILD='2026-10-10.2';
+    var BUILD='2026-10-14.1';
     function check(){
       fetch('version.json?t='+Date.now(), {cache:'no-store'})
         .then(function(r){ return r.ok?r.json():null; })
