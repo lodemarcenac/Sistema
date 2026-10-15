@@ -74,7 +74,7 @@
         <p class="hint muted">Cargá primero el <b>total</b> de la factura o remito y el pago. En el paso 2 agregás los productos (la suma de productos puede no coincidir con el total, y está bien).</p>
         <div class="abm-nueva">
           <div><label>Proveedor</label><div style="display:flex;gap:6px;"><select id="c-cuenta" style="flex:1;"></select><button class="btn" type="button" onclick="nuevoProvRapido()" title="Cargar un proveedor nuevo" style="padding:7px 12px;font-weight:800;font-size:1.05rem;line-height:1;">＋</button></div></div>
-          <div><label>Comprobante (opc)</label><input id="c-comp" placeholder="N° factura / remito"></div>
+          <div><label>Comprobante</label><input id="c-comp" placeholder="N° factura / remito"></div>
           <div><label>Total de la factura $</label><input id="c-total-fc" type="number" step="0.01" placeholder="0"></div>
           <div><label>Forma de pago</label><select id="c-fp" onchange="onFormaCompra()"></select></div>
           <div id="c-caja-wrap" hidden><label>Caja</label><select id="c-caja"><option>Caja del día</option><option>Caja guardada</option></select></div>
@@ -92,7 +92,7 @@
         <p class="hint muted" id="c-prod-sub"></p>
         <div class="abm-nueva" style="align-items:end;">
           <div style="grid-column:span 2;"><label>Producto</label><input id="ci-cod" class="prod-ac" autocomplete="off" placeholder="código o nombre" onchange="ciProd(this)"></div>
-          <div><label>Cantidad</label><input id="ci-cant" type="number" step="0.001"></div>
+          <div><label id="ci-cant-lbl">Cantidad</label><input id="ci-cant" type="number" step="0.001"></div>
           <div><label>Costo unit.</label><input id="ci-cu" type="number" step="0.01"></div>
           <button class="btn" onclick="agregarItemUI()">+ Agregar</button>
         </div>
@@ -127,14 +127,14 @@
           <div style="grid-column:1/-1;"><label>Detalle del gasto</label><input id="g-desc" placeholder="Ej: Luz, alquiler, flete…"></div>
           <div><label>Fecha</label><input id="g-fecha" type="date"></div>
           <div style="grid-column:span 2;min-width:220px;"><label>Categoría</label><select id="g-cat" onchange="onCatGasto()"></select><span id="g-cat-grupo" class="muted" style="display:block;font-size:var(--fs-xs);margin-top:3px;min-height:1em;"></span></div>
-          <div style="grid-column:1/-1;"><label>Proveedor (opc)</label><div style="display:flex;gap:6px;"><select id="g-prov" style="flex:1;min-width:0;"></select><button class="btn" type="button" onclick="nuevoProvRapido()" title="Cargar un proveedor nuevo" style="flex:0 0 auto;padding:7px 12px;font-weight:800;font-size:1.05rem;line-height:1;">＋</button></div></div>
+          <div style="grid-column:1/-1;"><label id="g-prov-lbl">Proveedor (opc)</label><div style="display:flex;gap:6px;"><select id="g-prov" style="flex:1;min-width:0;"></select><button class="btn" type="button" onclick="nuevoProvRapido()" title="Cargar un proveedor nuevo" style="flex:0 0 auto;padding:7px 12px;font-weight:800;font-size:1.05rem;line-height:1;">＋</button></div></div>
           <div><label>Monto $</label><input id="g-monto" type="number" step="0.01" oninput="onMontoGasto()"></div>
           <div style="grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:10px;">
             <label style="font-size:var(--fs-xs);color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin:0;">Imputar a</label>
             <label style="font-weight:600;font-size:var(--fs-xs);display:inline-flex;align-items:center;gap:5px;margin:0;white-space:nowrap;"><input type="checkbox" id="g-multi" onchange="renderImput()"> Varios locales</label>
             <div id="g-imput" style="flex:1;min-width:220px;"></div>
           </div>
-          <div><label>Forma de pago</label><select id="g-fp" onchange="toggleCaja('g-fp','g-caja-wrap')"></select></div>
+          <div><label>Forma de pago</label><select id="g-fp" onchange="onFormaGasto()"></select></div>
           <div id="g-caja-wrap" hidden><label>Caja</label><select id="g-caja"><option>Caja del día</option><option>Caja guardada</option></select></div>
           <div><label>Comprobante (opc)</label><input id="g-comp"></div>
         </div>
@@ -191,9 +191,10 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="sb-api.js"></script>
-<script src="auth-guard.js"></script>
-<script src="nav.js"></script>
+<script>window.APP_BUILD='2026-10-15.3';</script>
+<script src="sb-api.js?v=2026-10-15.3"></script>
+<script src="auth-guard.js?v=2026-10-15.3"></script>
+<script src="nav.js?v=2026-10-15.3"></script>
 <script>
 var sb=window.sbClient;
 var PRODS={}, SUCS=[], PROVS=[], CG=[], FORMAS=['Efectivo','Tarjeta','Virtual','Cuenta Corriente'];
@@ -237,7 +238,7 @@ async function cargarProveedoresLocal(){
 function poblarSelects(){
   var fp=FORMAS.map(function(f){ var lbl=/cuenta\s*corriente/i.test(f)?(f+' (deuda proveedor)'):f; return '<option value="'+String(f).replace(/"/g,'&quot;')+'">'+lbl+'</option>'; }).join('');
   document.getElementById('c-fp').innerHTML=fp; document.getElementById('g-fp').innerHTML=fp;
-  onFormaCompra(); toggleCaja('g-fp','g-caja-wrap');
+  onFormaCompra(); onFormaGasto();
   renderImput();
   document.getElementById('g-cat').innerHTML='<option value="">(elegir categoría)</option>'+CG.map(function(c){return '<option value="'+c.id+'">'+c.nombre+'</option>';}).join('');
   onCatGasto();
@@ -261,8 +262,9 @@ function switchTab(name){
 var acInput=null, acM=[];
 function acFilter(v){ v=String(v||'').trim().toLowerCase(); if(!v) return []; return Object.keys(PRODS).filter(function(c){ return (c+' '+(PRODS[c].nombre||'')).toLowerCase().indexOf(v)>=0; }).slice(0,30); }
 function acShow(input){ acInput=input; acM=acFilter(input.value); var p=document.getElementById('ac-pop'); if(!acM.length){ p.hidden=true; return; } p.innerHTML=acM.map(function(c,i){ var pr=PRODS[c]; return '<div onmousedown="acPick(event,'+i+')">'+(pr.nombre||c)+' <span style="color:#8891a3">('+c+')</span></div>'; }).join(''); var r=input.getBoundingClientRect(); p.style.left=(r.left+scrollX)+'px'; p.style.top=(r.bottom+scrollY)+'px'; p.style.width=Math.max(r.width,240)+'px'; p.hidden=false; }
-function acPick(ev,i){ if(ev) ev.preventDefault(); var c=acM[i]; if(acInput&&c){ acInput.value=c; acInput.dispatchEvent(new Event('change')); } document.getElementById('ac-pop').hidden=true; }
-document.addEventListener('input', function(e){ if(e.target.classList&&e.target.classList.contains('prod-ac')) acShow(e.target); });
+function codDe(el){ return (el && (el.dataset.cod || String(el.value||'').trim())) || ''; }
+function acPick(ev,i){ if(ev) ev.preventDefault(); var c=acM[i]; if(acInput&&c){ var pr=PRODS[c]; acInput.dataset.cod=c; acInput.value=(pr&&pr.nombre)?pr.nombre:c; acInput.dispatchEvent(new Event('change')); } document.getElementById('ac-pop').hidden=true; }
+document.addEventListener('input', function(e){ if(e.target.classList&&e.target.classList.contains('prod-ac')){ delete e.target.dataset.cod; acShow(e.target); } });
 document.addEventListener('click', function(e){ var p=document.getElementById('ac-pop'); if(p&&!p.hidden&&e.target!==acInput&&!p.contains(e.target)&&!(e.target.classList&&e.target.classList.contains('prod-ac'))) p.hidden=true; });
 
 // ---- NUEVA COMPRA (2 etapas: cabecera -> productos, con borrador que se guarda solo) ----
@@ -277,12 +279,14 @@ function aplicarPermCosto(){ var cu=document.getElementById('ci-cu'); if(!cu) re
 document.addEventListener('perm-listo', aplicarPermCosto);
 document.addEventListener('perm-listo', function(){ cargarProveedoresLocal(); });   // proveedores + np-suc según los locales del usuario
 // Al elegir un producto en la fila de carga, precarga su último costo conocido.
-function ciProd(input){ var cod=(input.value||'').trim(); var p=PRODS[cod]; var cant=document.getElementById('ci-cant'); if(p){ if(p.costo!=null) document.getElementById('ci-cu').value=p.costo; if(cant) cant.step=(p.tipo==='unidad'?'1':'0.001'); } }
+function ciProd(input){ var cod=codDe(input); var p=PRODS[cod]; var cant=document.getElementById('ci-cant'); var lbl=document.getElementById('ci-cant-lbl'); if(p){ if(p.costo!=null) document.getElementById('ci-cu').value=p.costo; var esUn=(p.tipo==='unidad'); if(cant) cant.step=(esUn?'1':'0.001'); if(lbl) lbl.textContent=(esUn?'Unidades':'Kilos'); } else { if(lbl) lbl.textContent='Cantidad'; } }
 
 // Etapa 1: crear la compra (borrador) con el total de la factura/remito
 async function crearCompraUI(){
   var provId=document.getElementById('c-cuenta').value||null;
-  if(!provId){ toast('Elegí un proveedor','error'); return; }
+  if(!provId){ toast('Elegí un proveedor','error'); document.getElementById('c-cuenta').focus(); return; }
+  var comp=document.getElementById('c-comp').value.trim();
+  if(!comp){ toast('Poné el comprobante (N° de factura o remito)','error'); document.getElementById('c-comp').focus(); return; }
   var totalFC=Number(document.getElementById('c-total-fc').value)||0;
   if(!(totalFC>0) && !confirm('El total de la factura es 0. ¿Continuar igual?')) return;
   var forma=efectivaForma('c-fp','c-caja');
@@ -298,14 +302,15 @@ function entrarEdicion(id, totalFC, titulo){
   document.getElementById('c-cab').hidden=true; document.getElementById('borr-card').hidden=true;
   document.getElementById('c-prod').hidden=false;
   document.getElementById('c-prod-sub').textContent=(titulo||'Compra')+' · Total factura: '+fmt$(COMPRA_TOTAL_FC);
-  document.getElementById('ci-cod').value=''; document.getElementById('ci-cant').value=''; document.getElementById('ci-cu').value='';
+  var cic=document.getElementById('ci-cod'); cic.value=''; delete cic.dataset.cod; document.getElementById('ci-cant').value=''; document.getElementById('ci-cu').value='';
   aplicarPermCosto(); cargarItems();
 }
 async function cargarItems(){
   var r=await window.sf('getCompraDetalle&id='+COMPRA_ID); var items=(r.ok?r.detalle:[])||[];
   var suma=0;
   document.getElementById('ci-tbody').innerHTML=items.map(function(d){ suma+=d.costo;
-    return '<tr><td>'+(d.nombre||d.codigo)+'</td><td class="num">'+d.cantidad+'</td><td class="num">'+fmt$(d.costo_unit)+'</td><td class="num">'+fmt$(d.costo)+'</td>'+
+    var u=(PRODS[d.codigo]&&PRODS[d.codigo].tipo==='unidad')?' un':' kg';
+    return '<tr><td>'+(d.nombre||d.codigo)+'</td><td class="num">'+d.cantidad+u+'</td><td class="num">'+fmt$(d.costo_unit)+'</td><td class="num">'+fmt$(d.costo)+'</td>'+
       '<td><button class="x-btn" title="Quitar" onclick="quitarItemUI('+d.id+')">✕</button></td></tr>';
   }).join('') || '<tr><td colspan="5" class="muted">Todavía sin productos. Agregá arriba.</td></tr>';
   document.getElementById('c-total').textContent=fmt$(suma);
@@ -315,14 +320,15 @@ async function cargarItems(){
 }
 async function agregarItemUI(){
   if(!COMPRA_ID) return;
-  var cod=(document.getElementById('ci-cod').value||'').trim();
+  var ciCod=document.getElementById('ci-cod'); var cod=codDe(ciCod);
   var cant=document.getElementById('ci-cant').value, cu=document.getElementById('ci-cu').value;
   if(!cod || !(Number(cant)>0)){ toast('Poné producto y cantidad','error'); return; }
   if(PRODS[cod] && PRODS[cod].tipo==='unidad') cant=Math.round(Number(cant)||0);   // unidad = entero
   var r=await window.sp('agregarItemCompra',{ compra_id:COMPRA_ID, codigo:cod, cantidad:cant, costo_unit:cu });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  document.getElementById('ci-cod').value=''; document.getElementById('ci-cant').value=''; document.getElementById('ci-cu').value='';
-  document.getElementById('ci-cod').focus(); cargarItems();
+  ciCod.value=''; delete ciCod.dataset.cod; document.getElementById('ci-cant').value=''; document.getElementById('ci-cu').value='';
+  var lbl=document.getElementById('ci-cant-lbl'); if(lbl) lbl.textContent='Cantidad';
+  ciCod.focus(); cargarItems();
 }
 async function quitarItemUI(detalleId){ var r=await window.sp('quitarItemCompra',{ detalle_id:detalleId }); if(!r.ok){ toast('Error: '+r.error,'error'); return; } cargarItems(); }
 async function confirmarCompraUI(){
@@ -429,6 +435,9 @@ function toggleGasto(id){ var r=document.getElementById('gx-'+id); if(r) r.hidde
 
 // ---- Forma de pago (Efectivo -> Caja del día / guardada) e imputación a locales ----
 function toggleCaja(fpId, wrapId){ var f=document.getElementById(fpId), w=document.getElementById(wrapId); if(f&&w) w.hidden=!/efectivo/i.test(f.value); }
+// Forma de pago del gasto: muestra/oculta el sub-selector de caja y, si es Cuenta corriente,
+// marca el proveedor como obligatorio (si no, queda opcional).
+function onFormaGasto(){ toggleCaja('g-fp','g-caja-wrap'); var cc=/cuenta\s*corriente/i.test((document.getElementById('g-fp')||{}).value||''); var l=document.getElementById('g-prov-lbl'); if(l) l.textContent=cc?'Proveedor (obligatorio)':'Proveedor (opc)'; }
 function efectivaForma(fpId, cajaId){ var f=document.getElementById(fpId).value; if(/efectivo/i.test(f)){ var c=document.getElementById(cajaId); return c?c.value:f; } return f; }
 function onMontoGasto(){ if(document.getElementById('g-multi').checked) renderImput(); }
 // Devuelve el reparto a aplicar (por local): el de la categoría elegida si tiene; si no, el general por defecto.
@@ -480,6 +489,8 @@ async function guardarGastoUI(){
   var montoTotal=Number(document.getElementById('g-monto').value)||0;
   if(!(montoTotal>0)){ toast('Poné un monto','error'); return; }
   var forma=efectivaForma('g-fp','g-caja'), desc=document.getElementById('g-desc').value.trim();
+  if(!desc){ toast('Poné el detalle del gasto','error'); document.getElementById('g-desc').focus(); return; }
+  if(/cuenta\s*corriente/i.test(forma) && !(document.getElementById('g-prov').value||'').trim()){ toast('Con Cuenta corriente tenés que elegir un proveedor','error'); document.getElementById('g-prov').focus(); return; }
   var base={ fecha:document.getElementById('g-fecha').value, sucursal:sucActual, categoriaId:(document.getElementById('g-cat').value||null), proveedorId:(document.getElementById('g-prov').value||null), formaPago:forma, comprobante:document.getElementById('g-comp').value.trim(), descripcion:desc };
 
   if(gastoEditId){
@@ -534,7 +545,7 @@ function addLineaElab(cont){
     '<button class="x-btn" title="Quitar" onclick="this.parentNode.remove()">✕</button>';
   document.getElementById(cont).appendChild(d);
 }
-function leerLineasElab(cont){ var arr=[]; document.querySelectorAll('#'+cont+' .linea').forEach(function(l){ var cod=(l.querySelector('.e-cod').value||'').trim(); var cant=l.querySelector('.e-cant').value; if(cod && Number(cant)>0) arr.push({codigo:cod, cantidad:cant}); }); return arr; }
+function leerLineasElab(cont){ var arr=[]; document.querySelectorAll('#'+cont+' .linea').forEach(function(l){ var cod=codDe(l.querySelector('.e-cod')); var cant=l.querySelector('.e-cant').value; if(cod && Number(cant)>0) arr.push({codigo:cod, cantidad:cant}); }); return arr; }
 async function registrarElabUI(){
   var insumos=leerLineasElab('e-insumos'), salidas=leerLineasElab('e-salidas');
   if(!insumos.length || !salidas.length){ toast('Cargá al menos un insumo y una salida','error'); return; }

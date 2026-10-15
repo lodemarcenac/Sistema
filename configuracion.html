@@ -59,6 +59,7 @@
       <button class="tab" data-s="gastos" onclick="switchSec('gastos')">🧾 Compras y Gastos</button>
       <button class="tab" data-s="clover" onclick="switchSec('clover')">💳 Clover</button>
       <button class="tab" data-s="prov" onclick="switchSec('prov')">🏪 Proveedores</button>
+      <button class="tab" data-s="historico" onclick="switchSec('historico')">📈 Histórico ventas</button>
     </div>
 
     <!-- FORMAS DE PAGO -->
@@ -171,15 +172,35 @@
         <div style="margin-top:10px;"><button class="btn" onclick="guardarCvImp()">Guardar impuestos</button></div>
       </div>
     </div>
+
+    <!-- HISTÓRICO DE VENTAS -->
+    <div id="s-historico" hidden>
+      <div class="card">
+        <h3>Histórico de ventas diarias</h3>
+        <p class="hint">Cargá las ventas diarias <b>anteriores al sistema</b> (las de tu Excel) para que el Tablero y los reportes comparen año contra año, ajustadas por inflación. Se guardan en <b>pesos nominales</b> (los de ese día): el ajuste por IPC lo hace solo el reporte. <b>Cargar de nuevo un día no lo duplica — lo pisa.</b></p>
+        <div id="hist-resumen" class="hint" style="background:var(--surface-2);border:1px solid var(--line-2);border-radius:var(--radius-sm);padding:10px 12px;">Cargando último día por local…</div>
+      </div>
+      <div class="card">
+        <h3>Pegar datos</h3>
+        <p class="hint">Pegá directo desde Excel (una fila por día). Acepta las columnas <b>Local, Fecha, Monto, Clientes</b> o el formato completo de tu planilla (<b>Local, Fecha, Año, Mes, Semana, Total&nbsp;Ventas, Clientes</b>). Fecha <code>dd/mm/aaaa</code>; el monto puede venir con <code>$</code> y puntos de miles.</p>
+        <textarea id="hist-paste" rows="8" style="width:100%;font-family:monospace;font-size:var(--fs-sm);border:1px solid var(--border-inp);border-radius:var(--radius-sm);padding:10px;box-sizing:border-box;" placeholder="Playa&#9;01/08/2026&#9;$ 22.277&#9;143"></textarea>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-sec" onclick="previewHist()">Previsualizar</button>
+          <button class="btn" id="hist-btn-cargar" onclick="cargarHist()" disabled>Cargar al sistema</button>
+        </div>
+        <div id="hist-preview" style="margin-top:14px;"></div>
+      </div>
+    </div>
   </main>
 </div>
 
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="sb-api.js"></script>
-<script src="auth-guard.js"></script>
-<script src="nav.js"></script>
+<script>window.APP_BUILD='2026-10-15.3';</script>
+<script src="sb-api.js?v=2026-10-15.3"></script>
+<script src="auth-guard.js?v=2026-10-15.3"></script>
+<script src="nav.js?v=2026-10-15.3"></script>
 <script>
 var sb=window.sbClient;
 var FORMAS=[{nombre:'Efectivo',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Tarjeta',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Virtual',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Cuenta Corriente',cta:true,facturar:false,cobro:true,pago:true}];
@@ -225,23 +246,38 @@ async function iniciar(){
 }
 function switchSec(name){
   document.querySelectorAll('.sec-tabs .tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-s')===name); });
-  ['pagos','locales','balanzas','gastos','clover','prov'].forEach(function(s){ document.getElementById('s-'+s).hidden=(s!==name); });
+  ['pagos','locales','balanzas','gastos','clover','prov','historico'].forEach(function(s){ document.getElementById('s-'+s).hidden=(s!==name); });
   if(name==='gastos') renderGastos();
   if(name==='clover') cargarClover();
   if(name==='prov') cargarCfgProv();
+  if(name==='historico') cargarHistResumen();
 }
 // ---- PROVEEDORES POR LOCAL ----
 var CFG_PROV=[];
 async function cargarCfgProv(){
   var r=await window.sf('getProveedoresConLocales'); CFG_PROV=(r.ok?r.proveedores:[])||[];
+  // cuentas compartidas (juntas): tomar la cuenta con >=2 locales de cada proveedor
+  try{
+    var rc=await window.sf('getCuentasProveedor'); var provsC=(rc.ok?rc.proveedores:[])||[];
+    var juntaByProv={};
+    provsC.forEach(function(pc){ (pc.cuentas||[]).forEach(function(cu){ if((cu.locales||[]).length>=2){ juntaByProv[pc.id]=cu.locales.slice(); } }); });
+    CFG_PROV.forEach(function(p){ p.junta=juntaByProv[p.id]||[]; });
+  }catch(e){ CFG_PROV.forEach(function(p){ p.junta=p.junta||[]; }); }
   renderCfgProv();
 }
 function renderCfgProv(){
   var locs=SUCS.filter(function(s){return s.id;});
   document.getElementById('cfg-prov-list').innerHTML = CFG_PROV.length ? CFG_PROV.map(function(p){
+    var junta=p.junta||[];
     return '<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><b>'+p.nombre+'</b><button class="mini-btn" onclick="guardarCfgProv('+p.id+')">Guardar</button></div>'+
-      '<div style="margin-top:8px;">'+locs.map(function(s){ return '<label style="margin-right:16px;font-size:var(--fs-sm);display:inline-flex;align-items:center;gap:5px;"><input type="checkbox" class="cfgp-'+p.id+'" value="'+String(s.nombre).replace(/"/g,'&quot;')+'" '+((p.locales||[]).indexOf(s.nombre)>=0?'checked':'')+'> '+s.nombre+'</label>'; }).join('')+'</div>'+
+      '<div style="margin-top:8px;font-size:var(--fs-xs);color:var(--muted);font-weight:600;">Aparece en estos locales:</div>'+
+      '<div style="margin-top:4px;">'+locs.map(function(s){ return '<label style="margin-right:16px;font-size:var(--fs-sm);display:inline-flex;align-items:center;gap:5px;"><input type="checkbox" class="cfgp-'+p.id+'" value="'+String(s.nombre).replace(/"/g,'&quot;')+'" '+((p.locales||[]).indexOf(s.nombre)>=0?'checked':'')+'> '+s.nombre+'</label>'; }).join('')+'</div>'+
+      '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--line-2);">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:var(--fs-xs);color:var(--muted);font-weight:600;">Saldo compartido (cuenta junta) entre:</span><button class="mini-btn" onclick="guardarCuentaJunta('+p.id+')">Guardar junta</button></div>'+
+        '<div style="margin-top:4px;">'+locs.map(function(s){ return '<label style="margin-right:16px;font-size:var(--fs-sm);display:inline-flex;align-items:center;gap:5px;"><input type="checkbox" class="cfgj-'+p.id+'" value="'+String(s.nombre).replace(/"/g,'&quot;')+'" '+(junta.indexOf(s.nombre)>=0?'checked':'')+'> '+s.nombre+'</label>'; }).join('')+'</div>'+
+        '<div class="muted" style="font-size:var(--fs-xs);margin-top:3px;">Tildá 2 o más locales para que compartan un solo saldo con este proveedor. Con 0 o 1, cada local lleva su cuenta por separado.</div>'+
+      '</div>'+
     '</div>';
   }).join('') : '<p class="muted">No hay proveedores todavía.</p>';
 }
@@ -250,6 +286,14 @@ async function guardarCfgProv(id){
   var r=await window.sp('setProveedorLocales',{ proveedorId:id, locales:locs });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   var p=CFG_PROV.find(function(x){return x.id===id;}); if(p) p.locales=locs; toast('Guardado');
+}
+async function guardarCuentaJunta(id){
+  var locs=[]; document.querySelectorAll('.cfgj-'+id+':checked').forEach(function(c){ locs.push(c.value); });
+  if(locs.length===1){ toast('Elegí 2 o más locales (o ninguno para dejarlo separado)','error'); return; }
+  var r=await window.sp('setCuentaJunta',{ proveedorId:id, locales:locs });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  var p=CFG_PROV.find(function(x){return x.id===id;}); if(p) p.junta=(locs.length>=2?locs:[]);
+  toast(locs.length>=2?('Saldo compartido entre '+locs.join(' + ')):'Cuenta separada por local');
 }
 // ---- REPARTO DE GASTOS POR DEFECTO (global, % por local) ----
 function renderRepDef(){
@@ -515,6 +559,80 @@ async function guardarRep(catId, sucId, val){
   var r=await window.sp('guardarReparto',{categoriaId:catId, sucursalId:sucId, porcentaje:val});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   REP[catId]=REP[catId]||{}; REP[catId][sucId]=(val===''?0:Number(val)); toast('Reparto guardado');
+}
+
+// ---- HISTÓRICO DE VENTAS ----
+var HIST_RESUMEN=[], HIST_PARSED=[];
+function histNorm(s){ return String(s||'').trim().toLowerCase(); }
+function fechaAR(iso){ if(!iso) return '—'; var p=String(iso).slice(0,10).split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):iso; }
+function fmtPesos(n){ return '$ '+(Number(n)||0).toLocaleString('es-AR'); }
+function parseFechaHist(s){
+  s=String(s||'').trim(); if(!s) return null;
+  var m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);   // dd/mm/aaaa
+  if(m){ var a=m[3].length===2?('20'+m[3]):m[3]; return a+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2); }
+  var m2=s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);    // aaaa-mm-dd
+  if(m2){ return m2[1]+'-'+('0'+m2[2]).slice(-2)+'-'+('0'+m2[3]).slice(-2); }
+  return null;
+}
+function parseMontoHist(s){ var neg=/^\s*-/.test(String(s)); var d=String(s||'').replace(/[^\d]/g,''); if(!d) return 0; var n=parseInt(d,10)||0; return neg?-n:n; }
+async function cargarHistResumen(){
+  var el=document.getElementById('hist-resumen');
+  var r=await window.sf('getHistoricoResumen');
+  if(!r.ok){ el.innerHTML='<span style="color:var(--bad)">No se pudo leer el resumen: '+r.error+'</span>'; return; }
+  HIST_RESUMEN=r.resumen||[];
+  if(!HIST_RESUMEN.length){ el.innerHTML='Todavía no hay histórico cargado. El primer bloque que pegues arranca la serie.'; return; }
+  el.innerHTML='<b>Último día cargado por local:</b><br>'+HIST_RESUMEN.map(function(x){
+    return '• '+x.sucursal+': <b>'+fechaAR(x.ultimo)+'</b> <span class="muted">('+x.dias+' días · '+fmtPesos(x.total)+')</span>';
+  }).join('<br>')+'<br><span class="muted">Seguí cargando desde el día siguiente. Cargar un día ya existente lo pisa, no lo suma.</span>';
+}
+function previewHist(){
+  var txt=document.getElementById('hist-paste').value||'';
+  var lineas=txt.split(/\r?\n/).filter(function(l){return l.trim();});
+  HIST_PARSED=[]; var errores=[];
+  var hoyISO=new Date().toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'});
+  var localesOK={}; SUCS.filter(function(s){return s.id;}).forEach(function(s){ localesOK[histNorm(s.nombre)]=s.nombre; if(s.sigla) localesOK[histNorm(s.sigla)]=s.nombre; });
+  lineas.forEach(function(ln,i){
+    var sep=ln.indexOf('\t')>=0?'\t':(ln.indexOf(';')>=0?';':',');
+    var c=ln.split(sep).map(function(x){return x.trim();});
+    if(i===0 && /local/i.test(c[0]||'') && /fecha/i.test(c[1]||'')) return;   // saltar encabezado
+    var local,fecha,monto,clientes;
+    if(c.length>=7){ local=c[0]; fecha=c[1]; monto=c[5]; clientes=c[6]; }
+    else if(c.length>=4){ local=c[0]; fecha=c[1]; monto=c[2]; clientes=c[3]; }
+    else if(c.length>=3){ local=c[0]; fecha=c[1]; monto=c[2]; clientes='0'; }
+    else { errores.push('Fila '+(i+1)+': muy pocas columnas'); return; }
+    var locN=localesOK[histNorm(local)];
+    var fISO=parseFechaHist(fecha);
+    if(!locN){ errores.push('Fila '+(i+1)+': local desconocido "'+local+'"'); return; }
+    if(!fISO){ errores.push('Fila '+(i+1)+': fecha inválida "'+fecha+'"'); return; }
+    if(fISO>hoyISO){ errores.push('Fila '+(i+1)+': fecha futura '+fecha); return; }
+    HIST_PARSED.push({ local:locN, fecha:fISO, monto:parseMontoHist(monto), clientes:parseInt(String(clientes).replace(/[^\d]/g,''))||0 });
+  });
+  var cont=document.getElementById('hist-preview'), btn=document.getElementById('hist-btn-cargar');
+  if(errores.length){
+    cont.innerHTML='<div style="color:var(--bad);font-weight:600;">No se pudo leer todo (no se cargó nada):</div><ul style="margin:6px 0 0 18px;color:var(--bad);font-size:var(--fs-sm);">'+errores.slice(0,20).map(function(e){return '<li>'+e+'</li>';}).join('')+'</ul>'+(errores.length>20?'<div class="muted">… y '+(errores.length-20)+' más</div>':'');
+    btn.disabled=true; return;
+  }
+  if(!HIST_PARSED.length){ cont.innerHTML='<span class="muted">No se detectaron filas.</span>'; btn.disabled=true; return; }
+  var porLocal={}; HIST_PARSED.forEach(function(r){ var o=porLocal[r.local]=porLocal[r.local]||{n:0,min:r.fecha,max:r.fecha,suma:0,cli:0}; o.n++; o.suma+=r.monto; o.cli+=r.clientes; if(r.fecha<o.min)o.min=r.fecha; if(r.fecha>o.max)o.max=r.fecha; });
+  var ultimoPorLocal={}; HIST_RESUMEN.forEach(function(x){ ultimoPorLocal[x.sucursal]=x.ultimo?String(x.ultimo).slice(0,10):null; });
+  var rows=Object.keys(porLocal).map(function(loc){
+    var o=porLocal[loc]; var ult=ultimoPorLocal[loc];
+    var aviso=(ult && o.min<=ult) ? '<span style="color:var(--warn)">pisa días ≤ '+fechaAR(ult)+'</span>' : '<span style="color:var(--good)">todo nuevo</span>';
+    return '<tr><td>'+loc+'</td><td>'+o.n+'</td><td>'+fechaAR(o.min)+' → '+fechaAR(o.max)+'</td><td>'+fmtPesos(o.suma)+'</td><td>'+o.cli+'</td><td>'+aviso+'</td></tr>';
+  }).join('');
+  cont.innerHTML='<div style="font-weight:600;margin-bottom:6px;">Listo para cargar: '+HIST_PARSED.length+' días</div>'+
+    '<div class="tblwrap"><table class="cfg"><thead><tr><th>Local</th><th>Días</th><th>Rango</th><th>Total</th><th>Clientes</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  btn.disabled=false;
+}
+async function cargarHist(){
+  if(!HIST_PARSED.length){ toast('Previsualizá primero','error'); return; }
+  var btn=document.getElementById('hist-btn-cargar'); btn.disabled=true; var prev=btn.textContent; btn.textContent='Cargando…';
+  var r=await window.sp('upsertHistorico',{ filas:HIST_PARSED });
+  btn.textContent=prev;
+  if(!r.ok){ toast('Error: '+r.error,'error'); btn.disabled=false; return; }
+  toast(r.cargadas+' días cargados');
+  document.getElementById('hist-paste').value=''; document.getElementById('hist-preview').innerHTML=''; HIST_PARSED=[];
+  await cargarHistResumen();
 }
 </script>
 </body>

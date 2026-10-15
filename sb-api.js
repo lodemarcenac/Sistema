@@ -254,11 +254,16 @@
     },
     getMovProveedor: async function(params){
       var id=params&&params.id; if(!id) return {ok:true, movimientos:[], saldo:0};
-      var sid=null; if(params&&params.sucursal){ var mm=await sucIdMap(); sid=mm[params.sucursal]||null; }
+      // Alcance de locales: 'sucursales' (lista, para cuentas juntas) o 'sucursal' (uno). Sin nada = todos.
+      var sids=null, filtrado=false;
+      if(params&&params.sucursales){ var mm=await sucIdMap(); filtrado=true; sids=String(params.sucursales).split(',').map(function(s){return s.trim();}).filter(Boolean).map(function(n){return mm[n];}).filter(function(x){return x!=null;}); }
+      else if(params&&params.sucursal){ var m1=await sucIdMap(); filtrado=true; var one=m1[params.sucursal]; sids=one?[one]:[]; }
+      if(filtrado && (!sids||!sids.length)) return {ok:true, movimientos:[], saldo:0};
+      var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
       var q=sb.from('deuda_proveedores').select('fecha,tipo,monto,descripcion,comprobante,forma_pago,sucursal_id').eq('proveedor_id',id);
-      if(sid) q=q.eq('sucursal_id',sid);
+      if(filtrado) q=q.in('sucursal_id',sids);
       var r=await q.order('fecha'); if(r.error) throw r.error;
-      var saldo=0; var movs=(r.data||[]).map(function(m){ var v=Number(m.monto)||0; if(/pago/i.test(m.tipo)) saldo-=v; else saldo+=v; return { fecha:m.fecha, tipo:m.tipo, monto:v, descripcion:m.descripcion||'', comprobante:m.comprobante||'', formaPago:m.forma_pago||'', saldo:saldo }; });
+      var saldo=0; var movs=(r.data||[]).map(function(m){ var v=Number(m.monto)||0; if(/pago/i.test(m.tipo)) saldo-=v; else saldo+=v; return { fecha:m.fecha, tipo:m.tipo, monto:v, descripcion:m.descripcion||'', comprobante:m.comprobante||'', formaPago:m.forma_pago||'', local:idToName[m.sucursal_id]||'', saldo:saldo }; });
       return {ok:true, movimientos:movs, saldo:saldo};
     },
     getProveedoresDeLocal: async function(params){
@@ -322,13 +327,37 @@
     },
     getDeudasLocal: async function(params){
       var m=await sucIdMap(); var sid=params&&params.sucursal?m[params.sucursal]:null; if(!sid) return {ok:true, deudas:[]};
+      var idToName={}; Object.keys(m).forEach(function(n){ idToName[m[n]]=n; });
+      // Cuentas juntas: un proveedor puede tener una cuenta que agrupa >=2 locales que comparten el saldo.
+      // Si las tablas aún no existen (SQL sin correr), cae a saldo por-local.
+      var cu=await sb.from('proveedor_cuentas').select('id,proveedor_id,nombre,activo');
+      var cl=await sb.from('proveedor_cuenta_locales').select('cuenta_id,sucursal_id');
+      var cuentaById={};
+      if(!cu.error && !cl.error){
+        (cu.data||[]).filter(function(c){return c.activo!==false;}).forEach(function(c){ cuentaById[c.id]={ proveedorId:c.proveedor_id, nombre:c.nombre||'', sucs:[] }; });
+        (cl.data||[]).forEach(function(x){ if(cuentaById[x.cuenta_id]) cuentaById[x.cuenta_id].sucs.push(x.sucursal_id); });
+      }
+      var cuentaDeProv={};  // proveedorId -> cuenta junta que incluye ESTE local
+      Object.keys(cuentaById).forEach(function(cid){ var c=cuentaById[cid]; if(c.sucs.length>=2 && c.sucs.indexOf(sid)>=0){ cuentaDeProv[c.proveedorId]=c; } });
+      // Proveedores relevantes: asignados al local + con deuda en el local + con junta que incluye el local
       var idsSet={};
       var asign=await sb.from('proveedor_locales').select('proveedor_id').eq('sucursal_id',sid); (asign.data||[]).forEach(function(x){ idsSet[x.proveedor_id]=true; });
-      var dp=await sb.from('deuda_proveedores').select('proveedor_id,tipo,monto').eq('sucursal_id',sid);
-      var saldo={}; (dp.data||[]).forEach(function(x){ if(x.proveedor_id==null) return; var v=Number(x.monto)||0; saldo[x.proveedor_id]=(saldo[x.proveedor_id]||0)+(/pago/i.test(x.tipo)?-v:v); idsSet[x.proveedor_id]=true; });
-      var ids=Object.keys(idsSet).map(Number); if(!ids.length) return {ok:true, deudas:[]};
-      var pr=await sb.from('proveedores').select('id,nombre,activo').in('id',ids);
-      return {ok:true, deudas:(pr.data||[]).filter(function(p){return p.activo!==false;}).map(function(p){ return { proveedorId:p.id, proveedor:p.nombre, saldo:+((saldo[p.id]||0)).toFixed(2) }; }).sort(function(a,b){ return b.saldo-a.saldo; })};
+      var dps=await sb.from('deuda_proveedores').select('proveedor_id').eq('sucursal_id',sid); (dps.data||[]).forEach(function(x){ if(x.proveedor_id!=null) idsSet[x.proveedor_id]=true; });
+      Object.keys(cuentaDeProv).forEach(function(pid){ idsSet[Number(pid)]=true; });
+      var relIds=Object.keys(idsSet).map(Number); if(!relIds.length) return {ok:true, deudas:[]};
+      // Alcance de sucursales por proveedor (junta => locales de la cuenta; si no => solo este local)
+      var scopeByProv={}, allScope={};
+      relIds.forEach(function(pid){ var c=cuentaDeProv[pid]; var sucs=c?c.sucs.slice():[sid]; scopeByProv[pid]=sucs; sucs.forEach(function(s){ allScope[s]=true; }); });
+      var scopeIds=Object.keys(allScope).map(Number);
+      // Saldo = suma de cargos - pagos sobre el alcance de cada proveedor
+      var saldo={};
+      var dp=await sb.from('deuda_proveedores').select('proveedor_id,sucursal_id,tipo,monto').in('proveedor_id',relIds).in('sucursal_id',scopeIds);
+      (dp.data||[]).forEach(function(x){ if(x.proveedor_id==null) return; var sc=scopeByProv[x.proveedor_id]; if(!sc || sc.indexOf(x.sucursal_id)<0) return; var v=Number(x.monto)||0; saldo[x.proveedor_id]=(saldo[x.proveedor_id]||0)+(/pago/i.test(x.tipo)?-v:v); });
+      var pr=await sb.from('proveedores').select('id,nombre,activo').in('id',relIds);
+      return {ok:true, deudas:(pr.data||[]).filter(function(p){return p.activo!==false;}).map(function(p){
+        var c=cuentaDeProv[p.id]; var scopeNames=(scopeByProv[p.id]||[]).map(function(s){ return idToName[s]||String(s); });
+        return { proveedorId:p.id, proveedor:p.nombre, saldo:+((saldo[p.id]||0)).toFixed(2), junta:!!c, localesJunta:(c?scopeNames:[]), scope:scopeNames };
+      }).sort(function(a,b){ return b.saldo-a.saldo; })};
     },
     getMovCuenta: async function(params){
       var id=params&&params.id; if(!id) return {ok:true, movimientos:[], saldo:0};
@@ -406,6 +435,14 @@
       var out={};
       (res.data||[]).forEach(function(b){ var n=b.suc?b.suc.nombre:null; if(n) out[n]={ prefijo:String(b.prefijo||''), dato:String(b.dato||''), codlen:String(b.codlen||''), datolen:String(b.datolen||'') }; });
       return {ok:true, balanzas:out};
+    },
+
+    // --- HISTÓRICO DE VENTAS (pre-sistema, carga manual) ---
+    // Último día cargado / días / total por local (lee la vista agregada, sin tope de 1000 filas).
+    getHistoricoResumen: async function(){
+      var r=await sb.from('v_historico_resumen').select('sucursal_id,sucursal,ultimo_dia,primer_dia,dias,total').order('sucursal');
+      if(r.error) throw r.error;
+      return {ok:true, resumen:(r.data||[]).map(function(x){ return { sucursalId:x.sucursal_id, sucursal:x.sucursal, ultimo:x.ultimo_dia, primero:x.primer_dia, dias:Number(x.dias)||0, total:Number(x.total)||0 }; })};
     },
 
     // --- CLOVER (conciliación) ---
@@ -819,7 +856,28 @@
       if((p.tipo||'pago')==='pago' && fondo==='reserva' && pay.sucursal_id && (Number(p.monto)||0)>0){
         await sb.from('efectivo_reserva_mov').insert({ sucursal_id:pay.sucursal_id, tipo:'egreso', monto:Number(p.monto)||0, concepto:'Pago a proveedor' });
       }
+      // Cheques emitidos (forma de pago cheque): se guardan para el listado de cheques.
+      if((p.tipo||'pago')==='pago' && Array.isArray(p.cheques) && p.cheques.length){
+        var chrows=p.cheques.map(function(c){ return { proveedor_id:(p.proveedorId||null), sucursal_id:pay.sucursal_id, banco:((c.banco||'').toString().trim()||null), numero:((c.numero||'').toString().trim()||null), fecha_pago:(c.fecha||null), monto:Number(c.monto)||0, estado:'emitido', concepto:(p.descripcion||'Pago a proveedor') }; });
+        var rc=await sb.from('cheques').insert(chrows);
+        if(rc.error) return {ok:true, warn:'El pago se registró, pero no se pudieron guardar los cheques (¿falta correr cheques_schema.sql?): '+rc.error.message};
+      }
       return {ok:true};
+    },
+    getCheques: async function(params){
+      params=params||{};
+      var m=await sucIdMap();
+      var q=sb.from('cheques').select('id,proveedor_id,sucursal_id,banco,numero,fecha_pago,monto,estado,concepto,prov:proveedores(nombre)').order('fecha_pago',{ascending:true}).limit(5000);
+      if(params.sucursal){ var sid=m[params.sucursal]; if(sid) q=q.eq('sucursal_id',sid); }
+      if(params.sucursales){ var sids=String(params.sucursales).split(',').map(function(s){return s.trim();}).filter(Boolean).map(function(n){return m[n];}).filter(function(x){return x!=null;}); if(sids.length) q=q.in('sucursal_id',sids); }
+      if(params.proveedorId) q=q.eq('proveedor_id',params.proveedorId);
+      if(params.estado) q=q.eq('estado',params.estado);
+      if(params.desde) q=q.gte('fecha_pago',params.desde);
+      if(params.hasta) q=q.lte('fecha_pago',params.hasta);
+      var r=await q;
+      if(r.error){ if(/relation|does not exist|schema cache|could not find/i.test(r.error.message||'')) return {ok:true, cheques:[], sinTabla:true}; throw r.error; }
+      var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
+      return {ok:true, cheques:(r.data||[]).map(function(c){ return { id:c.id, proveedor:(c.prov?c.prov.nombre:''), proveedorId:c.proveedor_id, local:idToName[c.sucursal_id]||'', banco:c.banco||'', numero:c.numero||'', fecha:c.fecha_pago, monto:Number(c.monto)||0, estado:c.estado||'emitido', concepto:c.concepto||'' }; })};
     },
     guardarCuentaProveedor: async function(p){
       var m=await sucIdMap(); var payload={ proveedor_id:p.proveedorId, nombre:(p.nombre||null) }; var cid=p.id;
@@ -833,6 +891,25 @@
     eliminarCuentaProveedor: async function(p){
       if(!p.id) throw new Error('Falta id'); var r=await sb.from('proveedor_cuentas').delete().eq('id',p.id);
       if(r.error){ var u=await sb.from('proveedor_cuentas').update({activo:false}).eq('id',p.id); if(u.error) throw u.error; return {ok:true,soft:true}; } return {ok:true};
+    },
+    // Define la cuenta COMPARTIDA (junta) de un proveedor = locales que comparten el saldo.
+    // locales con < 2 elementos => el proveedor queda separado por local (se borra la junta).
+    setCuentaJunta: async function(p){
+      var pid=p.proveedorId; if(!pid) throw new Error('Falta proveedor');
+      var m=await sucIdMap();
+      var sids=(p.locales||[]).map(function(l){ return (typeof l==='number')?l:(m[l]||null); }).filter(Boolean);
+      // borrar cuenta(s) junta previas de este proveedor
+      var ex=await sb.from('proveedor_cuentas').select('id').eq('proveedor_id',pid);
+      var ids=(ex.data||[]).map(function(x){return x.id;});
+      if(ids.length){ await sb.from('proveedor_cuenta_locales').delete().in('cuenta_id',ids); var del=await sb.from('proveedor_cuentas').delete().in('id',ids); if(del.error){ await sb.from('proveedor_cuentas').update({activo:false}).in('id',ids); } }
+      if(sids.length>=2){
+        var nombre=(p.locales||[]).join('+');
+        var ins=await sb.from('proveedor_cuentas').insert({ proveedor_id:pid, nombre:nombre, activo:true }).select('id').single(); if(ins.error) throw ins.error;
+        var rows=sids.map(function(s){ return { cuenta_id:ins.data.id, sucursal_id:s }; });
+        var rl=await sb.from('proveedor_cuenta_locales').insert(rows); if(rl.error) throw rl.error;
+        return {ok:true, id:ins.data.id};
+      }
+      return {ok:true, id:null};
     },
     // --- CATEGORÍAS DE GASTO / REPARTO ---
     guardarCategoriaGasto: async function(p){
@@ -964,7 +1041,25 @@
       var r=await sb.rpc('compra_descartar',{p:{ compra_id:p.id }}); if(r.error) throw r.error; return r.data||{ok:true};
     },
     reabrirCompra: async function(p){ var r=await sb.rpc('compra_reabrir',{p:{ compra_id:p.id }}); if(r.error) throw r.error; return r.data||{ok:true}; },
-    anularCompra: async function(p){ var r=await sb.rpc('compra_anular',{p:{ compra_id:p.id }}); if(r.error) throw r.error; return r.data||{ok:true}; }
+    anularCompra: async function(p){ var r=await sb.rpc('compra_anular',{p:{ compra_id:p.id }}); if(r.error) throw r.error; return r.data||{ok:true}; },
+
+    // --- HISTÓRICO DE VENTAS DIARIO ---
+    // Upsert por (sucursal_id, fecha): cargar de nuevo un día lo PISA, nunca lo duplica.
+    // Espera { filas:[{local, fecha(yyyy-mm-dd), monto, clientes}] }.
+    upsertHistorico: async function(p){
+      var filas=(p&&p.filas)||[]; if(!filas.length) throw new Error('No hay filas para cargar');
+      var m=await sucIdMap(); var rows=[], errores=[];
+      filas.forEach(function(f,idx){
+        var sid=m[f.local]||m[String(f.local||'').trim()];
+        if(!sid){ errores.push('Fila '+(idx+1)+': local desconocido "'+f.local+'"'); return; }
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(String(f.fecha||''))){ errores.push('Fila '+(idx+1)+': fecha inválida'); return; }
+        rows.push({ sucursal_id:sid, fecha:f.fecha, monto:Number(f.monto)||0, clientes:parseInt(f.clientes)||0, origen:'carga-manual' });
+      });
+      if(errores.length) throw new Error(errores.join(' | '));
+      var r=await sb.from('ventas_historico_diario').upsert(rows, { onConflict:'sucursal_id,fecha' });
+      if(r.error) throw r.error;
+      return {ok:true, cargadas:rows.length};
+    }
   };
 
   // ---------------- DISPATCH ----------------

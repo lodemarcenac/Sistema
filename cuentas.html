@@ -50,6 +50,7 @@
     <div class="tabs">
       <button class="tab on" data-t="prov" onclick="switchTab('prov')">Deuda a proveedores</button>
       <button class="tab" data-t="inter" onclick="switchTab('inter')">Entre locales</button>
+      <button class="tab" data-t="cheques" onclick="switchTab('cheques')">Cheques emitidos</button>
     </div>
 
     <div id="t-prov">
@@ -66,12 +67,44 @@
         <h3 id="pv-pago-tit" style="font-size:var(--fs-lg);">Registrar movimiento</h3>
         <div class="abm-nueva">
           <div><label>Monto $</label><input id="pv-monto" type="number" step="0.01"></div>
-          <div><label>Forma</label><select id="pv-fp" onchange="toggleCaja('pv-fp','pv-caja-wrap')"></select></div>
+          <div><label>Forma</label><select id="pv-fp" onchange="onFormaPagoProv()"></select></div>
           <div id="pv-caja-wrap" hidden><label>Caja</label><select id="pv-caja"><option>Caja del día</option><option>Caja guardada</option></select></div>
           <div><label>Tipo</label><select id="pv-tipo"><option value="pago">Pago</option><option value="cargo">Cargo manual</option></select></div>
           <button class="btn" onclick="movProv()">Registrar</button>
           <button class="btn-sec" onclick="cerrarPagoProv()">Cancelar</button>
         </div>
+        <div id="pv-cheques-wrap" hidden style="margin-top:12px;border-top:1px dashed var(--line-2);padding-top:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+            <b style="font-size:var(--fs-sm);">Cheques de la orden de pago</b>
+            <button class="btn-sec" type="button" onclick="addChequeRow()">+ Cheque</button>
+          </div>
+          <div id="pv-cheques-list" style="margin-top:8px;"></div>
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:4px;">Banco y fecha de pago son <b>obligatorios</b>. El monto del pago = suma de los cheques.</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="t-cheques" hidden>
+      <div class="card" style="margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <h3 style="margin:0;">Cheques emitidos</h3>
+          <div style="display:flex;align-items:center;gap:10px;"><span class="muted" id="chq-total"></span><button class="btn-sec" onclick="exportarCheques()">📥 Exportar Excel</button></div>
+        </div>
+        <div class="abm-nueva" style="margin-top:8px;">
+          <div><label>Desde</label><input id="chq-desde" type="date" onchange="cargarCheques()"></div>
+          <div><label>Hasta</label><input id="chq-hasta" type="date" onchange="cargarCheques()"></div>
+          <div><label>Alcance</label><select id="chq-alcance" onchange="cargarCheques()"><option value="local">Este local</option><option value="todos">Todos los locales</option></select></div>
+          <div><label>Buscar</label><input id="chq-buscar" placeholder="Banco, proveedor o N°…" oninput="pintarCheques()"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:14px;">
+        <h3 style="margin:0 0 6px;font-size:var(--fs-lg);">💵 Flujo de fondos · total a pagar por fecha</h3>
+        <p class="resumen" style="margin:0 0 8px;">Suma de cheques por fecha de pago (con el acumulado), según los filtros de arriba.</p>
+        <div class="tblwrap"><table class="data"><thead><tr><th>Fecha de pago</th><th class="num">Cheques</th><th class="num">A pagar ese día</th><th class="num">Acumulado</th></tr></thead><tbody id="chq-flujo-tbody"></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 8px;font-size:var(--fs-lg);">Detalle de cheques</h3>
+        <div class="tblwrap"><table class="data"><thead><tr><th>Fecha pago</th><th>Banco</th><th>N°</th><th>Proveedor</th><th>Local</th><th>Estado</th><th class="num">Monto</th></tr></thead><tbody id="chq-tbody"></tbody></table></div>
       </div>
     </div>
 
@@ -89,9 +122,11 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="sb-api.js"></script>
-<script src="auth-guard.js"></script>
-<script src="nav.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>window.APP_BUILD='2026-10-15.3';</script>
+<script src="sb-api.js?v=2026-10-15.3"></script>
+<script src="auth-guard.js?v=2026-10-15.3"></script>
+<script src="nav.js?v=2026-10-15.3"></script>
 <script>
 var sb=window.sbClient;
 var CLIENTES=[], PROVS=[], SUCS=[], SUCID={}, FORMAS=['Efectivo','Tarjeta','Virtual'], sucActual='';
@@ -114,14 +149,16 @@ async function iniciar(){
   var rs=await window.sf('getSucursales'); var suc=(rs.ok?(rs.sucursales||[]):[]); SUCS=suc.map(function(s){return s.nombre;}); SUCID={}; suc.forEach(function(s){ SUCID[s.id]=s.nombre; });
   var rcfg=await window.sf('getConfigGeneral'); if(rcfg.ok && rcfg.config && rcfg.config.formas_pago){ try{ var a=JSON.parse(rcfg.config.formas_pago); if(a.length) FORMAS=a.map(function(f){return f.nombre||f;}); }catch(e){} }
   poblarSuc();
-  document.getElementById('pv-fp').innerHTML=FORMAS.filter(function(f){ return !/cuenta\s*corriente/i.test(f); }).map(function(f){return '<option>'+f+'</option>';}).join('');
+  var formasPago=FORMAS.filter(function(f){ return !/cuenta\s*corriente/i.test(f); });
+  if(!formasPago.some(function(f){ return /cheque/i.test(f); })) formasPago.push('Cheque');
+  document.getElementById('pv-fp').innerHTML=formasPago.map(function(f){return '<option>'+f+'</option>';}).join('');
   toggleCaja('pv-fp','pv-caja-wrap');
   await cargarCuentasProv();
 }
 function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; }
 function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarCuentasProv(); }
 async function cargarCuentasProv(){ cerrarPagoProv(); await renderDeudas(); }
-function switchTab(name){ document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); }); ['prov','inter'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); }); if(name==='inter') cargarInter(); if(name==='prov') cargarCuentasProv(); }
+function switchTab(name){ document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); }); ['prov','inter','cheques'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); }); if(name==='inter') cargarInter(); if(name==='prov') cargarCuentasProv(); if(name==='cheques') cargarCheques(); }
 async function cargarInter(){
   var r=await window.sf('getCuentasInternas'); var movs=(r.ok?r.movimientos:[])||[];
   // neto por par: origen le debe a destino
@@ -160,7 +197,7 @@ function pintarDeudas(){
     var etq=d.saldo>0.5?('<span style="color:var(--bad);font-weight:700;">Debe '+fmt$(d.saldo)+'</span>'):(d.saldo<-0.5?('<span style="color:var(--good);font-weight:700;">A favor '+fmt$(-d.saldo)+'</span>'):'<span class="muted">al día</span>');
     return '<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">'+
-        '<div style="font-weight:600;">'+d.proveedor+'</div>'+
+        '<div style="font-weight:600;">'+d.proveedor+(d.junta?(' <span style="font-size:.7rem;font-weight:700;color:#2f6fd6;background:#e7f0fe;padding:1px 7px;border-radius:10px;" title="Saldo compartido entre estos locales">🔗 junta: '+(d.localesJunta||[]).join(' + ')+'</span>'):'')+'</div>'+
         '<div style="display:flex;align-items:center;gap:8px;">'+etq+
           '<button class="btn-sec" onclick="toggleHist('+d.proveedorId+')">Historial</button>'+
           '<button class="btn" style="padding:5px 11px;font-size:.78rem;" onclick="pagarProv('+d.proveedorId+',\''+String(d.proveedor).replace(/\x27/g,"\\x27")+'\')">💰 Pagar</button>'+
@@ -174,26 +211,134 @@ async function toggleHist(provId){
   var el=document.getElementById('hist-'+provId); if(!el) return;
   if(!el.hidden){ el.hidden=true; return; }
   el.hidden=false; el.innerHTML='<p class="muted">Cargando…</p>';
-  var r=await window.sf('getMovProveedor&id='+provId+'&sucursal='+encodeURIComponent(sucActual)); var movs=(r.ok?r.movimientos:[])||[];
-  el.innerHTML='<div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th><th>Detalle</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th></tr></thead><tbody>'+
+  var d=DEUDAS.find(function(x){return x.proveedorId===provId;});
+  var alcance=(d&&d.junta&&(d.scope||[]).length)?('&sucursales='+encodeURIComponent(d.scope.join(','))):('&sucursal='+encodeURIComponent(sucActual));
+  var r=await window.sf('getMovProveedor&id='+provId+alcance); var movs=(r.ok?r.movimientos:[])||[];
+  var esJunta=!!(d&&d.junta);
+  el.innerHTML='<div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th>'+(esJunta?'<th>Local</th>':'')+'<th>Detalle</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th></tr></thead><tbody>'+
     (movs.slice().reverse().map(function(m){ var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; var esPago=/pago/i.test(m.tipo);
-      return '<tr><td>'+f+'</td><td>'+(m.descripcion||'')+'</td><td>'+(m.comprobante||'')+'</td><td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td></tr>';
-    }).join('') || '<tr><td colspan="6" class="muted">Sin movimientos.</td></tr>')+'</tbody></table></div>';
+      return '<tr><td>'+f+'</td>'+(esJunta?('<td>'+(m.local||'')+'</td>'):'')+'<td>'+(m.descripcion||'')+'</td><td>'+(m.comprobante||'')+'</td><td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td></tr>';
+    }).join('') || '<tr><td colspan="'+(esJunta?7:6)+'" class="muted">Sin movimientos.</td></tr>')+'</tbody></table></div>';
 }
 function pagarProv(provId, prov){
   pvProvSel=provId;
   document.getElementById('pv-pago-tit').textContent='Registrar movimiento — '+prov;
   document.getElementById('pv-pago-card').hidden=false;
   document.getElementById('pv-monto').value='';
+  document.getElementById('pv-cheques-list').innerHTML='';
+  onFormaPagoProv();
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
 }
 function cerrarPagoProv(){ pvProvSel=null; var c=document.getElementById('pv-pago-card'); if(c) c.hidden=true; }
+// ---- CHEQUES (en la orden de pago) ----
+function esFormaCheque(){ return /cheque/i.test((document.getElementById('pv-fp')||{}).value||''); }
+function onFormaPagoProv(){
+  toggleCaja('pv-fp','pv-caja-wrap');
+  var chq=esFormaCheque(); var w=document.getElementById('pv-cheques-wrap'); if(w) w.hidden=!chq;
+  var mo=document.getElementById('pv-monto'); if(mo){ mo.readOnly=chq; mo.style.background=chq?'#f2f4f8':''; }
+  if(chq){ var list=document.getElementById('pv-cheques-list'); if(list && !list.children.length) addChequeRow(); sumCheques(); }
+}
+function addChequeRow(){
+  var list=document.getElementById('pv-cheques-list'); var d=document.createElement('div'); d.className='chq-row';
+  d.style.cssText='display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px;';
+  var st='padding:7px 9px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;';
+  d.innerHTML='<input class="chq-banco" placeholder="Banco *" style="flex:1;min-width:120px;'+st+'">'+
+    '<input class="chq-num" placeholder="N° cheque" style="flex:1;min-width:90px;'+st+'">'+
+    '<input class="chq-fecha" type="date" title="Fecha de pago" style="'+st+'">'+
+    '<input class="chq-monto" type="number" step="0.01" placeholder="Monto *" oninput="sumCheques()" style="width:120px;'+st+'">'+
+    '<button class="x-btn" type="button" title="Quitar" onclick="this.closest(\'.chq-row\').remove();sumCheques();">✕</button>';
+  list.appendChild(d);
+}
+function sumCheques(){
+  var s=0; document.querySelectorAll('#pv-cheques-list .chq-monto').forEach(function(i){ s+=Number(i.value)||0; });
+  if(esFormaCheque()){ var mo=document.getElementById('pv-monto'); if(mo) mo.value=s?s.toFixed(2):''; }
+}
+function readCheques(){
+  var arr=[], err=null;
+  document.querySelectorAll('#pv-cheques-list .chq-row').forEach(function(r){
+    var banco=(r.querySelector('.chq-banco').value||'').trim();
+    var num=(r.querySelector('.chq-num').value||'').trim();
+    var fecha=r.querySelector('.chq-fecha').value||'';
+    var monto=Number(r.querySelector('.chq-monto').value)||0;
+    if(!banco && !fecha && !monto && !num) return; // fila vacía: ignorar
+    if(!banco) err='Falta el banco en un cheque';
+    else if(!fecha) err='Falta la fecha de pago en un cheque';
+    else if(!(monto>0)) err='Falta el monto en un cheque';
+    arr.push({banco:banco, numero:num, fecha:fecha, monto:monto});
+  });
+  return {cheques:arr, error:err};
+}
 async function movProv(){
-  var id=pvProvSel; var monto=document.getElementById('pv-monto').value;
+  var id=pvProvSel; var tipo=document.getElementById('pv-tipo').value;
+  var cheques=null;
+  if(esFormaCheque()){
+    if(tipo!=='pago'){ toast('El cheque es para un pago, no un cargo','error'); return; }
+    sumCheques(); var rc=readCheques();
+    if(rc.error){ toast(rc.error,'error'); return; }
+    if(!rc.cheques.length){ toast('Cargá al menos un cheque','error'); return; }
+    cheques=rc.cheques;
+  }
+  var monto=document.getElementById('pv-monto').value;
   if(!id){ toast('Elegí un proveedor (botón Pagar)','error'); return; } if(!(Number(monto)>0)){ toast('Poné un monto','error'); return; }
-  var r=await window.sp('registrarPagoProveedor',{proveedorId:id, sucursal:sucActual, tipo:document.getElementById('pv-tipo').value, monto:monto, formaPago:efectivaForma('pv-fp','pv-caja'), descripcion:(document.getElementById('pv-tipo').value==='cargo'?'Cargo manual':'Pago a proveedor')});
+  var r=await window.sp('registrarPagoProveedor',{proveedorId:id, sucursal:sucActual, tipo:tipo, monto:monto, formaPago:efectivaForma('pv-fp','pv-caja'), descripcion:(tipo==='cargo'?'Cargo manual':'Pago a proveedor'), cheques:cheques});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  document.getElementById('pv-monto').value=''; toast('Registrado'); cerrarPagoProv(); renderDeudas();
+  if(r.warn){ toast(r.warn,'error'); }
+  document.getElementById('pv-monto').value=''; document.getElementById('pv-cheques-list').innerHTML=''; toast('Registrado'); cerrarPagoProv(); renderDeudas();
+}
+// ---- LISTADO DE CHEQUES EMITIDOS ----
+var CHEQUES=[];
+async function cargarCheques(){
+  var alc=document.getElementById('chq-alcance').value;
+  var p={ desde:document.getElementById('chq-desde').value||'', hasta:document.getElementById('chq-hasta').value||'' };
+  if(alc!=='todos') p.sucursal=sucActual;
+  var qs=Object.keys(p).filter(function(k){return p[k];}).map(function(k){return k+'='+encodeURIComponent(p[k]);}).join('&');
+  var r=await window.sf('getCheques'+(qs?'&'+qs:'')); CHEQUES=(r.ok?r.cheques:[])||[];
+  if(r.sinTabla){ document.getElementById('chq-tbody').innerHTML='<tr><td colspan="7" class="muted">Falta correr <b>cheques_schema.sql</b> en Supabase para usar los cheques.</td></tr>'; document.getElementById('chq-flujo-tbody').innerHTML='<tr><td colspan="4" class="muted">—</td></tr>'; document.getElementById('chq-total').textContent=''; return; }
+  pintarCheques();
+}
+function fechaCorta(iso){ return iso?new Date(iso+'T00:00:00').toLocaleDateString('es-AR'):''; }
+function chequesFiltrados(){
+  var q=(document.getElementById('chq-buscar').value||'').trim().toLowerCase();
+  return CHEQUES.filter(function(c){ return !q || (c.banco+' '+c.proveedor+' '+c.numero).toLowerCase().indexOf(q)>=0; });
+}
+// Agrupa por fecha de pago -> {fecha, n, total} ordenado, con acumulado
+function flujoPorFecha(arr){
+  var by={}; arr.forEach(function(c){ var k=c.fecha||'(sin fecha)'; var o=by[k]=by[k]||{fecha:k,n:0,total:0}; o.n++; o.total+=(c.monto||0); });
+  var filas=Object.keys(by).sort().map(function(k){ return by[k]; });
+  var acum=0; filas.forEach(function(f){ acum+=f.total; f.acum=acum; });
+  return filas;
+}
+function pintarCheques(){
+  var arr=chequesFiltrados();
+  var total=arr.reduce(function(s,c){ return s+(c.monto||0); },0);
+  document.getElementById('chq-total').innerHTML='Total: <b>'+fmt$(total)+'</b> · '+arr.length+' cheque(s)';
+  // flujo por fecha
+  var fl=flujoPorFecha(arr);
+  document.getElementById('chq-flujo-tbody').innerHTML = fl.length ? fl.map(function(f){
+    return '<tr><td>'+(f.fecha==='(sin fecha)'?'(sin fecha)':fechaCorta(f.fecha))+'</td><td class="num">'+f.n+'</td><td class="num">'+fmt$(f.total)+'</td><td class="num"><b>'+fmt$(f.acum)+'</b></td></tr>';
+  }).join('') : '<tr><td colspan="4" class="muted">Sin cheques para el filtro elegido.</td></tr>';
+  // detalle
+  document.getElementById('chq-tbody').innerHTML = arr.length ? arr.map(function(c){
+    return '<tr><td>'+fechaCorta(c.fecha)+'</td><td>'+(c.banco||'')+'</td><td>'+(c.numero||'')+'</td><td>'+(c.proveedor||'')+'</td><td>'+(c.local||'')+'</td><td>'+(c.estado||'')+'</td><td class="num">'+fmt$(c.monto)+'</td></tr>';
+  }).join('') : '<tr><td colspan="7" class="muted">No hay cheques para el filtro elegido.</td></tr>';
+}
+function exportarCheques(){
+  var arr=chequesFiltrados();
+  if(!arr.length){ toast('No hay cheques para exportar','error'); return; }
+  if(typeof XLSX==='undefined'){ toast('No se pudo cargar el exportador','error'); return; }
+  // Hoja 1: detalle
+  var det=[['Fecha pago','Banco','N° cheque','Proveedor','Local','Estado','Monto']];
+  arr.slice().sort(function(a,b){ return String(a.fecha||'').localeCompare(String(b.fecha||'')); }).forEach(function(c){
+    det.push([fechaCorta(c.fecha), c.banco||'', c.numero||'', c.proveedor||'', c.local||'', c.estado||'', Math.round(c.monto||0)]);
+  });
+  // Hoja 2: flujo por fecha
+  var fl=flujoPorFecha(arr); var flu=[['Fecha de pago','Cheques','A pagar ese día','Acumulado']];
+  fl.forEach(function(f){ flu.push([f.fecha==='(sin fecha)'?'(sin fecha)':fechaCorta(f.fecha), f.n, Math.round(f.total), Math.round(f.acum)]); });
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(flu), 'Flujo por fecha');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(det), 'Cheques');
+  var hoy=new Date().toLocaleDateString('en-CA');
+  XLSX.writeFile(wb, 'cheques_'+hoy+'.xlsx');
 }
 </script>
 </body>

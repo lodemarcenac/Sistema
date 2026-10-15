@@ -145,36 +145,34 @@
     }
   });
 
-  // --- Auto-actualización: detecta versión nueva publicada y ofrece recargar ---
+  // --- Auto-actualización: detecta versión nueva publicada y recarga SIN caché ---
+  // La versión de ESTA página va embebida en el HTML como window.APP_BUILD (se
+  // cachea junto al HTML). Se compara contra app/version.json del server (traída
+  // siempre fresca, sin caché). Si difieren, el HTML que está corriendo quedó viejo.
+  // Al tocar "Actualizar" recargamos el documento con un parámetro único: eso baja
+  // el HTML fresco, y como el HTML nuevo referencia los .js con ?v=<versión nueva>,
+  // también bajan frescos. Un solo clic alcanza (ya no hace falta Ctrl+F5).
   (function(){
-    // Versión de ESTE código (debe coincidir con app/version.json en cada deploy).
-    // Se compara contra la version.json del servidor: si difieren, el código que
-    // está corriendo quedó viejo (aunque el navegador haya cacheado los archivos).
-    var BUILD='2026-10-14.1';
+    var BUILD=(typeof window!=='undefined' && window.APP_BUILD) ? String(window.APP_BUILD) : null;
     function check(){
       fetch('version.json?t='+Date.now(), {cache:'no-store'})
         .then(function(r){ return r.ok?r.json():null; })
-        .then(function(j){ if(!j) return; var v=j.version||j.v; if(!v) return;
-          if(v===BUILD){ try{ sessionStorage.removeItem('upd-tried'); }catch(e){} return; }
+        .then(function(j){ if(!j) return; var v=j.version||j.v; if(!v||!BUILD) return;
+          if(v===BUILD){ var old=document.getElementById('upd-banner'); if(old) old.remove(); return; }
           banner(v); })
         .catch(function(){});
     }
     function banner(v){
       if(document.getElementById('upd-banner')) return;
-      // ¿Ya intentamos actualizar a ESTA versión y el navegador sigue con el código viejo?
-      // (típico: archivos cacheados). En ese caso no ofrecemos "Actualizar" de nuevo
-      // —eso genera el bucle— sino que pedimos Ctrl+F5.
-      var tried=null; try{ tried=sessionStorage.getItem('upd-tried'); }catch(e){}
       var b=document.createElement('div'); b.id='upd-banner';
       b.style.cssText='position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#0e2a5c;color:#fff;padding:10px 16px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.35);z-index:9998;font-family:Inter,system-ui,Arial,sans-serif;font-size:.85rem;display:flex;align-items:center;gap:12px;max-width:92vw;';
-      if(tried===v){
-        b.innerHTML='🔄 Para terminar de actualizar, apretá <b>Ctrl + F5</b> (o cerrá y volvé a abrir el navegador).';
-      } else {
-        b.innerHTML='🔄 Hay una versión nueva del sistema. <button id="upd-btn" style="background:#fff;color:#0e2a5c;border:none;padding:6px 12px;border-radius:7px;font-weight:700;cursor:pointer;font-family:inherit;">Actualizar</button>';
-      }
+      b.innerHTML='🔄 Hay una versión nueva del sistema. <button id="upd-btn" style="background:#fff;color:#0e2a5c;border:none;padding:6px 12px;border-radius:7px;font-weight:700;cursor:pointer;font-family:inherit;">Actualizar</button>';
       document.body.appendChild(b);
       var btn=document.getElementById('upd-btn');
-      if(btn) btn.addEventListener('click', function(){ try{ sessionStorage.setItem('upd-tried', v); }catch(e){} location.reload(true); });
+      if(btn) btn.addEventListener('click', function(){
+        btn.disabled=true; btn.textContent='Actualizando…';
+        location.replace(location.pathname + '?u=' + Date.now());
+      });
     }
     document.addEventListener('DOMContentLoaded', function(){
       check();
