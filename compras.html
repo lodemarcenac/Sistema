@@ -24,6 +24,10 @@
   .ac-pop div{padding:8px 12px;cursor:pointer;font-size:var(--fs-sm);border-bottom:1px solid var(--line-2);}
   .ac-pop div:hover{background:var(--brand-soft);}
   .locs label{display:inline-flex;align-items:center;gap:5px;margin-right:14px;font-size:var(--fs-sm);}
+  /* Listados de compras y gastos: ~10% más compactos para que entren en una página */
+  table.data.compact{ font-size:calc(var(--fs-sm)*.9); }
+  table.data.compact th, table.data.compact td{ padding:5px 9px; }
+  table.data.compact th{ font-size:calc(var(--fs-xs)*.9); }
 </style>
 </head>
 <body>
@@ -115,7 +119,7 @@
           <div><label style="display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;">Hasta</label><input id="cc-hasta" type="date" onchange="cargarConfirmadas()" style="padding:7px 9px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></div>
           <div style="flex:1;min-width:170px;"><label style="display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;">Buscar</label><input id="cc-buscar" placeholder="Proveedor o comprobante…" oninput="renderConfirmadas()" style="width:100%;padding:7px 9px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></div>
         </div>
-        <div class="tblwrap"><table class="data"><thead><tr><th></th><th>Proveedor</th><th>Comprobante</th><th class="num">Total</th><th>Fecha</th><th></th></tr></thead><tbody id="conf-tbody"></tbody></table></div>
+        <div class="tblwrap"><table class="data compact"><thead><tr><th></th><th>Fecha</th><th>Proveedor</th><th class="num">Monto</th><th>Comprobante</th><th></th></tr></thead><tbody id="conf-tbody"></tbody></table></div>
       </div>
     </div>
 
@@ -146,7 +150,7 @@
           <div><label style="display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;">Hasta</label><input id="g-hasta" type="date" onchange="renderGastos()" style="padding:7px 9px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></div>
           <div style="flex:1;min-width:180px;"><label style="display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;">Buscar</label><input id="g-buscar" placeholder="Detalle, categoría, proveedor…" oninput="renderGastos()" style="width:100%;padding:7px 9px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></div>
         </div>
-        <div class="tblwrap"><table class="data"><thead><tr><th></th><th>Detalle</th><th>Categoría</th><th>Local</th><th>Proveedor</th><th class="num">Monto</th><th>Pago</th><th>Fecha</th><th></th></tr></thead><tbody id="g-tbody"></tbody></table></div>
+        <div class="tblwrap"><table class="data compact"><thead><tr><th></th><th>Fecha</th><th>Categoría</th><th>Detalle</th><th>Local</th><th>Proveedor</th><th class="num">Monto</th><th>Pago</th><th></th></tr></thead><tbody id="g-tbody"></tbody></table></div>
       </div>
     </div>
 
@@ -191,10 +195,10 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-10-15.3';</script>
-<script src="sb-api.js?v=2026-10-15.3"></script>
-<script src="auth-guard.js?v=2026-10-15.3"></script>
-<script src="nav.js?v=2026-10-15.3"></script>
+<script>window.APP_BUILD='2026-10-15.6';</script>
+<script src="sb-api.js?v=2026-10-15.6"></script>
+<script src="auth-guard.js?v=2026-10-15.6"></script>
+<script src="nav.js?v=2026-10-15.6"></script>
 <script>
 var sb=window.sbClient;
 var PRODS={}, SUCS=[], PROVS=[], CG=[], FORMAS=['Efectivo','Tarjeta','Virtual','Cuenta Corriente'];
@@ -380,12 +384,16 @@ async function cargarConfirmadas(){
 function renderConfirmadas(){
   var q=(document.getElementById('cc-buscar').value||'').trim().toLowerCase();
   var arr=CONFIRMADAS.filter(function(c){ return !q || (c.proveedor+' '+c.comprobante).toLowerCase().indexOf(q)>=0; });
-  arr.sort(function(a,b){ return String(a.proveedor||'').localeCompare(String(b.proveedor||'')); });
+  arr.sort(function(a,b){
+    var fa=String(a.fecha||''), fb=String(b.fecha||'');
+    if(fa!==fb) return fa<fb?1:-1;                 // fecha: más nuevo primero
+    return String(a.proveedor||'').localeCompare(String(b.proveedor||''));
+  });
   var anul=puedeAnular();
   document.getElementById('conf-tbody').innerHTML=arr.map(function(c){
     var f=c.fecha?new Date(c.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
     var prods=(c.items||[]).map(function(d){ return d.nombre+' — '+d.cantidad+' — '+fmt$(d.costo); }).join('<br>')||'(sin productos)';
-    return '<tr style="cursor:pointer;" onclick="toggleConf('+c.id+')"><td style="width:18px;color:var(--muted);">▸</td><td>'+(c.proveedor||'')+'</td><td>'+(c.comprobante||'')+'</td><td class="num">'+fmt$(c.total)+'</td><td>'+f+'</td>'+
+    return '<tr style="cursor:pointer;" onclick="toggleConf('+c.id+')"><td style="width:18px;color:var(--muted);">▸</td><td>'+f+'</td><td>'+(c.proveedor||'')+'</td><td class="num">'+fmt$(c.total)+'</td><td>'+(c.comprobante||'')+'</td>'+
       '<td style="white-space:nowrap;" onclick="event.stopPropagation();">'+(anul?('<button class="mini-btn" onclick="editarConfirmada('+c.id+')">Editar</button><button class="x-btn" title="Anular" onclick="anularConfirmada('+c.id+')">✕</button>'):'<span class="muted" style="font-size:.72rem;">solo lectura</span>')+'</td></tr>'+
       '<tr id="cf-'+c.id+'" hidden><td></td><td colspan="5" style="background:var(--surface-2);font-size:var(--fs-sm);color:var(--ink-soft);">'+prods+'</td></tr>';
   }).join('') || '<tr><td colspan="6" class="muted">Sin compras confirmadas en el período.</td></tr>';
@@ -422,11 +430,15 @@ function renderGastos(){
     if(hasta && f>hasta) return false;
     return true;
   });
-  arr.sort(function(a,b){ return String(a.descripcion||'').localeCompare(String(b.descripcion||'')); });
+  arr.sort(function(a,b){
+    var fa=String(a.fecha||''), fb=String(b.fecha||'');
+    if(fa!==fb) return fa<fb?1:-1;                 // fecha: más nuevo primero
+    return String(a.proveedor||'').localeCompare(String(b.proveedor||''));
+  });
   document.getElementById('g-tbody').innerHTML=arr.map(function(g){
     var f=arDisp(g.fecha);
-    return '<tr style="cursor:pointer;" onclick="toggleGasto('+g.id+')"><td style="width:18px;color:var(--muted);">▸</td><td>'+(g.descripcion||'(sin detalle)')+'</td><td>'+(g.categoria||'')+(g.grupo?' <span class="muted">('+g.grupo+')</span>':'')+'</td><td>'+(SUCID[g.destinatarioId]||'')+'</td><td>'+(g.proveedor||'')+'</td>'+
-      '<td class="num">'+fmt$(g.monto)+'</td><td>'+(g.formaPago||'')+'</td><td>'+f+'</td>'+
+    return '<tr style="cursor:pointer;" onclick="toggleGasto('+g.id+')"><td style="width:18px;color:var(--muted);">▸</td><td>'+f+'</td><td>'+(g.categoria||'')+(g.grupo?' <span class="muted">('+g.grupo+')</span>':'')+'</td><td>'+(g.descripcion||'(sin detalle)')+'</td><td>'+(SUCID[g.destinatarioId]||'')+'</td><td>'+(g.proveedor||'')+'</td>'+
+      '<td class="num">'+fmt$(g.monto)+'</td><td>'+(g.formaPago||'')+'</td>'+
       '<td style="white-space:nowrap;" onclick="event.stopPropagation();"><button class="mini-btn" onclick="editarGasto('+g.id+')">Editar</button><button class="x-btn" title="Eliminar" onclick="borrarGasto('+g.id+')">✕</button></td></tr>'+
       '<tr id="gx-'+g.id+'" hidden><td></td><td colspan="8" style="background:var(--surface-2);font-size:var(--fs-sm);color:var(--ink-soft);">Detalle: '+(g.descripcion||'-')+' · Comprobante: '+(g.comprobante||'-')+' · Forma de pago: '+(g.formaPago||'-')+' · Categoría: '+(g.categoria||'-')+(g.grupo?(' / '+g.grupo):'')+' · Imputado a: '+(SUCID[g.destinatarioId]||'-')+' · Monto: '+fmt$(g.monto)+'</td></tr>';
   }).join('') || '<tr><td colspan="9" class="muted">Sin gastos en el período.</td></tr>';
@@ -556,15 +568,17 @@ async function registrarElabUI(){
 }
 
 // ---- PROVEEDORES ----
+function esAdminProv(){ return !(window.PERM && window.PERM.cargado && !window.PERM.esAdmin && (window.PERM.locales||[]).length); }
 function renderProv(){
-  // Solo los proveedores asignados al local actual (no todos los cargados).
-  var ids={}; (PROVS_LOCAL||[]).forEach(function(p){ ids[p.id]=true; });
-  var lista=PROVS.filter(function(p){ return ids[p.id]; });
+  // Admin: TODOS los proveedores (asignados o no). No-admin: solo los asignados a sus locales.
+  var lista;
+  if(esAdminProv()){ lista=PROVS.slice(); }
+  else { var ids={}; (PROVS_LOCAL||[]).forEach(function(p){ ids[p.id]=true; }); lista=PROVS.filter(function(p){ return ids[p.id]; }); }
   document.getElementById('p-tbody').innerHTML=lista.map(function(p,i){
-    return '<tr><td><input value="'+(p.nombre||'').replace(/"/g,'&quot;')+'" onchange="editarProv('+p.id+',\'nombre\',this.value)" style="border:none;background:none;width:100%;font-family:inherit;"></td>'+
-      '<td><input value="'+(p.cuit||'').replace(/"/g,'&quot;')+'" onchange="editarProv('+p.id+',\'cuit\',this.value)" style="border:none;background:none;width:100%;font-family:inherit;"></td>'+
-      '<td><input value="'+(p.telefono||'').replace(/"/g,'&quot;')+'" onchange="editarProv('+p.id+',\'telefono\',this.value)" style="border:none;background:none;width:100%;font-family:inherit;"></td>'+
-      '<td><input value="'+(p.email||'').replace(/"/g,'&quot;')+'" onchange="editarProv('+p.id+',\'email\',this.value)" style="border:none;background:none;width:100%;font-family:inherit;"></td>'+
+    return '<tr><td><input class="cell txt" value="'+(p.nombre||'').replace(/"/g,'&quot;')+'" onchange="editarProv('+p.id+',\'nombre\',this.value)"></td>'+
+      '<td><input class="cell txt" value="'+(p.cuit||'').replace(/"/g,'&quot;')+'" placeholder="—" onchange="editarProv('+p.id+',\'cuit\',this.value)"></td>'+
+      '<td><input class="cell txt" value="'+(p.telefono||'').replace(/"/g,'&quot;')+'" placeholder="—" onchange="editarProv('+p.id+',\'telefono\',this.value)"></td>'+
+      '<td><input class="cell txt" value="'+(p.email||'').replace(/"/g,'&quot;')+'" placeholder="—" onchange="editarProv('+p.id+',\'email\',this.value)"></td>'+
       '<td><button class="x-btn" title="Eliminar" onclick="borrarProv('+p.id+',\''+String(p.nombre).replace(/'/g,"\\'")+'\')">✕</button></td></tr>';
   }).join('') || '<tr><td colspan="5" class="muted">Sin proveedores.</td></tr>';
 }
