@@ -57,14 +57,18 @@
       <div class="card" style="margin-bottom:14px;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
           <h3 style="margin:0;">Deuda con proveedores</h3>
-          <span class="muted" id="pv-total"></span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <select id="pv-alcance" onchange="renderDeudas()" hidden style="padding:6px 9px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;font-size:var(--fs-sm);"><option value="local">Este local</option><option value="todos">Todos los locales</option></select>
+            <span class="muted" id="pv-total"></span>
+          </div>
         </div>
-        <p class="resumen" style="margin:8px 0 10px;">Proveedores de este local, ordenados de mayor a menor deuda. El saldo = compras/gastos a cuenta corriente (cargos) menos pagos.</p>
+        <p class="resumen" style="margin:8px 0 10px;" id="pv-sub">Proveedores de este local, ordenados de mayor a menor deuda. El saldo = compras/gastos a cuenta corriente (cargos) menos pagos.</p>
         <input id="pv-buscar" placeholder="Buscar proveedor por nombre…" oninput="pintarDeudas()" style="width:100%;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;margin-bottom:10px;">
         <div id="pv-lista"><p class="muted">Cargando…</p></div>
       </div>
       <div class="card" id="pv-pago-card" hidden style="margin-bottom:14px;">
         <h3 id="pv-pago-tit" style="font-size:var(--fs-lg);">Registrar movimiento</h3>
+        <div id="pv-pago-local" style="display:flex;align-items:center;gap:8px;background:var(--brand-soft);border:1px solid #bcd0f0;color:var(--brand-ink);border-radius:var(--radius-sm);padding:7px 11px;margin:6px 0 12px;font-size:var(--fs-sm);font-weight:600;">💰 Registrando en el local <b id="pv-pago-local-nom">—</b></div>
         <div class="abm-nueva">
           <div><label>Monto $</label><input id="pv-monto" type="number" step="0.01"></div>
           <div><label>Forma</label><select id="pv-fp" onchange="onFormaPagoProv()"></select></div>
@@ -123,10 +127,10 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>window.APP_BUILD='2026-10-15.6';</script>
-<script src="sb-api.js?v=2026-10-15.6"></script>
-<script src="auth-guard.js?v=2026-10-15.6"></script>
-<script src="nav.js?v=2026-10-15.6"></script>
+<script>window.APP_BUILD='2026-10-16.1';</script>
+<script src="sb-api.js?v=2026-10-16.1"></script>
+<script src="auth-guard.js?v=2026-10-16.1"></script>
+<script src="nav.js?v=2026-10-16.1"></script>
 <script>
 var sb=window.sbClient;
 var CLIENTES=[], PROVS=[], SUCS=[], SUCID={}, FORMAS=['Efectivo','Tarjeta','Virtual'], sucActual='';
@@ -153,8 +157,12 @@ async function iniciar(){
   if(!formasPago.some(function(f){ return /cheque/i.test(f); })) formasPago.push('Cheque');
   document.getElementById('pv-fp').innerHTML=formasPago.map(function(f){return '<option>'+f+'</option>';}).join('');
   toggleCaja('pv-fp','pv-caja-wrap');
+  aplicarVistaAdmin();
   await cargarCuentasProv();
 }
+// El selector "Todos los locales" (vista consolidada) es solo para el administrador.
+function aplicarVistaAdmin(){ var al=document.getElementById('pv-alcance'); if(al) al.hidden=!esAdminVista(); }
+document.addEventListener('perm-listo', function(){ aplicarVistaAdmin(); renderDeudas(); });
 function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; }
 function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarCuentasProv(); }
 async function cargarCuentasProv(){ cerrarPagoProv(); await renderDeudas(); }
@@ -180,28 +188,36 @@ async function saldarInter(deudorId, acreedorId, monto){
 function pintarSaldo(el, s, etiquetaDebe, etiquetaFavor){ if(s>0.5){ el.className='saldo debe'; el.textContent=fmt$(s); } else if(s<-0.5){ el.className='saldo favor'; el.textContent=fmt$(-s)+' a favor'; } else { el.className='saldo cero'; el.textContent='$0'; } }
 
 // ---- PROVEEDORES (listado consolidado de deudas) ----
-var DEUDAS=[], pvProvSel=null;
+var DEUDAS=[], pvProvSel=null, vistaTodos=false;
+function esAdminVista(){ return !!(window.PERM && window.PERM.cargado && window.PERM.esAdmin); }
 async function renderDeudas(){
-  var r=await window.sf('getDeudasLocal&sucursal='+encodeURIComponent(sucActual)); DEUDAS=(r.ok?r.deudas:[])||[];
+  var al=document.getElementById('pv-alcance');
+  vistaTodos = esAdminVista() && al && al.value==='todos';
+  var r = vistaTodos ? await window.sf('getDeudasTodas') : await window.sf('getDeudasLocal&sucursal='+encodeURIComponent(sucActual));
+  DEUDAS=(r.ok?r.deudas:[])||[];
   DEUDAS.sort(function(a,b){ return b.saldo-a.saldo; });
+  var sub=document.getElementById('pv-sub');
+  if(sub) sub.textContent = vistaTodos
+    ? 'Deuda de TODOS los locales, un renglón por proveedor con el saldo total. Para registrar un pago, elegí un local arriba.'
+    : 'Proveedores de este local, ordenados de mayor a menor deuda. El saldo = compras/gastos a cuenta corriente (cargos) menos pagos.';
   pintarDeudas();
 }
 function pintarDeudas(){
   var cont=document.getElementById('pv-lista'), tot=document.getElementById('pv-total');
   var q=(document.getElementById('pv-buscar').value||'').trim().toLowerCase();
   var totalDeuda=DEUDAS.reduce(function(s,d){ return s+(d.saldo>0?d.saldo:0); },0);
-  tot.innerHTML='Deuda total: <b style="color:var(--bad);">'+fmt$(totalDeuda)+'</b>';
+  tot.innerHTML='Deuda total'+(vistaTodos?' (todos los locales)':'')+': <b style="color:var(--bad);">'+fmt$(totalDeuda)+'</b>';
   var arr=DEUDAS.filter(function(d){ return !q || (d.proveedor||'').toLowerCase().indexOf(q)>=0; });
-  if(!arr.length){ cont.innerHTML='<p class="muted">'+(DEUDAS.length?'Sin resultados para la búsqueda.':'Este local no tiene proveedores. Asignalos en Configuración → Proveedores.')+'</p>'; return; }
+  if(!arr.length){ cont.innerHTML='<p class="muted">'+(DEUDAS.length?'Sin resultados para la búsqueda.':(vistaTodos?'No hay deudas en ningún local.':'Este local no tiene proveedores. Asignalos en Configuración → Proveedores.'))+'</p>'; return; }
   cont.innerHTML=arr.map(function(d){
     var etq=d.saldo>0.5?('<span style="color:var(--bad);font-weight:700;">Debe '+fmt$(d.saldo)+'</span>'):(d.saldo<-0.5?('<span style="color:var(--good);font-weight:700;">A favor '+fmt$(-d.saldo)+'</span>'):'<span class="muted">al día</span>');
+    var compartido=(d.junta?(' <span class="badge-junta" title="Saldo compartido entre estos locales">🔗 Compartido: '+(d.localesJunta||[]).join(' + ')+'</span>'):(vistaTodos&&(d.scope||[]).length?(' <span class="muted" style="font-size:var(--fs-xs);">('+(d.scope||[]).join(' + ')+')</span>'):''));
+    var acciones='<button class="btn-sec" onclick="toggleHist('+d.proveedorId+')">Historial</button>'+
+      (vistaTodos?'':('<button class="btn" style="padding:5px 11px;font-size:.78rem;" onclick="pagarProv('+d.proveedorId+',\''+String(d.proveedor).replace(/\x27/g,"\\x27")+'\')">💰 Pagar</button>'));
     return '<div class="row-item">'+
       '<div class="row-head">'+
-        '<div style="font-weight:600;">'+d.proveedor+(d.junta?(' <span class="badge-junta" title="Saldo compartido entre estos locales">🔗 junta: '+(d.localesJunta||[]).join(' + ')+'</span>'):'')+'</div>'+
-        '<div style="display:flex;align-items:center;gap:8px;">'+etq+
-          '<button class="btn-sec" onclick="toggleHist('+d.proveedorId+')">Historial</button>'+
-          '<button class="btn" style="padding:5px 11px;font-size:.78rem;" onclick="pagarProv('+d.proveedorId+',\''+String(d.proveedor).replace(/\x27/g,"\\x27")+'\')">💰 Pagar</button>'+
-        '</div>'+
+        '<div style="font-weight:600;">'+d.proveedor+compartido+'</div>'+
+        '<div style="display:flex;align-items:center;gap:8px;">'+etq+acciones+'</div>'+
       '</div>'+
       '<div id="hist-'+d.proveedorId+'" hidden class="row-sub"></div>'+
     '</div>';
@@ -212,7 +228,7 @@ async function toggleHist(provId){
   if(!el.hidden){ el.hidden=true; return; }
   el.hidden=false; el.innerHTML='<p class="muted">Cargando…</p>';
   var d=DEUDAS.find(function(x){return x.proveedorId===provId;});
-  var alcance=(d&&d.junta&&(d.scope||[]).length)?('&sucursales='+encodeURIComponent(d.scope.join(','))):('&sucursal='+encodeURIComponent(sucActual));
+  var alcance=(d&&(d.scope||[]).length)?('&sucursales='+encodeURIComponent(d.scope.join(','))):('&sucursal='+encodeURIComponent(sucActual));
   var r=await window.sf('getMovProveedor&id='+provId+alcance); var movs=(r.ok?r.movimientos:[])||[];
   var esJunta=!!(d&&d.junta);
   el.innerHTML='<div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th>'+(esJunta?'<th>Local</th>':'')+'<th>Detalle</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th></tr></thead><tbody>'+
@@ -223,6 +239,7 @@ async function toggleHist(provId){
 function pagarProv(provId, prov){
   pvProvSel=provId;
   document.getElementById('pv-pago-tit').textContent='Registrar movimiento — '+prov;
+  var pln=document.getElementById('pv-pago-local-nom'); if(pln) pln.textContent=sucActual||'—';
   document.getElementById('pv-pago-card').hidden=false;
   document.getElementById('pv-monto').value='';
   document.getElementById('pv-cheques-list').innerHTML='';

@@ -62,6 +62,8 @@
       <button class="tab" data-t="prov" onclick="switchTab('prov')">Proveedores</button>
     </div>
 
+    <div id="aviso-local" hidden style="display:flex;align-items:center;gap:8px;background:var(--brand-soft);border:1px solid #bcd0f0;color:var(--brand-ink);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:12px;font-size:var(--fs-sm);font-weight:600;">📍 Estás cargando en el local <b id="aviso-local-nom">—</b>. Cambiá la sucursal de arriba para operar en otro.</div>
+
     <!-- NUEVA COMPRA (en 2 etapas: cabecera -> productos) -->
     <div id="t-compra">
 
@@ -195,15 +197,15 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-10-15.6';</script>
-<script src="sb-api.js?v=2026-10-15.6"></script>
-<script src="auth-guard.js?v=2026-10-15.6"></script>
-<script src="nav.js?v=2026-10-15.6"></script>
+<script>window.APP_BUILD='2026-10-16.1';</script>
+<script src="sb-api.js?v=2026-10-16.1"></script>
+<script src="auth-guard.js?v=2026-10-16.1"></script>
+<script src="nav.js?v=2026-10-16.1"></script>
 <script>
 var sb=window.sbClient;
 var PRODS={}, SUCS=[], PROVS=[], CG=[], FORMAS=['Efectivo','Tarjeta','Virtual','Cuenta Corriente'];
 var sucActual='', GASTOS=[], gastoEditId=null, SUCID={};
-var PROVS_LOCAL=[], REP_DEF={}, REPCAT={};  // REP_DEF: reparto general por local; REPCAT: {catId:{localNombre:pct}} por categoría (manda este)
+var PROVS_LOCAL=[], PROV_LOCS={}, REP_DEF={}, REPCAT={};  // PROVS_LOCAL: proveedores del local donde estás parado; PROV_LOCS: {provId:[locales]}; REP_DEF: reparto general por local; REPCAT: {catId:{localNombre:pct}} por categoría (manda este)
 function fmt$(n){ return '$'+Math.round(Number(n)||0).toLocaleString('es-AR'); }
 function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
 
@@ -233,11 +235,23 @@ async function iniciar(){
 function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; }
 function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarProveedoresLocal(); cargarGastos(); if(!COMPRA_ID){ cargarBorradores(); cargarConfirmadas(); } }
 async function cargarProveedoresLocal(){
-  // Proveedores de TODAS las sucursales asignadas del usuario (no solo la seleccionada).
-  var r=await window.sf('getProveedoresDeLocal&sucursales='+encodeURIComponent(localesUsuario().join(','))); PROVS_LOCAL=(r.ok?r.proveedores:[])||[];
-  document.getElementById('c-cuenta').innerHTML = PROVS_LOCAL.length ? ('<option value="">(elegir proveedor)</option>'+PROVS_LOCAL.map(function(p){ return '<option value="'+p.id+'">'+p.nombre+'</option>'; }).join('')) : '<option value="">(sin proveedores — usá ＋ o Configuración)</option>';
-  document.getElementById('g-prov').innerHTML='<option value="">(sin proveedor)</option>'+PROVS_LOCAL.map(function(p){ return '<option value="'+p.id+'">'+p.nombre+'</option>'; }).join('');
-  poblarProvSuc(); renderProv();
+  // Proveedores con sus locales asignados. El desplegable de compra/gasto muestra SOLO
+  // los del local donde estás parado (sucActual); así no se carga a un proveedor de otro
+  // local por tener la sucursal equivocada arriba.
+  var r=await window.sf('getProveedoresConLocales'); var cl=(r.ok?r.proveedores:[])||[];
+  PROV_LOCS={}; cl.forEach(function(p){ PROV_LOCS[p.id]=p.locales||[]; });
+  PROVS_LOCAL=cl.filter(function(p){ return (p.locales||[]).indexOf(sucActual)>=0; });
+  var opts=PROVS_LOCAL.map(function(p){ return '<option value="'+p.id+'">'+p.nombre+'</option>'; }).join('');
+  document.getElementById('c-cuenta').innerHTML = PROVS_LOCAL.length ? ('<option value="">(elegir proveedor)</option>'+opts) : '<option value="">(sin proveedores en '+(sucActual||'este local')+' — usá ＋ o Configuración)</option>';
+  document.getElementById('g-prov').innerHTML='<option value="">(sin proveedor)</option>'+opts;
+  actualizarAvisoLocal(); poblarProvSuc(); renderProv();
+}
+// Aviso visible de en qué local estás cargando (solo si el usuario tiene más de un local).
+function actualizarAvisoLocal(){
+  var el=document.getElementById('aviso-local'); if(!el) return;
+  var varios=(localesUsuario().length>1);
+  el.hidden=!varios;
+  var nom=document.getElementById('aviso-local-nom'); if(nom) nom.textContent=sucActual||'—';
 }
 function poblarSelects(){
   var fp=FORMAS.map(function(f){ var lbl=/cuenta\s*corriente/i.test(f)?(f+' (deuda proveedor)'):f; return '<option value="'+String(f).replace(/"/g,'&quot;')+'">'+lbl+'</option>'; }).join('');
@@ -573,7 +587,7 @@ function renderProv(){
   // Admin: TODOS los proveedores (asignados o no). No-admin: solo los asignados a sus locales.
   var lista;
   if(esAdminProv()){ lista=PROVS.slice(); }
-  else { var ids={}; (PROVS_LOCAL||[]).forEach(function(p){ ids[p.id]=true; }); lista=PROVS.filter(function(p){ return ids[p.id]; }); }
+  else { var locs=localesUsuario(); lista=PROVS.filter(function(p){ return (PROV_LOCS[p.id]||[]).some(function(l){ return locs.indexOf(l)>=0; }); }); }
   document.getElementById('p-tbody').innerHTML=lista.map(function(p,i){
     return '<tr><td><input class="cell txt" value="'+(p.nombre||'').replace(/"/g,'&quot;')+'" onchange="editarProv('+p.id+',\'nombre\',this.value)"></td>'+
       '<td><input class="cell txt" value="'+(p.cuit||'').replace(/"/g,'&quot;')+'" placeholder="—" onchange="editarProv('+p.id+',\'cuit\',this.value)"></td>'+

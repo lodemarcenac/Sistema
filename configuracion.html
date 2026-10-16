@@ -197,10 +197,10 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-10-15.6';</script>
-<script src="sb-api.js?v=2026-10-15.6"></script>
-<script src="auth-guard.js?v=2026-10-15.6"></script>
-<script src="nav.js?v=2026-10-15.6"></script>
+<script>window.APP_BUILD='2026-10-16.1';</script>
+<script src="sb-api.js?v=2026-10-16.1"></script>
+<script src="auth-guard.js?v=2026-10-16.1"></script>
+<script src="nav.js?v=2026-10-16.1"></script>
 <script>
 var sb=window.sbClient;
 var FORMAS=[{nombre:'Efectivo',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Tarjeta',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Virtual',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Cuenta Corriente',cta:true,facturar:false,cobro:true,pago:true}];
@@ -256,35 +256,23 @@ function switchSec(name){
 var CFG_PROV=[];
 async function cargarCfgProv(){
   var r=await window.sf('getProveedoresConLocales'); CFG_PROV=(r.ok?r.proveedores:[])||[];
-  // cuentas compartidas (juntas): tomar la cuenta con >=2 locales de cada proveedor
-  try{
-    var rc=await window.sf('getCuentasProveedor'); var provsC=(rc.ok?rc.proveedores:[])||[];
-    var juntaByProv={};
-    provsC.forEach(function(pc){ (pc.cuentas||[]).forEach(function(cu){ if((cu.locales||[]).length>=2){ juntaByProv[pc.id]=cu.locales.slice(); } }); });
-    CFG_PROV.forEach(function(p){ p.junta=juntaByProv[p.id]||[]; });
-  }catch(e){ CFG_PROV.forEach(function(p){ p.junta=p.junta||[]; }); }
   renderCfgProv();
 }
 function chkLocales(cls, id, locs, marcados){
   return locs.map(function(s){
     var on=(marcados||[]).indexOf(s.nombre)>=0;
     return '<label class="pill-check">'+
-      '<input type="checkbox" class="'+cls+'-'+id+'" value="'+String(s.nombre).replace(/"/g,'&quot;')+'" '+(on?'checked':'')+' onchange="'+(cls==='cfgp'?'guardarCfgProv':'guardarCuentaJunta')+'('+id+')"> '+s.nombre+'</label>';
+      '<input type="checkbox" class="'+cls+'-'+id+'" value="'+String(s.nombre).replace(/"/g,'&quot;')+'" '+(on?'checked':'')+' onchange="guardarCfgProv('+id+')"> '+s.nombre+'</label>';
   }).join('');
 }
 function renderCfgProv(){
   var locs=SUCS.filter(function(s){return s.id;});
   document.getElementById('cfg-prov-list').innerHTML = CFG_PROV.length ? CFG_PROV.map(function(p){
-    var junta=p.junta||[];
     return '<div class="row-item">'+
       '<div class="row-head"><b>'+p.nombre+'</b><span id="cfgp-st-'+p.id+'" class="cfg-st"></span></div>'+
       '<div class="mini-label" style="margin-top:10px;">Aparece en estos locales</div>'+
       '<div style="margin-top:6px;">'+chkLocales('cfgp', p.id, locs, p.locales)+'</div>'+
-      '<div class="row-sub">'+
-        '<div class="mini-label">Saldo compartido (cuenta junta)</div>'+
-        '<div style="margin-top:6px;">'+chkLocales('cfgj', p.id, locs, junta)+'</div>'+
-        '<div class="muted" style="font-size:var(--fs-xs);margin-top:5px;">Tildá 2 o más locales para que compartan un solo saldo. Con 0 o 1, cada local lleva su cuenta por separado.</div>'+
-      '</div>'+
+      '<div class="muted" style="font-size:var(--fs-xs);margin-top:5px;">Si lo asignás a 2 o más locales, esos locales comparten un solo saldo. Con un solo local, lleva su cuenta por separado.</div>'+
     '</div>';
   }).join('') : '<p class="muted">No hay proveedores todavía.</p>';
 }
@@ -296,14 +284,6 @@ async function guardarCfgProv(id){
   if(!r.ok){ setProvStatus(id,'✕ No se guardó','var(--bad)'); toast('Error: '+r.error,'error'); return; }
   var p=CFG_PROV.find(function(x){return x.id===id;}); if(p) p.locales=locs;
   setProvStatus(id,'✓ Guardado','var(--good)');
-}
-async function guardarCuentaJunta(id){
-  setProvStatus(id,'Guardando…','var(--muted)');
-  var locs=[]; document.querySelectorAll('.cfgj-'+id+':checked').forEach(function(c){ locs.push(c.value); });
-  var r=await window.sp('setCuentaJunta',{ proveedorId:id, locales:locs });
-  if(!r.ok){ setProvStatus(id,'✕ No se guardó','var(--bad)'); toast('Error: '+r.error,'error'); return; }
-  var p=CFG_PROV.find(function(x){return x.id===id;}); if(p) p.junta=(locs.length>=2?locs:[]);
-  setProvStatus(id, (locs.length>=2?('✓ Junta: '+locs.join(' + ')):'✓ Separado por local'),'var(--good)');
 }
 // ---- REPARTO DE GASTOS POR DEFECTO (global, % por local) ----
 function renderRepDef(){

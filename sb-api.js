@@ -328,26 +328,21 @@
     getDeudasLocal: async function(params){
       var m=await sucIdMap(); var sid=params&&params.sucursal?m[params.sucursal]:null; if(!sid) return {ok:true, deudas:[]};
       var idToName={}; Object.keys(m).forEach(function(n){ idToName[m[n]]=n; });
-      // Cuentas juntas: un proveedor puede tener una cuenta que agrupa >=2 locales que comparten el saldo.
-      // Si las tablas aún no existen (SQL sin correr), cae a saldo por-local.
-      var cu=await sb.from('proveedor_cuentas').select('id,proveedor_id,nombre,activo');
-      var cl=await sb.from('proveedor_cuenta_locales').select('cuenta_id,sucursal_id');
-      var cuentaById={};
-      if(!cu.error && !cl.error){
-        (cu.data||[]).filter(function(c){return c.activo!==false;}).forEach(function(c){ cuentaById[c.id]={ proveedorId:c.proveedor_id, nombre:c.nombre||'', sucs:[] }; });
-        (cl.data||[]).forEach(function(x){ if(cuentaById[x.cuenta_id]) cuentaById[x.cuenta_id].sucs.push(x.sucursal_id); });
-      }
-      var cuentaDeProv={};  // proveedorId -> cuenta junta que incluye ESTE local
-      Object.keys(cuentaById).forEach(function(cid){ var c=cuentaById[cid]; if(c.sucs.length>=2 && c.sucs.indexOf(sid)>=0){ cuentaDeProv[c.proveedorId]=c; } });
-      // Proveedores relevantes: asignados al local + con deuda en el local + con junta que incluye el local
+      // Saldo consolidado por ASIGNACIÓN (reemplaza las "cuentas juntas"): un proveedor
+      // comparte el saldo entre TODOS los locales a los que está asignado (proveedor_locales).
+      // Si está asignado a uno solo, el saldo es el de ese local; si lo comparten dos o más,
+      // se muestra el saldo conjunto, igual en cada uno de esos locales.
+      var asignAll=await sb.from('proveedor_locales').select('proveedor_id,sucursal_id'); if(asignAll.error) throw asignAll.error;
+      var locsByProv={};  // proveedor_id -> [sucursal_id...] asignados
+      (asignAll.data||[]).forEach(function(x){ (locsByProv[x.proveedor_id]=locsByProv[x.proveedor_id]||[]).push(x.sucursal_id); });
+      // Proveedores relevantes para ESTE local: asignados a él + con deuda cargada en él.
       var idsSet={};
-      var asign=await sb.from('proveedor_locales').select('proveedor_id').eq('sucursal_id',sid); (asign.data||[]).forEach(function(x){ idsSet[x.proveedor_id]=true; });
+      Object.keys(locsByProv).forEach(function(pid){ if(locsByProv[pid].indexOf(sid)>=0) idsSet[pid]=true; });
       var dps=await sb.from('deuda_proveedores').select('proveedor_id').eq('sucursal_id',sid); (dps.data||[]).forEach(function(x){ if(x.proveedor_id!=null) idsSet[x.proveedor_id]=true; });
-      Object.keys(cuentaDeProv).forEach(function(pid){ idsSet[Number(pid)]=true; });
       var relIds=Object.keys(idsSet).map(Number); if(!relIds.length) return {ok:true, deudas:[]};
-      // Alcance de sucursales por proveedor (junta => locales de la cuenta; si no => solo este local)
+      // Alcance por proveedor = locales asignados ∪ este local (lo de acá siempre cuenta).
       var scopeByProv={}, allScope={};
-      relIds.forEach(function(pid){ var c=cuentaDeProv[pid]; var sucs=c?c.sucs.slice():[sid]; scopeByProv[pid]=sucs; sucs.forEach(function(s){ allScope[s]=true; }); });
+      relIds.forEach(function(pid){ var sc=(locsByProv[pid]||[]).slice(); if(sc.indexOf(sid)<0) sc.push(sid); scopeByProv[pid]=sc; sc.forEach(function(s){ allScope[s]=true; }); });
       var scopeIds=Object.keys(allScope).map(Number);
       // Saldo = suma de cargos - pagos sobre el alcance de cada proveedor
       var saldo={};
@@ -355,9 +350,24 @@
       (dp.data||[]).forEach(function(x){ if(x.proveedor_id==null) return; var sc=scopeByProv[x.proveedor_id]; if(!sc || sc.indexOf(x.sucursal_id)<0) return; var v=Number(x.monto)||0; saldo[x.proveedor_id]=(saldo[x.proveedor_id]||0)+(/pago/i.test(x.tipo)?-v:v); });
       var pr=await sb.from('proveedores').select('id,nombre,activo').in('id',relIds);
       return {ok:true, deudas:(pr.data||[]).filter(function(p){return p.activo!==false;}).map(function(p){
-        var c=cuentaDeProv[p.id]; var scopeNames=(scopeByProv[p.id]||[]).map(function(s){ return idToName[s]||String(s); });
-        return { proveedorId:p.id, proveedor:p.nombre, saldo:+((saldo[p.id]||0)).toFixed(2), junta:!!c, localesJunta:(c?scopeNames:[]), scope:scopeNames };
+        var scopeNames=(scopeByProv[p.id]||[]).map(function(s){ return idToName[s]||String(s); });
+        var compartido=scopeNames.length>1;
+        return { proveedorId:p.id, proveedor:p.nombre, saldo:+((saldo[p.id]||0)).toFixed(2), junta:compartido, localesJunta:(compartido?scopeNames:[]), scope:scopeNames };
       }).sort(function(a,b){ return b.saldo-a.saldo; })};
+    },
+    // Vista del administrador: deuda de TODOS los locales, un renglón por proveedor
+    // con el saldo total y los locales donde opera. Solo lectura (para pagar, se entra al local).
+    getDeudasTodas: async function(){
+      var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
+      var asign=await sb.from('proveedor_locales').select('proveedor_id,sucursal_id');
+      var locsByProv={}; (asign.data||[]).forEach(function(x){ (locsByProv[x.proveedor_id]=locsByProv[x.proveedor_id]||[]).push(x.sucursal_id); });
+      var dp=await sb.from('deuda_proveedores').select('proveedor_id,tipo,monto'); if(dp.error) throw dp.error;
+      var saldo={}; (dp.data||[]).forEach(function(x){ if(x.proveedor_id==null) return; var v=Number(x.monto)||0; saldo[x.proveedor_id]=(saldo[x.proveedor_id]||0)+(/pago/i.test(x.tipo)?-v:v); });
+      var pr=await sb.from('proveedores').select('id,nombre,activo').order('nombre'); if(pr.error) throw pr.error;
+      return {ok:true, deudas:(pr.data||[]).filter(function(p){return p.activo!==false;}).map(function(p){
+        var scopeNames=(locsByProv[p.id]||[]).map(function(s){ return idToName[s]||String(s); });
+        return { proveedorId:p.id, proveedor:p.nombre, saldo:+((saldo[p.id]||0)).toFixed(2), junta:scopeNames.length>1, localesJunta:scopeNames, scope:scopeNames, todos:true };
+      }).filter(function(d){ return Math.abs(d.saldo)>0.5; }).sort(function(a,b){ return b.saldo-a.saldo; })};
     },
     getMovCuenta: async function(params){
       var id=params&&params.id; if(!id) return {ok:true, movimientos:[], saldo:0};
