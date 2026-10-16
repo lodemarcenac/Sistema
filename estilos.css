@@ -135,6 +135,41 @@ input.cell.ro{ background:#f2f4f8; color:var(--muted); }
 /* ---- Estado vacío ---- */
 .vacio{ padding:38px 18px; text-align:center; color:var(--muted); font-size:var(--fs-sm); background:var(--surface-2); border:1px dashed #d5dbe6; border-radius:var(--radius); }
 
+/* ---- Fila/caja de lista (items dentro de cards: deudas, proveedores) ---- */
+.row-item{ border:1px solid var(--line); border-radius:var(--radius-sm); padding:10px 12px; margin-bottom:8px; background:var(--surface); }
+.row-item:last-child{ margin-bottom:0; }
+.row-head{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+.row-sub{ margin-top:10px; padding-top:10px; border-top:1px dashed var(--line-2); }
+
+/* ---- Micro-etiqueta suelta (mismo criterio que label de .field) ---- */
+.mini-label{ font-size:var(--fs-xs); color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+
+/* ---- Tag removible (grupos de gasto, selecciones) ---- */
+.tag{ display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--line-2); color:var(--ink-soft); border-radius:999px; padding:5px 12px; font-size:var(--fs-sm); font-weight:600; }
+.tag .x-btn{ font-size:.85rem; padding:0 2px; }
+
+/* ---- Pill con checkbox (selección múltiple, sobria) ---- */
+.pill-check{ display:inline-flex; align-items:center; gap:6px; font-size:var(--fs-sm); padding:5px 11px; border:1px solid var(--border-inp); border-radius:999px; background:#fff; color:var(--ink-soft); cursor:pointer; margin:0 8px 6px 0; transition:border-color .12s, background .12s, color .12s; }
+.pill-check:hover{ border-color:#bcd0f0; background:var(--surface-2); }
+.pill-check:has(input:checked){ border-color:var(--brand); background:var(--brand-soft); color:var(--brand-ink); }
+
+/* ---- Badge de cuenta junta (saldo compartido entre locales) ---- */
+.badge-junta{ font-size:.7rem; font-weight:700; color:var(--brand); background:var(--brand-soft); padding:1px 8px; border-radius:10px; }
+
+/* ---- Estado inline de guardado (el color lo fija el JS con tokens) ---- */
+.cfg-st{ font-size:var(--fs-xs); font-weight:700; }
+
+/* ---- Fila de cheque (orden de pago) ---- */
+.chq-row{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:6px; }
+.chq-row input{ padding:7px 9px; border:1px solid var(--border-inp); border-radius:var(--radius-sm); font-family:inherit; font-size:var(--fs-base); background:#fff; }
+.chq-row input:focus{ border-color:var(--brand-2); outline:none; box-shadow:0 0 0 3px rgba(47,123,230,.14); }
+.chq-row .chq-banco{ flex:1; min-width:120px; }
+.chq-row .chq-num{ flex:1; min-width:90px; }
+.chq-row .chq-monto{ width:120px; }
+
+/* ---- Input de texto editable dentro de table.data (ancho, alineado a la izq) ---- */
+input.cell.txt{ width:100%; text-align:left; font-variant-numeric:normal; }
+
 /* ---- Login (compartido) ---- */
 #login{ position:fixed; inset:0; background:linear-gradient(160deg,var(--brand),#0d3f92); display:flex; align-items:center; justify-content:center; z-index:100; padding:20px; }
 #login .box{ background:#fff; border-radius:14px; padding:30px 28px; width:100%; max-width:360px; box-shadow:0 20px 60px rgba(0,0,0,.3); }

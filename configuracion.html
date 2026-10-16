@@ -197,10 +197,10 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-10-15.3';</script>
-<script src="sb-api.js?v=2026-10-15.3"></script>
-<script src="auth-guard.js?v=2026-10-15.3"></script>
-<script src="nav.js?v=2026-10-15.3"></script>
+<script>window.APP_BUILD='2026-10-15.6';</script>
+<script src="sb-api.js?v=2026-10-15.6"></script>
+<script src="auth-guard.js?v=2026-10-15.6"></script>
+<script src="nav.js?v=2026-10-15.6"></script>
 <script>
 var sb=window.sbClient;
 var FORMAS=[{nombre:'Efectivo',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Tarjeta',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Virtual',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Cuenta Corriente',cta:true,facturar:false,cobro:true,pago:true}];
@@ -265,35 +265,45 @@ async function cargarCfgProv(){
   }catch(e){ CFG_PROV.forEach(function(p){ p.junta=p.junta||[]; }); }
   renderCfgProv();
 }
+function chkLocales(cls, id, locs, marcados){
+  return locs.map(function(s){
+    var on=(marcados||[]).indexOf(s.nombre)>=0;
+    return '<label class="pill-check">'+
+      '<input type="checkbox" class="'+cls+'-'+id+'" value="'+String(s.nombre).replace(/"/g,'&quot;')+'" '+(on?'checked':'')+' onchange="'+(cls==='cfgp'?'guardarCfgProv':'guardarCuentaJunta')+'('+id+')"> '+s.nombre+'</label>';
+  }).join('');
+}
 function renderCfgProv(){
   var locs=SUCS.filter(function(s){return s.id;});
   document.getElementById('cfg-prov-list').innerHTML = CFG_PROV.length ? CFG_PROV.map(function(p){
     var junta=p.junta||[];
-    return '<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><b>'+p.nombre+'</b><button class="mini-btn" onclick="guardarCfgProv('+p.id+')">Guardar</button></div>'+
-      '<div style="margin-top:8px;font-size:var(--fs-xs);color:var(--muted);font-weight:600;">Aparece en estos locales:</div>'+
-      '<div style="margin-top:4px;">'+locs.map(function(s){ return '<label style="margin-right:16px;font-size:var(--fs-sm);display:inline-flex;align-items:center;gap:5px;"><input type="checkbox" class="cfgp-'+p.id+'" value="'+String(s.nombre).replace(/"/g,'&quot;')+'" '+((p.locales||[]).indexOf(s.nombre)>=0?'checked':'')+'> '+s.nombre+'</label>'; }).join('')+'</div>'+
-      '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--line-2);">'+
-        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:var(--fs-xs);color:var(--muted);font-weight:600;">Saldo compartido (cuenta junta) entre:</span><button class="mini-btn" onclick="guardarCuentaJunta('+p.id+')">Guardar junta</button></div>'+
-        '<div style="margin-top:4px;">'+locs.map(function(s){ return '<label style="margin-right:16px;font-size:var(--fs-sm);display:inline-flex;align-items:center;gap:5px;"><input type="checkbox" class="cfgj-'+p.id+'" value="'+String(s.nombre).replace(/"/g,'&quot;')+'" '+(junta.indexOf(s.nombre)>=0?'checked':'')+'> '+s.nombre+'</label>'; }).join('')+'</div>'+
-        '<div class="muted" style="font-size:var(--fs-xs);margin-top:3px;">Tildá 2 o más locales para que compartan un solo saldo con este proveedor. Con 0 o 1, cada local lleva su cuenta por separado.</div>'+
+    return '<div class="row-item">'+
+      '<div class="row-head"><b>'+p.nombre+'</b><span id="cfgp-st-'+p.id+'" class="cfg-st"></span></div>'+
+      '<div class="mini-label" style="margin-top:10px;">Aparece en estos locales</div>'+
+      '<div style="margin-top:6px;">'+chkLocales('cfgp', p.id, locs, p.locales)+'</div>'+
+      '<div class="row-sub">'+
+        '<div class="mini-label">Saldo compartido (cuenta junta)</div>'+
+        '<div style="margin-top:6px;">'+chkLocales('cfgj', p.id, locs, junta)+'</div>'+
+        '<div class="muted" style="font-size:var(--fs-xs);margin-top:5px;">Tildá 2 o más locales para que compartan un solo saldo. Con 0 o 1, cada local lleva su cuenta por separado.</div>'+
       '</div>'+
     '</div>';
   }).join('') : '<p class="muted">No hay proveedores todavía.</p>';
 }
+function setProvStatus(id, txt, col){ var e=document.getElementById('cfgp-st-'+id); if(e){ e.textContent=txt; e.style.color=col||'var(--good)'; } }
 async function guardarCfgProv(id){
+  setProvStatus(id,'Guardando…','var(--muted)');
   var locs=[]; document.querySelectorAll('.cfgp-'+id+':checked').forEach(function(c){ locs.push(c.value); });
   var r=await window.sp('setProveedorLocales',{ proveedorId:id, locales:locs });
-  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  var p=CFG_PROV.find(function(x){return x.id===id;}); if(p) p.locales=locs; toast('Guardado');
+  if(!r.ok){ setProvStatus(id,'✕ No se guardó','var(--bad)'); toast('Error: '+r.error,'error'); return; }
+  var p=CFG_PROV.find(function(x){return x.id===id;}); if(p) p.locales=locs;
+  setProvStatus(id,'✓ Guardado','var(--good)');
 }
 async function guardarCuentaJunta(id){
+  setProvStatus(id,'Guardando…','var(--muted)');
   var locs=[]; document.querySelectorAll('.cfgj-'+id+':checked').forEach(function(c){ locs.push(c.value); });
-  if(locs.length===1){ toast('Elegí 2 o más locales (o ninguno para dejarlo separado)','error'); return; }
   var r=await window.sp('setCuentaJunta',{ proveedorId:id, locales:locs });
-  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  if(!r.ok){ setProvStatus(id,'✕ No se guardó','var(--bad)'); toast('Error: '+r.error,'error'); return; }
   var p=CFG_PROV.find(function(x){return x.id===id;}); if(p) p.junta=(locs.length>=2?locs:[]);
-  toast(locs.length>=2?('Saldo compartido entre '+locs.join(' + ')):'Cuenta separada por local');
+  setProvStatus(id, (locs.length>=2?('✓ Junta: '+locs.join(' + ')):'✓ Separado por local'),'var(--good)');
 }
 // ---- REPARTO DE GASTOS POR DEFECTO (global, % por local) ----
 function renderRepDef(){
@@ -500,8 +510,8 @@ function grupoOptions(sel){
 function renderGruposGasto(){
   var cont=document.getElementById('gg-pills'); if(!cont) return;
   cont.innerHTML = GRUPOS.length ? GRUPOS.map(function(g){
-    return '<span style="display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--line-2);border-radius:999px;padding:5px 12px;font-size:var(--fs-sm);font-weight:600;">'+
-      escAttr(g)+'<button class="x-btn" title="Eliminar grupo" onclick="delGrupoGasto(\''+escAttr(g).replace(/'/g,"\\'")+'\')" style="line-height:1;">✕</button></span>';
+    return '<span class="tag">'+
+      escAttr(g)+'<button class="x-btn" title="Eliminar grupo" onclick="delGrupoGasto(\''+escAttr(g).replace(/'/g,"\\'")+'\')">✕</button></span>';
   }).join('') : '<span class="muted">Todavía no hay grupos.</span>';
   // Select del alta de categoría
   var selNew=document.getElementById('cg-grupo'); if(selNew) selNew.innerHTML=grupoOptions(selNew.value);
