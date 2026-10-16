@@ -108,7 +108,7 @@
       </div>
       <div class="card">
         <h3 style="margin:0 0 8px;font-size:var(--fs-lg);">Detalle de cheques</h3>
-        <div class="tblwrap"><table class="data"><thead><tr><th>Fecha pago</th><th>Banco</th><th>N°</th><th>Proveedor</th><th>Local</th><th>Estado</th><th class="num">Monto</th></tr></thead><tbody id="chq-tbody"></tbody></table></div>
+        <div class="tblwrap"><table class="data"><thead><tr><th>Fecha pago</th><th>Banco</th><th>N°</th><th>Proveedor</th><th>Local</th><th>Estado</th><th class="num">Monto</th><th></th></tr></thead><tbody id="chq-tbody"></tbody></table></div>
       </div>
     </div>
 
@@ -231,10 +231,19 @@ async function toggleHist(provId){
   var alcance=(d&&(d.scope||[]).length)?('&sucursales='+encodeURIComponent(d.scope.join(','))):('&sucursal='+encodeURIComponent(sucActual));
   var r=await window.sf('getMovProveedor&id='+provId+alcance); var movs=(r.ok?r.movimientos:[])||[];
   var esJunta=!!(d&&d.junta);
-  el.innerHTML='<div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th>'+(esJunta?'<th>Local</th>':'')+'<th>Detalle</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th></tr></thead><tbody>'+
+  el.innerHTML='<div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th>'+(esJunta?'<th>Local</th>':'')+'<th>Detalle</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th><th></th></tr></thead><tbody>'+
     (movs.slice().reverse().map(function(m){ var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; var esPago=/pago/i.test(m.tipo);
-      return '<tr><td>'+f+'</td>'+(esJunta?('<td>'+(m.local||'')+'</td>'):'')+'<td>'+(m.descripcion||'')+'</td><td>'+(m.comprobante||'')+'</td><td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td></tr>';
-    }).join('') || '<tr><td colspan="'+(esJunta?7:6)+'" class="muted">Sin movimientos.</td></tr>')+'</tbody></table></div>';
+      var des=(m.descripcion||''); var borrable=m.id && !(des==='Compra'||des==='Pago en la compra'||/^Gasto a cuenta/i.test(des));
+      return '<tr><td>'+f+'</td>'+(esJunta?('<td>'+(m.local||'')+'</td>'):'')+'<td>'+(m.descripcion||'')+'</td><td>'+(m.comprobante||'')+'</td><td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td><td style="white-space:nowrap;text-align:right;">'+(borrable?('<button class="x-btn" title="Eliminar este movimiento" onclick="borrarMovProv('+m.id+','+provId+')">✕</button>'):'')+'</td></tr>';
+    }).join('') || '<tr><td colspan="'+(esJunta?8:7)+'" class="muted">Sin movimientos.</td></tr>')+'</tbody></table></div>';
+}
+async function borrarMovProv(movId, provId){
+  if(!confirm('¿Eliminar este movimiento de la cuenta del proveedor? El saldo se recalcula.')) return;
+  var r=await window.sp('eliminarMovProveedor',{ id:movId });
+  if(!r.ok){ toast(r.error||'No se pudo eliminar','error'); return; }
+  toast('Movimiento eliminado');
+  await renderDeudas();
+  var el=document.getElementById('hist-'+provId); if(el){ el.hidden=true; toggleHist(provId); }
 }
 function pagarProv(provId, prov){
   pvProvSel=provId;
@@ -308,7 +317,7 @@ async function cargarCheques(){
   if(alc!=='todos') p.sucursal=sucActual;
   var qs=Object.keys(p).filter(function(k){return p[k];}).map(function(k){return k+'='+encodeURIComponent(p[k]);}).join('&');
   var r=await window.sf('getCheques'+(qs?'&'+qs:'')); CHEQUES=(r.ok?r.cheques:[])||[];
-  if(r.sinTabla){ document.getElementById('chq-tbody').innerHTML='<tr><td colspan="7" class="muted">Falta correr <b>cheques_schema.sql</b> en Supabase para usar los cheques.</td></tr>'; document.getElementById('chq-flujo-tbody').innerHTML='<tr><td colspan="4" class="muted">—</td></tr>'; document.getElementById('chq-total').textContent=''; return; }
+  if(r.sinTabla){ document.getElementById('chq-tbody').innerHTML='<tr><td colspan="8" class="muted">Falta correr <b>cheques_schema.sql</b> en Supabase para usar los cheques.</td></tr>'; document.getElementById('chq-flujo-tbody').innerHTML='<tr><td colspan="4" class="muted">—</td></tr>'; document.getElementById('chq-total').textContent=''; return; }
   pintarCheques();
 }
 function fechaCorta(iso){ return iso?new Date(iso+'T00:00:00').toLocaleDateString('es-AR'):''; }
@@ -334,8 +343,17 @@ function pintarCheques(){
   }).join('') : '<tr><td colspan="4" class="muted">Sin cheques para el filtro elegido.</td></tr>';
   // detalle
   document.getElementById('chq-tbody').innerHTML = arr.length ? arr.map(function(c){
-    return '<tr><td>'+fechaCorta(c.fecha)+'</td><td>'+(c.banco||'')+'</td><td>'+(c.numero||'')+'</td><td>'+(c.proveedor||'')+'</td><td>'+(c.local||'')+'</td><td>'+(c.estado||'')+'</td><td class="num">'+fmt$(c.monto)+'</td></tr>';
-  }).join('') : '<tr><td colspan="7" class="muted">No hay cheques para el filtro elegido.</td></tr>';
+    var anulado=/anulad/i.test(c.estado||'');
+    var acc=(c.id && !anulado)?('<button class="x-btn" title="Anular el cheque y revertir el pago" onclick="anularChequeUI('+c.id+',\''+String(c.numero||c.banco||'').replace(/\x27/g,"\\x27")+'\')">Anular</button>'):'';
+    return '<tr'+(anulado?' class="inactivo"':'')+'><td>'+fechaCorta(c.fecha)+'</td><td>'+(c.banco||'')+'</td><td>'+(c.numero||'')+'</td><td>'+(c.proveedor||'')+'</td><td>'+(c.local||'')+'</td><td>'+(c.estado||'')+'</td><td class="num">'+fmt$(c.monto)+'</td><td style="white-space:nowrap;text-align:right;">'+acc+'</td></tr>';
+  }).join('') : '<tr><td colspan="8" class="muted">No hay cheques para el filtro elegido.</td></tr>';
+}
+async function anularChequeUI(id, ref){
+  if(!confirm('¿Anular el cheque '+(ref?('"'+ref+'" '):'')+'? Se revierte el pago asociado (vuelve a quedar la deuda) y, si el pago tenía otros cheques, también se anulan.')) return;
+  var r=await window.sp('anularCheque',{ id:id });
+  if(!r.ok){ toast(r.error||'No se pudo anular','error'); return; }
+  toast(r.pagoRevertido?'Cheque anulado y pago revertido':'Cheque anulado');
+  cargarCheques();
 }
 function exportarCheques(){
   var arr=chequesFiltrados();

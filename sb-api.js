@@ -260,11 +260,30 @@
       else if(params&&params.sucursal){ var m1=await sucIdMap(); filtrado=true; var one=m1[params.sucursal]; sids=one?[one]:[]; }
       if(filtrado && (!sids||!sids.length)) return {ok:true, movimientos:[], saldo:0};
       var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
-      var q=sb.from('deuda_proveedores').select('fecha,tipo,monto,descripcion,comprobante,forma_pago,sucursal_id').eq('proveedor_id',id);
+      var q=sb.from('deuda_proveedores').select('id,fecha,tipo,monto,descripcion,comprobante,forma_pago,sucursal_id').eq('proveedor_id',id);
       if(filtrado) q=q.in('sucursal_id',sids);
       var r=await q.order('fecha'); if(r.error) throw r.error;
-      var saldo=0; var movs=(r.data||[]).map(function(m){ var v=Number(m.monto)||0; if(/pago/i.test(m.tipo)) saldo-=v; else saldo+=v; return { fecha:m.fecha, tipo:m.tipo, monto:v, descripcion:m.descripcion||'', comprobante:m.comprobante||'', formaPago:m.forma_pago||'', local:idToName[m.sucursal_id]||'', saldo:saldo }; });
+      var saldo=0; var movs=(r.data||[]).map(function(m){ var v=Number(m.monto)||0; if(/pago/i.test(m.tipo)) saldo-=v; else saldo+=v; return { id:m.id, fecha:m.fecha, tipo:m.tipo, monto:v, descripcion:m.descripcion||'', comprobante:m.comprobante||'', formaPago:m.forma_pago||'', local:idToName[m.sucursal_id]||'', saldo:saldo }; });
       return {ok:true, movimientos:movs, saldo:saldo};
+    },
+    // Borra un movimiento de cuenta de proveedor (cargo manual o pago). Mismo acceso que cargarlo.
+    // Pagos con cheque se bloquean (hay que anular el cheque aparte). Si el pago salió de la Caja
+    // guardada (reserva), se repone la reserva.
+    eliminarMovProveedor: async function(p){
+      if(!p||!p.id) throw new Error('Falta el id del movimiento');
+      var g=await sb.from('deuda_proveedores').select('id,proveedor_id,sucursal_id,tipo,monto,forma_pago,fondo,descripcion').eq('id',p.id).maybeSingle();
+      if(g.error) throw g.error; if(!g.data) return {ok:false, error:'No se encontró el movimiento'};
+      var mov=g.data; var des=(mov.descripcion||'');
+      // Movimientos que vienen de una compra o gasto: no se tocan desde acá (se anulan en su origen).
+      if(des==='Compra' || des==='Pago en la compra' || /^Gasto a cuenta/i.test(des)){
+        return {ok:false, error:'Este movimiento viene de una compra o gasto. Borralo o anulalo desde Compras o Gastos.'};
+      }
+      // Si era un pago con cheques vinculados, estos se borran en cascada (deuda_id).
+      var d=await sb.from('deuda_proveedores').delete().eq('id',p.id); if(d.error) throw d.error;
+      if((mov.tipo||'')==='pago' && mov.fondo==='reserva' && mov.sucursal_id && (Number(mov.monto)||0)>0){
+        await sb.from('efectivo_reserva_mov').insert({ sucursal_id:mov.sucursal_id, tipo:'ingreso', monto:Number(mov.monto)||0, concepto:'Reversa pago a proveedor (borrado)' });
+      }
+      return {ok:true};
     },
     getProveedoresDeLocal: async function(params){
       var m=await sucIdMap(); var names=null;
@@ -861,18 +880,50 @@
       var m=await sucIdMap();
       var fondo=fondoDeForma(p.formaPago);
       var pay={ proveedor_id:(p.proveedorId||null), cuenta_id:(p.cuentaId||null), sucursal_id:(p.sucursal?m[p.sucursal]:null), tipo:(p.tipo||'pago'), monto:Number(p.monto)||0, forma_pago:(p.formaPago||null), fondo:fondo, descripcion:(p.descripcion||(p.tipo==='cargo'?'Cargo':'Pago')) };
-      var r=await sb.from('deuda_proveedores').insert(pay); if(r.error) throw r.error;
+      var r=await sb.from('deuda_proveedores').insert(pay).select('id').single(); if(r.error) throw r.error;
+      var deudaId=(r.data?r.data.id:null);
       // Si se paga desde la Caja guardada (reserva), descontar la reserva del local.
       if((p.tipo||'pago')==='pago' && fondo==='reserva' && pay.sucursal_id && (Number(p.monto)||0)>0){
         await sb.from('efectivo_reserva_mov').insert({ sucursal_id:pay.sucursal_id, tipo:'egreso', monto:Number(p.monto)||0, concepto:'Pago a proveedor' });
       }
-      // Cheques emitidos (forma de pago cheque): se guardan para el listado de cheques.
+      // Cheques emitidos (forma de pago cheque): se guardan para el listado y quedan
+      // vinculados al pago (deuda_id) para poder anularlos/revertirlos juntos.
       if((p.tipo||'pago')==='pago' && Array.isArray(p.cheques) && p.cheques.length){
-        var chrows=p.cheques.map(function(c){ return { proveedor_id:(p.proveedorId||null), sucursal_id:pay.sucursal_id, banco:((c.banco||'').toString().trim()||null), numero:((c.numero||'').toString().trim()||null), fecha_pago:(c.fecha||null), monto:Number(c.monto)||0, estado:'emitido', concepto:(p.descripcion||'Pago a proveedor') }; });
+        var chrows=p.cheques.map(function(c){ return { proveedor_id:(p.proveedorId||null), sucursal_id:pay.sucursal_id, banco:((c.banco||'').toString().trim()||null), numero:((c.numero||'').toString().trim()||null), fecha_pago:(c.fecha||null), monto:Number(c.monto)||0, estado:'emitido', concepto:(p.descripcion||'Pago a proveedor'), deuda_id:deudaId }; });
         var rc=await sb.from('cheques').insert(chrows);
-        if(rc.error) return {ok:true, warn:'El pago se registró, pero no se pudieron guardar los cheques (¿falta correr cheques_schema.sql?): '+rc.error.message};
+        if(rc.error){
+          if(/deuda_id/i.test(rc.error.message||'')){  // columna sin crear: guardar sin el vínculo
+            var chrows2=chrows.map(function(x){ var y=Object.assign({},x); delete y.deuda_id; return y; });
+            var rc2=await sb.from('cheques').insert(chrows2);
+            if(rc2.error) return {ok:true, warn:'El pago se registró, pero no se pudieron guardar los cheques: '+rc2.error.message};
+            return {ok:true, warn:'Cheques guardados sin vínculo al pago — corré alter_cheques_deuda.sql para poder anularlos automáticamente.'};
+          }
+          return {ok:true, warn:'El pago se registró, pero no se pudieron guardar los cheques (¿falta correr cheques_schema.sql?): '+rc.error.message};
+        }
       }
       return {ok:true};
+    },
+    // Anula un cheque: si está vinculado a un pago, revierte ese pago (lo borra; sus
+    // cheques se van en cascada y, si salió de la Caja guardada, se repone la reserva).
+    // Si es un cheque viejo sin vínculo, solo lo marca 'anulado'.
+    anularCheque: async function(p){
+      if(!p||!p.id) throw new Error('Falta el id del cheque');
+      var c=await sb.from('cheques').select('*').eq('id',p.id).maybeSingle();
+      if(c.error) throw c.error; if(!c.data) return {ok:false, error:'No se encontró el cheque'};
+      var ch=c.data;
+      if(ch.deuda_id!=null){
+        var g=await sb.from('deuda_proveedores').select('id,sucursal_id,tipo,monto,fondo').eq('id',ch.deuda_id).maybeSingle();
+        if(!g.error && g.data){
+          var mov=g.data;
+          var d=await sb.from('deuda_proveedores').delete().eq('id',mov.id); if(d.error) throw d.error;  // cascada: borra los cheques del pago
+          if((mov.tipo||'')==='pago' && mov.fondo==='reserva' && mov.sucursal_id && (Number(mov.monto)||0)>0){
+            await sb.from('efectivo_reserva_mov').insert({ sucursal_id:mov.sucursal_id, tipo:'ingreso', monto:Number(mov.monto)||0, concepto:'Reversa pago a proveedor (cheque anulado)' });
+          }
+          return {ok:true, pagoRevertido:true};
+        }
+      }
+      var u=await sb.from('cheques').update({estado:'anulado'}).eq('id',p.id); if(u.error) throw u.error;
+      return {ok:true, soloCheque:true};
     },
     getCheques: async function(params){
       params=params||{};
