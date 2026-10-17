@@ -171,20 +171,24 @@
     // Para exportar. params: sucursal(nombre, opcional=todos), desde, hasta, excluirAnuladas('1').
     getVentasDetalle: async function(params){
       params=params||{};
-      var q=sb.from('ventas_detalle').select('nombre,categoria,marca,codigo,peso,precio_kg,precio,cantidad,precio_lista,descuento_pct,venta:ventas!inner(comprobante,fecha,cliente_nombre,forma_pago,estado,sucursal_id)').limit(100000);
-      if(params.sucursal){ var m=await sucIdMap(); var sid=m[params.sucursal]; if(sid) q=q.eq('venta.sucursal_id', sid); }
-      if(params.desde) q=q.gte('venta.fecha', desdeAR(params.desde));
-      if(params.hasta) q=q.lte('venta.fecha', hastaAR(params.hasta));
-      if(params.excluirAnuladas==='1') q=q.eq('venta.estado','ok');
-      var r=await q; if(r.error) throw r.error;
-      var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
-      var rows=(r.data||[]).map(function(d){ var v=d.venta||{}; return {
-        fecha:v.fecha, comprobante:v.comprobante, cliente:v.cliente_nombre||'', formaPago:v.forma_pago||'', estado:v.estado||'',
-        local:idToName[v.sucursal_id]||'', categoria:d.categoria||'', codigo:d.codigo||'', producto:d.nombre||'', marca:d.marca||'',
+      // Agregación en el servidor (jsonb) para no chocar con el límite de filas
+      // de PostgREST: el select crudo con .limit() truncaba y perdía las ventas
+      // más recientes (las de hoy). Filtro por día en hora de Argentina.
+      var sid=null;
+      if(params.sucursal){ var m=await sucIdMap(); sid=m[params.sucursal]||null; }
+      var r=await sb.rpc('reporte_ventas_detalle', {
+        p_desde: params.desde||null,
+        p_hasta: params.hasta||null,
+        p_suc: sid,
+        p_excluir_anuladas: params.excluirAnuladas==='1'
+      });
+      if(r.error) throw r.error;
+      var rows=(r.data||[]).map(function(d){ return {
+        fecha:d.fecha, comprobante:d.comprobante, cliente:d.cliente||'', formaPago:d.forma_pago||'', estado:d.estado||'',
+        local:d.local||'', categoria:d.categoria||'', codigo:d.codigo||'', producto:d.producto||'', marca:d.marca||'',
         pesoKg:(d.peso==null?'':Number(d.peso)), precioKg:(d.precio_kg==null?'':Number(d.precio_kg)),
         cantidad:(d.cantidad==null?'':Number(d.cantidad)), importe:(d.precio==null?'':Number(d.precio)),
         descuentoPct:(d.descuento_pct==null?'':Number(d.descuento_pct)) }; });
-      rows.sort(function(a,b){ return new Date(a.fecha)-new Date(b.fecha); });
       return {ok:true, filas:rows};
     },
     getRoles: async function(){
