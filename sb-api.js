@@ -531,8 +531,16 @@
   var writers = {
     // --- PRODUCTOS ---
     setCostoProducto: async function(p){
-      var r=await sb.from('productos').update({ costo:(p.costo===''?null:Number(p.costo)), fecha_costo:hoy() }).eq('codigo_interno',String(p.codigo));
-      if(r.error) throw r.error; return {ok:true};
+      var pid=await prodIdPorCod(String(p.codigo)); if(!pid) throw new Error('Producto no encontrado: '+p.codigo);
+      var costo=(p.costo===''||p.costo==null?null:Number(p.costo));
+      // Guarda el último costo y, si corresponde, recalcula Minorista (manteniendo el
+      // margen que ya tenía) y las derivadas. Toda la lógica vive en el RPC.
+      var r=await sb.rpc('aplicar_costo_producto',{ p_producto_id:pid, p_costo:costo });
+      if(r.error) throw r.error;
+      // Devolver los precios recalculados para refrescar la grilla sin recargar.
+      var pp=await sb.from('producto_precios').select('precio,lista:listas_precio(nombre)').eq('producto_id',pid);
+      var precios={}; (pp.data||[]).forEach(function(x){ if(x.lista&&x.lista.nombre) precios[x.lista.nombre]=Number(x.precio); });
+      return {ok:true, precios:precios};
     },
     setPrecioProducto: async function(p){
       var pid=await prodIdPorCod(p.codigo); var lm=await listaIdMap(); var lid=lm[p.lista];
@@ -585,17 +593,29 @@
     // Import masivo: filas = [{codigo,nombre,marca,categoria,tipo,costo,margen,precios:{lista:val}}]
     importProductos: async function(p){
       var filas=p.filas||[]; var lm=await listaIdMap(); var creados=0, actualizados=0, errores=[];
+      // Nombre de la lista base (Minorista) para saber si la fila trae precio explícito.
+      var lp=await sb.from('listas_precio').select('nombre,tipo'); var baseNom=((lp.data||[]).filter(function(x){return x.tipo==='base';})[0]||{}).nombre||'Minorista';
       for(var i=0;i<filas.length;i++){
         var f=filas[i]; var cod=String(f.codigo||'').trim(); if(!cod) continue;
         try{
           var cid=await catIdOrCreate(f.categoria||'');
+          var costo=(f.costo===''||f.costo==null?null:Number(f.costo));
+          // El costo se aplica aparte (puede recalcular precios), no en este update/insert.
           var prod={ nombre:f.nombre||'', marca:f.marca||'', categoria_id:cid, tipo:(f.tipo==='unidad'?'unidad':'pesable'),
-            costo:(f.costo===''||f.costo==null?null:Number(f.costo)), margen_override:(f.margen===''||f.margen==null?null:Number(f.margen)) };
-          prod.fecha_costo=(prod.costo!=null?hoy():null);
+            margen_override:(f.margen===''||f.margen==null?null:Number(f.margen)) };
           var ex=await sb.from('productos').select('id').eq('codigo_interno',cod).maybeSingle();
           var pid;
           if(ex.data){ var u=await sb.from('productos').update(prod).eq('id',ex.data.id); if(u.error) throw u.error; pid=ex.data.id; actualizados++; }
           else { prod.codigo_interno=cod; prod.activo=true; var ins=await sb.from('productos').insert(prod).select('id').single(); if(ins.error) throw ins.error; pid=ins.data.id; creados++; }
+          // ¿La fila trae Minorista explícito? Si sí, respetamos los precios pegados.
+          var minExplicito=(f.precios && f.precios[baseNom]!=null && f.precios[baseNom]!=='' && Number(f.precios[baseNom])>0);
+          if(costo!=null && costo>0 && !minExplicito){
+            // Guarda el costo y deriva Minorista + derivadas desde el margen (el que ya tenía).
+            var rc=await sb.rpc('aplicar_costo_producto',{ p_producto_id:pid, p_costo:costo }); if(rc.error) throw rc.error;
+          } else {
+            await sb.from('productos').update({ costo:costo, fecha_costo:(costo!=null?hoy():null) }).eq('id',pid);
+          }
+          // Precios explícitos de la fila: pisan lo derivado (lo pegado manda).
           var rows=[]; Object.keys(f.precios||{}).forEach(function(l){ var v=Number(f.precios[l]); if(lm[l] && v>0) rows.push({ producto_id:pid, lista_id:lm[l], precio:v, fecha:hoy() }); });
           if(rows.length){ var pr=await sb.from('producto_precios').upsert(rows,{onConflict:'producto_id,lista_id'}); if(pr.error) throw pr.error; }
         }catch(e){ errores.push(cod+': '+(e.message||e)); }

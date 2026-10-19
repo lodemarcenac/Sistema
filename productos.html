@@ -319,7 +319,11 @@ async function editarCosto(cod,val){
   if(sinPermiso('productos.editar_costo','No tenés permiso para editar costos')) return;
   var r=await window.sp('setCostoProducto',{codigo:cod,costo:val});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  if(PRODS[cod]) PRODS[cod].costo=(val===''?null:Number(val));
+  if(PRODS[cod]){
+    PRODS[cod].costo=(val===''?null:Number(val));
+    // El costo pudo recalcular Minorista y derivadas: reflejarlo en la grilla.
+    if(r.precios){ PRODS[cod].precio=r.precios; render(); }
+  }
   toast('Costo actualizado');
 }
 async function editarMargen(cod,val){

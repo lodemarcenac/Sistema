@@ -359,6 +359,7 @@ function poblarSelects(){
 }
 
 // ---- CLIENTES ----
+var cliEditId=null;   // realId del cliente que se está editando (null = ninguno)
 function renderClientes(){
   var q=(document.getElementById('q').value||'').trim().toLowerCase();
   var arr=CLIENTES.filter(function(c){ return !q || (c.nombre+' '+(c.lista||'')).toLowerCase().indexOf(q)>=0; }).sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
@@ -367,27 +368,39 @@ function renderClientes(){
   var optsS='<option value="">(sin administrador)</option>'+SUCS.map(function(s){return '<option>'+s+'</option>';}).join('');
   var edit=puedeEditarCli();
   document.getElementById('cli-tbody').innerHTML=arr.map(function(c){
-    var lsel, ssel, del;
-    if(edit){
-      lsel='<select class="cell" onchange="editarCli(\''+c.realId+'\',\'lista\',this.value)">'+optsL.replace('<option>'+c.lista+'</option>','<option selected>'+c.lista+'</option>')+'</select>';
-      ssel='<select class="cell" onchange="editarCli(\''+c.realId+'\',\'administrador\',this.value)">'+optsS.replace('<option>'+c.administrador+'</option>','<option selected>'+c.administrador+'</option>')+'</select>';
-      del='<button class="x-btn" title="Eliminar cliente" onclick="borrarCli(\''+c.realId+'\',\''+String(c.nombre).replace(/'/g,"\\'")+'\')">✕</button>';
-    } else {
-      lsel=(c.lista||'<span class="muted">—</span>');
-      ssel=(c.administrador||'<span class="muted">—</span>');
-      del='';
+    // --- Modo edición: nombre + lista + administrador editables en la fila ---
+    if(edit && String(c.realId)===String(cliEditId)){
+      var nin='<input class="cell txt" id="ce-nom" value="'+String(c.nombre).replace(/"/g,'&quot;')+'">';
+      var lsel='<select class="cell" id="ce-lista">'+optsL.replace('<option>'+c.lista+'</option>','<option selected>'+c.lista+'</option>')+'</select>';
+      var ssel='<select class="cell" id="ce-adm">'+optsS.replace('<option>'+c.administrador+'</option>','<option selected>'+c.administrador+'</option>')+'</select>';
+      var acc='<button class="mini-btn" onclick="guardarCliEdit(\''+c.realId+'\')">Guardar</button><button class="mini-btn" onclick="cancelarCliEdit()">Cancelar</button>';
+      return '<tr><td>'+nin+'</td><td>'+lsel+'</td><td>'+ssel+'</td><td style="white-space:nowrap;">'+acc+'</td></tr>';
     }
-    return '<tr><td>'+c.nombre+'</td><td>'+lsel+'</td><td>'+ssel+'</td><td>'+del+'</td></tr>';
+    // --- Modo vista ---
+    var acc='';
+    if(edit){
+      acc='<button class="mini-btn" onclick="editarCliInit(\''+c.realId+'\')">Editar</button>'+
+          '<button class="x-btn" title="Eliminar cliente" onclick="borrarCli(\''+c.realId+'\',\''+String(c.nombre).replace(/'/g,"\\'")+'\')">✕</button>';
+    }
+    return '<tr><td>'+c.nombre+'</td><td>'+(c.lista||'<span class="muted">—</span>')+'</td><td>'+(c.administrador||'<span class="muted">—</span>')+'</td><td style="white-space:nowrap;">'+acc+'</td></tr>';
   }).join('') || '<tr><td colspan="4" class="muted">Sin clientes.</td></tr>';
 }
-async function editarCli(realId,campo,val){
+function editarCliInit(realId){
+  if(!puedeEditarCli()){ toast('No tenés permiso para modificar clientes','error'); return; }
+  cliEditId=realId; renderClientes();
+  var el=document.getElementById('ce-nom'); if(el){ el.focus(); el.select(); }
+}
+function cancelarCliEdit(){ cliEditId=null; renderClientes(); }
+async function guardarCliEdit(realId){
   if(!puedeEditarCli()){ toast('No tenés permiso para modificar clientes','error'); return; }
   var c=CLIENTES.find(function(x){return String(x.realId)===String(realId);}); if(!c) return;
-  var payload={ realId:c.realId, nombre:c.nombre, lista:c.lista, administrador:c.administrador };
-  payload[campo]=val;
-  var r=await window.sp('guardarCliente',payload);
+  var nom=(document.getElementById('ce-nom').value||'').trim();
+  if(!nom){ toast('Poné el nombre','error'); return; }
+  var lista=document.getElementById('ce-lista').value;
+  var adm=document.getElementById('ce-adm').value;
+  var r=await window.sp('guardarCliente',{ realId:c.realId, nombre:nom, lista:lista, administrador:adm });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  c[campo]=val; toast('Cliente actualizado');
+  c.nombre=nom; c.lista=lista; c.administrador=adm; cliEditId=null; toast('Cliente actualizado'); renderClientes();
 }
 async function crearClienteUI(){
   if(!puedeEditarCli()){ toast('No tenés permiso para modificar clientes','error'); return; }
