@@ -228,9 +228,13 @@ async function toggleHist(provId){
   if(!el.hidden){ el.hidden=true; return; }
   el.hidden=false; el.innerHTML='<p class="muted">Cargando…</p>';
   var d=DEUDAS.find(function(x){return x.proveedorId===provId;});
-  var alcance=(d&&(d.scope||[]).length)?('&sucursales='+encodeURIComponent(d.scope.join(','))):('&sucursal='+encodeURIComponent(sucActual));
+  // En la vista "todos los locales" el saldo suma TODOS los movimientos del proveedor
+  // (sin filtrar por local). El historial tampoco se filtra, sino el saldo puede dar
+  // distinto de $0 pero mostrar "Sin movimientos" cuando la deuda quedó cargada en un
+  // local que no está asignado al proveedor.
+  var alcance = (d&&d.todos) ? '' : ((d&&(d.scope||[]).length)?('&sucursales='+encodeURIComponent(d.scope.join(','))):('&sucursal='+encodeURIComponent(sucActual)));
   var r=await window.sf('getMovProveedor&id='+provId+alcance); var movs=(r.ok?r.movimientos:[])||[];
-  var esJunta=!!(d&&d.junta);
+  var esJunta=!!(d&&(d.junta||d.todos));
   el.innerHTML='<div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th>'+(esJunta?'<th>Local</th>':'')+'<th>Detalle</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th><th></th></tr></thead><tbody>'+
     (movs.slice().reverse().map(function(m){ var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; var esPago=/pago/i.test(m.tipo);
       var des=(m.descripcion||''); var borrable=m.id && !(des==='Compra'||des==='Pago en la compra'||/^Gasto a cuenta/i.test(des));
