@@ -91,6 +91,7 @@
         <div class="abm-nueva" style="border-top:none;padding-top:8px;" id="ccx-pago">
           <div><label>Registrar pago $</label><input id="ccx-monto" type="number" step="0.01"></div>
           <div><label>Forma</label><select id="ccx-fp"></select></div>
+          <div><label>Local (caja)</label><select id="ccx-suc"></select></div>
           <button class="btn-alta" onclick="pagarCCx()">Registrar pago</button>
         </div>
         <div class="tblwrap" style="margin-top:12px;"><table class="data"><thead><tr><th>Fecha</th><th>Concepto</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th><th></th></tr></thead><tbody id="ccx-movs"></tbody></table></div>
@@ -188,6 +189,10 @@ async function iniciar(){
   var rc=await window.sf('getClientes'); if(rc.ok) CLIENTES=rc.clientes||[];
   var rcfg=await window.sf('getConfigGeneral'); if(rcfg.ok && rcfg.config && rcfg.config.formas_pago){ try{ var af=JSON.parse(rcfg.config.formas_pago); if(af.length) FORMAS=af.map(function(f){return f.nombre||f;}); }catch(e){} }
   document.getElementById('ccx-fp').innerHTML=FORMAS.map(function(f){return '<option>'+f+'</option>';}).join('');
+  // Local donde entra el cobro (define en qué caja suma el efectivo). Por defecto, el
+  // local del usuario; si es admin (sin locales), el último local activo o el primero.
+  var sucDef=(window.PERM&&window.PERM.locales&&window.PERM.locales[0])||localStorage.getItem('pvSucursalPort')||SUCS[0]||'';
+  var selS=document.getElementById('ccx-suc'); if(selS) selS.innerHTML=SUCS.map(function(s){return '<option'+(s===sucDef?' selected':'')+'>'+s+'</option>';}).join('');
   poblarSelects(); renderClientes(); applyPermsUI();
 }
 function switchTab(name){
@@ -339,7 +344,10 @@ async function pagarCCx(){
   if(!puedePagoCC()){ toast('No tenés permiso para registrar pagos','error'); return; }
   if(!ccxSel){ toast('Elegí un cliente','error'); return; }
   var monto=document.getElementById('ccx-monto').value; if(!(Number(monto)>0)){ toast('Poné un monto','error'); return; }
-  var r=await window.sp('registrarPagoCC',{ clienteId:ccxSel, sucursal:(window.PERM&&window.PERM.locales&&window.PERM.locales[0])||'', monto:monto, formaPago:document.getElementById('ccx-fp').value, concepto:'Pago cta cte' });
+  var selS=document.getElementById('ccx-suc'); var sucPago=(selS&&selS.value)||'';
+  if(!sucPago){ toast('Elegí el local donde entra el cobro','error'); return; }
+  if(sucPago){ try{ localStorage.setItem('pvSucursalPort',sucPago); }catch(e){} }
+  var r=await window.sp('registrarPagoCC',{ clienteId:ccxSel, sucursal:sucPago, monto:monto, formaPago:document.getElementById('ccx-fp').value, concepto:'Pago cta cte' });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   document.getElementById('ccx-monto').value=''; toast('Pago registrado'); verClienteCC(ccxSel,ccxNom); renderCtaCte();
 }
