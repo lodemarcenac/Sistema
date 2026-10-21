@@ -71,6 +71,7 @@
           <div class="tot-row"><span>− Pagos a proveedor efectivo (caja)</span><span id="ca-pagos">$0</span></div>
           <div class="tot-row big"><span>Efectivo esperado</span><span id="ca-esperado">$0</span></div>
           <div class="tot-row big"><span>Esperado de cobro con Clover (tarjeta / QR)</span><span id="ca-posnet">$0</span></div>
+          <div class="tot-row"><span>Clover según sistema (automático de la terminal)</span><span id="ca-clover-auto" class="muted">—</span></div>
 
           <hr style="border:none;border-top:1px solid var(--line);margin:12px 0;">
           <div class="muted" style="font-weight:600;margin-bottom:4px;">A completar para el cierre</div>
@@ -83,7 +84,7 @@
 
           <div style="margin-top:10px;"><label>Cierre de la terminal POS (total tarjeta / QR según el lote)</label>
             <input id="ci-posnet" type="number" step="0.01" oninput="calcCierre()" style="width:160px;margin-left:6px;padding:5px 8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);"></div>
-          <div class="tot-row"><span>Clover — contra lo esperado</span><span id="ci-posnet-dif" class="dif">—</span></div>
+          <div class="tot-row"><span id="ci-posnet-dif-lbl">Clover — contra lo esperado</span><span id="ci-posnet-dif" class="dif">—</span></div>
 
           <hr style="border:none;border-top:1px solid var(--line);margin:12px 0;">
           <div class="tot-row big"><span>Diferencia neta (efectivo + Clover)</span><span id="ci-dif-neta" class="dif">—</span></div>
@@ -109,7 +110,7 @@
 
     <div class="card" style="margin-top:16px;">
       <h3>Historial de cajas</h3>
-      <div class="tblwrap"><table class="data"><thead><tr><th>Local</th><th>Cajero</th><th>Apertura</th><th>Cierre</th><th class="num">Apertura $</th><th class="num">Esperado</th><th class="num">Contado</th><th class="num">Diferencia</th><th class="num">A reserva</th></tr></thead><tbody id="hist-tbody"></tbody></table></div>
+      <div class="tblwrap"><table class="data"><thead><tr><th>Local</th><th>Cajero</th><th>Apertura</th><th>Cierre</th><th class="num">Apertura $</th><th class="num">Esperado</th><th class="num">Contado</th><th class="num">Diferencia</th><th class="num">A reserva</th><th class="num">Clover sistema</th><th class="num">Clover informado</th><th class="num">Clover dif.</th></tr></thead><tbody id="hist-tbody"></tbody></table></div>
     </div>
   </main>
 </div>
@@ -166,7 +167,24 @@ async function cargarCaja(){
   porMedio.forEach(function(x){ if(esPosnet(x.metodo)) posnet+=Number(x.monto)||0; });
   cajaActual.posnet=+posnet.toFixed(2);
   document.getElementById('ca-posnet').textContent=fmt$(cajaActual.posnet);
+  // Clover automático (API de la terminal) para la ventana del turno — asíncrono.
+  cajaActual.cloverAuto=null;
+  var elCA=document.getElementById('ca-clover-auto'); if(elCA){ elCA.textContent='calculando…'; elCA.className='muted'; }
+  cargarCloverAuto(cajaActual.id);
   document.getElementById('ci-queda').value=''; document.getElementById('ci-reserva').value=''; document.getElementById('ci-posnet').value=''; calcCierre();
+}
+async function cargarCloverAuto(cajaId){
+  var el=document.getElementById('ca-clover-auto'); if(!el) return;
+  try{
+    var r=await window.sf('getCloverAutoCaja&id='+cajaId);
+    if(!cajaActual || cajaActual.id!==cajaId) return;   // cambió de caja mientras cargaba
+    if(!r || !r.ok){ el.textContent='—'; el.className='muted'; return; }
+    if(!r.configurado){ cajaActual.cloverAuto=null; el.textContent='sin terminal Clover'; el.className='muted'; el.title=''; calcCierre(); return; }
+    if(r.error){ cajaActual.cloverAuto=null; el.textContent='no disponible'; el.className='muted'; el.title=r.error; calcCierre(); return; }
+    cajaActual.cloverAuto=Number(r.bruto)||0;
+    el.textContent=fmt$(cajaActual.cloverAuto)+(r.cant?(' · '+r.cant+' tx'):''); el.className=''; el.title='Traído de la terminal Clover para el turno.';
+    calcCierre();
+  }catch(e){ el.textContent='no disponible'; el.className='muted'; el.title=(e&&e.message)||''; }
 }
 function esPosnet(m){ m=(m||'').toLowerCase(); return /tarj|cr[eé]d|d[eé]b|posnet|clover|visa|master|qr|credit|debit|prepaid/.test(m); }
 function pintarDif(el, dif, hayDato){
@@ -180,13 +198,19 @@ function pintarDif(el, dif, hayDato){
 function calcCierre(){
   var espEf=cajaActual?(cajaActual.esperado||0):0;
   var espPos=cajaActual?(cajaActual.posnet||0):0;
+  // Si Clover trajo el automático, el cierre se compara contra ESE (lo real de la terminal);
+  // si no hay terminal, se compara contra lo que esperaban las ventas del sistema.
+  var tieneAuto=!!(cajaActual && cajaActual.cloverAuto!=null);
+  var benchPos=tieneAuto?cajaActual.cloverAuto:espPos;
+  var lbl=document.getElementById('ci-posnet-dif-lbl');
+  if(lbl) lbl.textContent=tieneAuto?'Clover — informado vs automático':'Clover — informado vs ventas del sistema';
   var chicaStr=document.getElementById('ci-queda').value, guardStr=document.getElementById('ci-reserva').value, posStr=document.getElementById('ci-posnet').value;
   var chica=Number(chicaStr)||0, guardada=Number(guardStr)||0;
   var cajaTotal=+(chica+guardada).toFixed(2);
   document.getElementById('ci-cajatotal').textContent=fmt$(cajaTotal);
   var hayCaja=(chicaStr!=='' || guardStr!==''), hayPos=(posStr!=='');
   var efDif=cajaTotal-espEf;
-  var posDif=hayPos?((Number(posStr)||0)-espPos):0;
+  var posDif=hayPos?((Number(posStr)||0)-benchPos):0;
   pintarDif(document.getElementById('ci-dif'), efDif, hayCaja);
   pintarDif(document.getElementById('ci-posnet-dif'), posDif, hayPos);
   pintarDif(document.getElementById('ci-dif-neta'), efDif+posDif, (hayCaja||hayPos));
@@ -202,7 +226,10 @@ async function cerrarCajaUI(){
   if(chicaStr==='' && guardStr===''){ toast('Completá la caja chica y la caja guardada','error'); return; }
   var chica=Number(chicaStr)||0, guardada=Number(guardStr)||0; var cajaTotal=+(chica+guardada).toFixed(2);
   if(!confirm('¿Cerrar la caja del local? (es la caja COMPARTIDA; si hay otra PC vendiendo, queda sin caja abierta)\n\nCaja chica (mañana): '+fmt$(chica)+'\nCaja guardada (a retirar): '+fmt$(guardada)+'\nCaja total: '+fmt$(cajaTotal))) return;
-  var r=await window.sp('cerrarCaja',{ id:cajaActual.id, contado:cajaTotal, queda:chica, reserva:guardada });
+  var posInfStr=document.getElementById('ci-posnet').value;
+  var r=await window.sp('cerrarCaja',{ id:cajaActual.id, contado:cajaTotal, queda:chica, reserva:guardada,
+    cloverSistema:(cajaActual.cloverAuto!=null?cajaActual.cloverAuto:null),
+    cloverInformado:(posInfStr!==''?Number(posInfStr):null) });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   toast('Caja cerrada — diferencia '+fmt$(r.diferencia)); cargarTodo();
 }
@@ -238,8 +265,12 @@ async function cargarHist(){
     var fa=c.abiertaAt?new Date(c.abiertaAt).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
     var fc=c.cerradaAt?new Date(c.cerradaAt).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):(c.cerrada?'':'ABIERTA');
     var difcls=Math.abs(c.diferencia)<0.5?'':'style="color:var(--bad);font-weight:700;"';
-    return '<tr><td>'+c.local+'</td><td>'+(c.cajero||'')+'</td><td>'+fa+'</td><td>'+fc+'</td><td class="num">'+fmt$(c.apertura)+'</td><td class="num">'+(c.cerrada?fmt$(c.esperado):'—')+'</td><td class="num">'+(c.cerrada?fmt$(c.contado):'—')+'</td><td class="num" '+difcls+'>'+(c.cerrada?((c.diferencia>=0?'+':'')+fmt$(c.diferencia)):'—')+'</td><td class="num">'+(c.cerrada?fmt$(c.aReserva):'—')+'</td></tr>';
-  }).join('') || '<tr><td colspan="9" class="muted">Sin cajas.</td></tr>';
+    var cSis=(c.cloverSistema!=null?fmt$(c.cloverSistema):'—');
+    var cInf=(c.cloverInformado!=null?fmt$(c.cloverInformado):'—');
+    var cDif='—', cDifcls='';
+    if(c.cloverSistema!=null && c.cloverInformado!=null){ var dd=+(c.cloverInformado-c.cloverSistema).toFixed(2); cDif=(dd>=0?'+':'')+fmt$(dd); cDifcls=Math.abs(dd)<0.5?'':'style="color:var(--bad);font-weight:700;"'; }
+    return '<tr><td>'+c.local+'</td><td>'+(c.cajero||'')+'</td><td>'+fa+'</td><td>'+fc+'</td><td class="num">'+fmt$(c.apertura)+'</td><td class="num">'+(c.cerrada?fmt$(c.esperado):'—')+'</td><td class="num">'+(c.cerrada?fmt$(c.contado):'—')+'</td><td class="num" '+difcls+'>'+(c.cerrada?((c.diferencia>=0?'+':'')+fmt$(c.diferencia)):'—')+'</td><td class="num">'+(c.cerrada?fmt$(c.aReserva):'—')+'</td><td class="num">'+cSis+'</td><td class="num">'+cInf+'</td><td class="num" '+cDifcls+'>'+cDif+'</td></tr>';
+  }).join('') || '<tr><td colspan="12" class="muted">Sin cajas.</td></tr>';
 }
 </script>
 </body>

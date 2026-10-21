@@ -37,13 +37,28 @@
   .pos{color:var(--good);} .neg{color:var(--bad);}
   .card-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
   .nota{font-size:var(--fs-xs);color:var(--muted);margin-top:10px;}
-  /* Explorador (PivotTable.js) */
+  /* Explorador (PivotTable.js) — estética alineada al sistema de diseño */
   #pivot{overflow:auto;font-size:var(--fs-sm);}
-  #pivot .pvtUi{color:var(--ink);font-family:var(--font);}
-  #pivot .pvtUi select{font-family:inherit;font-size:var(--fs-xs);}
-  #pivot .pvtAxisContainer li span.pvtAttr{background:var(--surface-3);border-color:#d7dded;border-radius:5px;}
-  #pivot .pvtRenderers,#pivot .pvtAxisContainer,#pivot .pvtVals{background:var(--surface-2);}
-  #pivot td.pvtTotal,#pivot td.pvtGrandTotal,#pivot th{font-variant-numeric:tabular-nums;}
+  #pivot .pvtUi{color:var(--ink);font-family:var(--font);border-collapse:separate;}
+  #pivot .pvtUi select{font-family:inherit;font-size:var(--fs-xs);padding:3px 7px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);background:#fff;}
+  #pivot .pvtAxisContainer,#pivot .pvtVals,#pivot .pvtRenderers{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:7px;}
+  #pivot .pvtAxisContainer li span.pvtAttr{background:#fff;border:1px solid #d7dded;border-radius:6px;padding:3px 9px;box-shadow:var(--shadow);transition:border-color .12s,box-shadow .12s;}
+  #pivot .pvtAxisContainer li span.pvtAttr:hover{border-color:var(--brand);box-shadow:var(--shadow-md);}
+  #pivot .pvtTriangle{color:var(--brand);}
+  #pivot table.pvtTable{border-collapse:separate;border-spacing:0;}
+  #pivot table.pvtTable thead tr th,#pivot table.pvtTable tbody tr th{background:var(--surface-2);color:var(--ink-soft);font-weight:600;border:1px solid var(--line);padding:6px 11px;}
+  #pivot table.pvtTable tbody tr td{border:1px solid var(--line);padding:6px 11px;font-variant-numeric:tabular-nums;text-align:right;}
+  #pivot table.pvtTable .pvtTotal,#pivot table.pvtTable .pvtGrandTotal{font-weight:700;background:var(--surface-2);}
+  #pivot table.pvtTable tbody tr:hover td{background:#eef3fb;}
+  /* Gráfico debajo de la tabla dinámica */
+  .pv-chart-wrap{margin-top:18px;border-top:1px solid var(--line);padding-top:14px;}
+  .pv-chart-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+  .pv-chart-title{font-weight:700;font-size:.82rem;color:var(--ink);text-transform:uppercase;letter-spacing:.04em;}
+  .pv-chart-btns{display:flex;gap:6px;flex-wrap:wrap;}
+  .pv-chart-btns .chip{cursor:pointer;user-select:none;}
+  .pv-chart-btns .chip.on{background:var(--brand);color:#fff;border-color:var(--brand);}
+  .pv-canvas-box{position:relative;height:360px;}
+  .pv-chart-note{font-size:var(--fs-xs);color:var(--muted);margin-top:10px;}
   .sem-bar{display:inline-block;width:100%;height:14px;background:var(--surface-3);border-radius:5px;overflow:hidden;vertical-align:middle;}
   .sem-bar span{display:block;height:100%;background:linear-gradient(90deg,var(--brand),var(--brand-2));}
 </style>
@@ -149,8 +164,22 @@
         </div>
       </div>
       <div class="card">
-        <p class="muted" style="margin-bottom:12px;">Arrastrá los campos (<b>Producto, Categoría, Local, Año, Mes, Día semana</b>) a las <b>filas</b> y <b>columnas</b>. Cambiá el <b>valor</b> (Importe o Kg) y el tipo de vista (Tabla, Barras, Mapa de calor) desde los selectores de arriba a la izquierda.</p>
+        <p class="muted" style="margin-bottom:12px;">Arrastrá los campos (<b>Producto, Categoría, Local, Año, Mes, Día semana</b>) a las <b>filas</b> y <b>columnas</b>. Cambiá el <b>valor</b> (<b>Importe</b> $, <b>Kg</b> de pesables o <b>Unidades</b> de los que van por unidad) y la vista (Tabla / Mapa de calor) desde los selectores de arriba a la izquierda. El <b>gráfico de abajo</b> acompaña lo que tengas en filas/columnas.</p>
         <div id="pivot-body"><div class="vacio">Elegí un período y tocá “Ver”.</div></div>
+        <div id="pv-chart-wrap" class="pv-chart-wrap" hidden>
+          <div class="pv-chart-head">
+            <span class="pv-chart-title">📊 Gráfico</span>
+            <div class="pv-chart-btns" id="pv-chart-btns">
+              <span class="chip mini on" data-ct="auto" onclick="setPvChart('auto')">Recomendado</span>
+              <span class="chip mini" data-ct="bar" onclick="setPvChart('bar')">Barras</span>
+              <span class="chip mini" data-ct="stacked" onclick="setPvChart('stacked')">Apiladas</span>
+              <span class="chip mini" data-ct="line" onclick="setPvChart('line')">Líneas</span>
+              <span class="chip mini" data-ct="pie" onclick="setPvChart('pie')">Torta</span>
+            </div>
+          </div>
+          <div class="pv-canvas-box"><canvas id="pv-canvas"></canvas></div>
+          <p class="pv-chart-note" id="pv-chart-note"></p>
+        </div>
       </div>
     </div>
 
@@ -188,6 +217,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.es.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>window.APP_BUILD='2026-10-16.2';</script>
 <script src="sb-api.js?v=2026-10-16.2"></script>
 <script src="auth-guard.js?v=2026-10-16.2"></script>
@@ -425,20 +455,104 @@ async function renderPivot(){
     var f=new Date(x.fecha+'T00:00:00');
     return { 'Local':x.local, 'Año':String(f.getFullYear()), 'Mes':p2(f.getMonth()+1)+' '+MESN[f.getMonth()],
              'Día semana':DOWL[(f.getDay()+6)%7], 'Categoría':x.categoria, 'Producto':x.producto,
-             'Importe':Math.round(Number(x.importe)||0), 'Kg':Math.round((Number(x.kg)||0)*100)/100 };
+             'Importe':Math.round(Number(x.importe)||0), 'Kg':Math.round((Number(x.kg)||0)*100)/100,
+             'Unidades':Math.round(Number(x.unidades)||0) };
   });
+  PV_RECS=recs; PV_CFG=null;
   body.innerHTML='<div id="pivot"></div>';
   // Español si el locale trae el agregador "Suma"; si no, inglés (siempre funciona).
   var loc = ($.pivotUtilities && $.pivotUtilities.locales && $.pivotUtilities.locales.es) ? $.pivotUtilities.locales.es : null;
   var useEs = !!(loc && loc.aggregators && loc.aggregators['Suma']);
+  var base = { rows:['Categoría'], cols:['Local'], vals:['Importe'], onRefresh:function(cfg){ PV_CFG=cfg; drawPivotChart(); } };
   var opts = useEs
-    ? { rows:['Categoría'], cols:['Local'], vals:['Importe'], aggregatorName:'Suma', rendererName:'Tabla' }
-    : { rows:['Categoría'], cols:['Local'], vals:['Importe'], aggregatorName:'Sum',  rendererName:'Table' };
+    ? Object.assign({}, base, { aggregatorName:'Suma', rendererName:'Tabla' })
+    : Object.assign({}, base, { aggregatorName:'Sum',  rendererName:'Table' });
   try{ $('#pivot').pivotUI(recs, opts, true, useEs?'es':'en'); }
   catch(e){
-    try{ $('#pivot').empty().pivotUI(recs, { rows:['Categoría'], cols:['Local'], vals:['Importe'], aggregatorName:'Sum', rendererName:'Table' }, true); }
-    catch(e2){ body.innerHTML='<div class="vacio">No se pudo dibujar el explorador.<br><small>'+(e2.message||e2)+'</small></div>'; }
+    try{ $('#pivot').empty().pivotUI(recs, Object.assign({}, base, { aggregatorName:'Sum', rendererName:'Table' }), true); }
+    catch(e2){ body.innerHTML='<div class="vacio">No se pudo dibujar el explorador.<br><small>'+(e2.message||e2)+'</small></div>'; document.getElementById('pv-chart-wrap').hidden=true; return; }
   }
+  document.getElementById('pv-chart-wrap').hidden=false;
+  drawPivotChart();
+}
+
+// ============================ GRÁFICO DEL EXPLORADOR ============================
+var PV_RECS=[], PV_CFG=null, PV_CHART=null, PV_CT='auto';
+var PV_PAL=['#2563eb','#16a34a','#f59e0b','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#4f46e5','#0d9488','#ca8a04'];
+var PV_TIME={'Año':1,'Mes':1,'Día semana':1};
+function setPvChart(ct){
+  PV_CT=ct;
+  var btns=document.querySelectorAll('#pv-chart-btns .chip');
+  for(var i=0;i<btns.length;i++){ btns[i].classList.toggle('on', btns[i].getAttribute('data-ct')===ct); }
+  drawPivotChart();
+}
+function pvFmt(val, campo){
+  var n=Number(val)||0;
+  if(campo==='Importe') return '$'+Math.round(n).toLocaleString('es-AR');
+  if(campo==='Kg') return (Math.round(n*100)/100).toLocaleString('es-AR')+' kg';
+  return Math.round(n).toLocaleString('es-AR')+(campo==='Unidades'?' u':'');
+}
+// Orden natural: Día semana por su orden real; el resto alfabético/numérico suave.
+function pvOrden(campo, vals){
+  if(campo==='Día semana'){ return vals.slice().sort(function(a,b){ return DOWL.indexOf(a)-DOWL.indexOf(b); }); }
+  return vals.slice().sort(function(a,b){ return String(a).localeCompare(String(b),'es',{numeric:true}); });
+}
+function drawPivotChart(){
+  if(typeof Chart==='undefined') return;
+  var note=document.getElementById('pv-chart-note'), canvas=document.getElementById('pv-canvas');
+  if(!canvas) return;
+  var cfg=PV_CFG||{};
+  var rowF=(cfg.rows&&cfg.rows[0])||null, colF=(cfg.cols&&cfg.cols[0])||null;
+  var valF=(cfg.vals&&cfg.vals[0])||'Importe';
+  var isCount=/cuenta|count/i.test(cfg.aggregatorName||'');
+  if(isCount) valF='__cuenta';
+  var dim=rowF||colF, ser=(rowF&&colF)?colF:null;
+  if(PV_CHART){ PV_CHART.destroy(); PV_CHART=null; }
+  if(!dim){ note.textContent='Arrastrá un campo a Filas (o Columnas) para ver el gráfico.'; return; }
+  // Agregar desde los registros crudos por dim × serie.
+  var dimVals={}, serVals={}, acc={};
+  PV_RECS.forEach(function(r){
+    var dk=r[dim]; if(dk==null) return; dimVals[dk]=1;
+    var sk=ser?r[ser]:'__uni'; if(ser) serVals[sk]=1;
+    var v=isCount?1:(Number(r[valF])||0);
+    acc[dk]=acc[dk]||{}; acc[dk][sk]=(acc[dk][sk]||0)+v;
+  });
+  var labels=pvOrden(dim, Object.keys(dimVals));
+  var series=ser?pvOrden(ser, Object.keys(serVals)):['__uni'];
+  var tipo=PV_CT;
+  if(tipo==='auto'){ tipo = PV_TIME[dim] ? 'line' : ((!ser && labels.length<=8) ? 'pie' : 'bar'); }
+  var campoLbl=isCount?'Conteo':valF;
+  var fmtCampo=isCount?'':valF;   // '' = número pelado (sin $/kg/u)
+
+  if(tipo==='pie'){
+    // Torta = reparto por dim (suma de todas las series).
+    var data=labels.map(function(l){ var o=acc[l]||{},t=0; for(var k in o) t+=o[k]; return t; });
+    PV_CHART=new Chart(canvas,{ type:'pie',
+      data:{ labels:labels, datasets:[{ data:data, backgroundColor:labels.map(function(_,i){return PV_PAL[i%PV_PAL.length];}), borderColor:'#fff', borderWidth:1.5 }] },
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ position:'right', labels:{ font:{family:'Inter'} } },
+          tooltip:{ callbacks:{ label:function(c){ var tot=c.dataset.data.reduce(function(s,x){return s+x;},0)||1; return c.label+': '+pvFmt(c.parsed, fmtCampo)+' ('+Math.round(c.parsed/tot*100)+'%)'; } } } } }
+    });
+    note.textContent='Reparto de '+campoLbl+' por '+dim+(ser?(' (se suman las columnas '+ser+')'):'')+'.';
+    return;
+  }
+  var stacked=(tipo==='stacked');
+  var datasets=series.map(function(sk,i){
+    return { label: ser?sk:campoLbl,
+      data: labels.map(function(l){ return (acc[l]&&acc[l][sk])||0; }),
+      backgroundColor: (tipo==='line')?'transparent':PV_PAL[i%PV_PAL.length],
+      borderColor: PV_PAL[i%PV_PAL.length], borderWidth:2,
+      pointRadius:(tipo==='line')?3:0, tension:.25, fill:false };
+  });
+  PV_CHART=new Chart(canvas,{ type:(tipo==='line'?'line':'bar'),
+    data:{ labels:labels, datasets:datasets },
+    options:{ responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ display:(series.length>1), labels:{ font:{family:'Inter'} } },
+        tooltip:{ callbacks:{ label:function(c){ return (c.dataset.label?c.dataset.label+': ':'')+pvFmt(c.parsed.y, fmtCampo); } } } },
+      scales:{ x:{ stacked:stacked, ticks:{ font:{family:'Inter'}, autoSkip:true, maxRotation:40 }, grid:{ display:false } },
+               y:{ stacked:stacked, beginAtZero:true, ticks:{ font:{family:'Inter'}, callback:function(v){ return pvFmt(v, fmtCampo); } }, grid:{ color:'#eef1f6' } } } }
+  });
+  note.textContent=campoLbl+' por '+dim+(ser?(' y '+ser):'')+'.'+((PV_CT==='auto')?(' Vista recomendada: '+(tipo==='line'?'líneas':'barras')+'. Cambiala con los botones.'):'');
 }
 
 // ============================ EXPORT EXCEL ============================

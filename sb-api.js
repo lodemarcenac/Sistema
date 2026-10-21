@@ -390,9 +390,30 @@
       var id=params&&params.id; if(!id) return {ok:false, error:'falta caja'};
       var r=await sb.rpc('caja_resumen',{ p_caja_id:id }); if(r.error) throw r.error; return {ok:true, resumen:r.data};
     },
+    // Total bruto de Clover (API de la terminal) para la VENTANA del turno de una caja.
+    // Trae las transacciones del/los día(s) de la caja y las filtra por apertura→cierre(o ahora).
+    // Devuelve {configurado:false} si el local no tiene terminal Clover cargada.
+    getCloverAutoCaja: async function(params){
+      var id=params&&params.id; if(!id) return {ok:false, error:'falta caja'};
+      var cj=await sb.from('cajas').select('sucursal_id,abierta_at,cerrada_at').eq('id',id).maybeSingle();
+      if(cj.error) throw cj.error; if(!cj.data) return {ok:true, configurado:false};
+      var sid=cj.data.sucursal_id, ini=cj.data.abierta_at, fin=cj.data.cerrada_at||new Date().toISOString();
+      var cc=await sb.from('clover_cuentas_estado').select('sucursal_id,activo').eq('sucursal_id',sid).maybeSingle();
+      if(!cc.data || cc.data.activo===false) return {ok:true, configurado:false};
+      function diaAR(x){ return new Date(x).toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'}); }
+      var inv;
+      try{ inv=await sb.functions.invoke('clover-tx', { body:{ sucursal_id:sid, desde:diaAR(ini), hasta:diaAR(fin) } }); }
+      catch(e){ return {ok:true, configurado:true, error:(e.message||String(e))}; }
+      if(inv.error) return {ok:true, configurado:true, error:(inv.error.message||String(inv.error))};
+      var d=inv.data||{};
+      if(d.error) return {ok:true, configurado:!/terminal|cuenta|configur/i.test(d.error), error:d.error};
+      var t0=new Date(ini).getTime(), t1=new Date(fin).getTime(), bruto=0, cant=0, porMedio={};
+      (d.tx||[]).forEach(function(t){ var tm=new Date(t.fecha).getTime(); if(tm>=t0 && tm<=t1){ var mo=Number(t.monto)||0; bruto+=mo; cant++; var k=t.medio||'(s/medio)'; porMedio[k]=(porMedio[k]||0)+mo; } });
+      return {ok:true, configurado:true, bruto:+bruto.toFixed(2), cant:cant, porMedio:porMedio, merchant:d.merchant||''};
+    },
     getCajas: async function(params){
       params=params||{};
-      var m=await sucIdMap(); var q=sb.from('cajas').select('id,sucursal_id,cajero,apertura,abierta_at,cerrada,cerrada_at,esperado,cierre_efectivo,diferencia,a_reserva,queda_caja').order('abierta_at',{ascending:false});
+      var m=await sucIdMap(); var q=sb.from('cajas').select('id,sucursal_id,cajero,apertura,abierta_at,cerrada,cerrada_at,esperado,cierre_efectivo,diferencia,a_reserva,queda_caja,clover_sistema,clover_informado').order('abierta_at',{ascending:false});
       if(params.sucursal){ var sid=m[params.sucursal]; if(sid) q=q.eq('sucursal_id',sid); }
       if(params.desde) q=q.gte('abierta_at', desdeAR(params.desde));
       if(params.hasta) q=q.lte('abierta_at', hastaAR(params.hasta));
@@ -400,7 +421,7 @@
       q=q.limit(params.desde||params.hasta?5000:100);
       var r=await q; if(r.error) throw r.error;
       var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
-      return {ok:true, cajas:(r.data||[]).map(function(c){ return { id:c.id, local:idToName[c.sucursal_id]||'', cajero:c.cajero||'', apertura:Number(c.apertura)||0, abiertaAt:c.abierta_at, cerrada:c.cerrada, cerradaAt:c.cerrada_at, esperado:Number(c.esperado)||0, contado:Number(c.cierre_efectivo)||0, diferencia:Number(c.diferencia)||0, aReserva:Number(c.a_reserva)||0, quedaCaja:Number(c.queda_caja)||0 }; })};
+      return {ok:true, cajas:(r.data||[]).map(function(c){ return { id:c.id, local:idToName[c.sucursal_id]||'', cajero:c.cajero||'', apertura:Number(c.apertura)||0, abiertaAt:c.abierta_at, cerrada:c.cerrada, cerradaAt:c.cerrada_at, esperado:Number(c.esperado)||0, contado:Number(c.cierre_efectivo)||0, diferencia:Number(c.diferencia)||0, aReserva:Number(c.a_reserva)||0, quedaCaja:Number(c.queda_caja)||0, cloverSistema:(c.clover_sistema==null?null:Number(c.clover_sistema)), cloverInformado:(c.clover_informado==null?null:Number(c.clover_informado)) }; })};
     },
     getReserva: async function(params){
       var m=await sucIdMap(); var sid=params&&params.sucursal?m[params.sucursal]:null; if(!sid) return {ok:true, saldo:0, movimientos:[]};
@@ -1020,7 +1041,9 @@
       var d=r.data||{}; return {ok:true, id:d.id, yaAbierta:!!d.ya_abierta, creada:!!d.creada, cajero:d.cajero||'', apertura:Number(d.apertura)||0};
     },
     cerrarCaja: async function(p){
-      var r=await sb.rpc('cerrar_caja',{ p_caja_id:p.id, p_contado:Number(p.contado)||0, p_queda:Number(p.queda)||0, p_reserva:Number(p.reserva)||0 });
+      var r=await sb.rpc('cerrar_caja',{ p_caja_id:p.id, p_contado:Number(p.contado)||0, p_queda:Number(p.queda)||0, p_reserva:Number(p.reserva)||0,
+        p_clover_sistema:(p.cloverSistema==null||p.cloverSistema===''?null:Number(p.cloverSistema)),
+        p_clover_informado:(p.cloverInformado==null||p.cloverInformado===''?null:Number(p.cloverInformado)) });
       if(r.error) throw r.error; return r.data||{ok:true};
     },
     movReserva: async function(p){
