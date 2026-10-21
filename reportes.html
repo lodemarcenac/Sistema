@@ -512,6 +512,10 @@ function pintarPivot(){
   var opts={ rows:rows, cols:cols, rendererName:renderer,
     rowOrder:(PV_CFG&&PV_CFG.rowOrder)||'value_z_to_a',
     colOrder:(PV_CFG&&PV_CFG.colOrder)||'value_z_to_a',
+    // Conserva los FILTROS por campo (lo tildado/destildado en el ▾); sin esto, al
+    // re-dibujar (cambio de medida/período) se perdían y volvían a aparecer todos.
+    inclusions:(PV_CFG&&PV_CFG.inclusions)||{},
+    exclusions:(PV_CFG&&PV_CFG.exclusions)||{},
     onRefresh:function(cfg){ PV_CFG=cfg; drawPivotChart(); } };
   if(combo){
     opts.aggregators={}; opts.aggregators['Importe + Kg']=aggImpKg; opts.aggregatorName='Importe + Kg';
