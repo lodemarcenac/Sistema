@@ -50,6 +50,12 @@
   #pivot table.pvtTable tbody tr td{border:1px solid var(--line);padding:6px 11px;font-variant-numeric:tabular-nums;text-align:right;}
   #pivot table.pvtTable .pvtTotal,#pivot table.pvtTable .pvtGrandTotal{font-weight:700;background:var(--surface-2);}
   #pivot table.pvtTable tbody tr:hover td{background:#eef3fb;}
+  /* La MEDIDA se elige con los botones "Medir:"; se oculta el desplegable de valor
+     de la librería. En modo "Importe + Kg" tampoco aplica la función (Suma/Promedio). */
+  #pivot .pvtVals select:not(.pvtAggregator){display:none;}
+  #pivot.combo .pvtVals .pvtAggregator{display:none;}
+  #pv-medida .chip{cursor:pointer;user-select:none;}
+  #pv-medida .chip.on{background:var(--brand);color:#fff;border-color:var(--brand);}
   /* Popup de filtro de un campo (el que se abre con el triangulito ▾) */
   #pivot .pvtFilterBox{background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 34px rgba(16,42,92,.20);padding:12px 14px;z-index:1000;min-width:200px;}
   #pivot .pvtFilterBox h4{margin:0 0 9px;font-size:var(--fs-base);color:var(--ink);font-weight:700;}
@@ -181,7 +187,14 @@
         </div>
       </div>
       <div class="card">
-        <p class="muted" style="margin-bottom:12px;">Abre <b>consolidado</b> (todos los locales juntos) y <b>ordenado por total, de mayor a menor</b>. Arrastrá los campos (<b>Producto, Categoría, Local, Año, Mes, Día semana</b>) a <b>filas</b> y <b>columnas</b> — poné <b>Local</b> cuando quieras comparar locales. Elegí el <b>valor</b> con el selector de arriba a la izquierda (función + campo: <b>Importe</b>, <b>Kg</b> o <b>Unidades</b>). El <b>gráfico de abajo</b> acompaña lo que tengas en filas/columnas.</p>
+        <p class="muted" style="margin-bottom:12px;">Abre <b>consolidado</b> (todos los locales juntos) y <b>ordenado por total, de mayor a menor</b>. Arrastrá los campos (<b>Producto, Categoría, Local, Año, Mes, Día semana</b>) a <b>filas</b> y <b>columnas</b> — poné <b>Local</b> cuando quieras comparar locales. Elegí <b>qué medir</b> con los botones de acá abajo; el desplegable <b>“Suma ▾”</b> cambia la función (Suma, Promedio…).</p>
+        <div id="pv-medida" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+          <span class="muted" style="font-size:var(--fs-xs);font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Medir:</span>
+          <span class="chip mini on" data-m="Importe" onclick="setPvMedida('Importe')">Importe</span>
+          <span class="chip mini" data-m="Kg" onclick="setPvMedida('Kg')">Kg</span>
+          <span class="chip mini" data-m="Unidades" onclick="setPvMedida('Unidades')">Unidades</span>
+          <span class="chip mini" data-m="ImporteKg" onclick="setPvMedida('ImporteKg')">Importe + Kg</span>
+        </div>
         <div id="pivot-body"><div class="vacio">Elegí un período y tocá “Ver”.</div></div>
         <div id="pv-chart-wrap" class="pv-chart-wrap" hidden>
           <div class="pv-chart-head">
@@ -459,47 +472,77 @@ async function renderRank(){
 }
 
 // ============================ EXPLORADOR (PIVOT) ============================
+// Trae los datos del período y dibuja. El re-dibujo (cambio de medida) no refetchea.
 async function renderPivot(){
   var desde=document.getElementById('pv-desde').value, hasta=document.getElementById('pv-hasta').value, suc=sucSel();
   var body=document.getElementById('pivot-body'); body.innerHTML='<div class="vacio">Cargando…</div>';
-  var $=window.jQuery;
-  if(!$ || !$.fn || !$.fn.pivotUI){ body.innerHTML='<div class="vacio">No se pudo cargar el explorador (librería no disponible). Revisá la conexión y recargá.</div>'; return; }
+  if(!window.jQuery || !jQuery.fn || !jQuery.fn.pivotUI){ body.innerHTML='<div class="vacio">No se pudo cargar el explorador (librería no disponible). Revisá la conexión y recargá.</div>'; return; }
   var r=await sb.rpc('reporte_pivot',{ p_desde:desde, p_hasta:hasta, p_suc:suc });
   if(r.error){ body.innerHTML='<div class="vacio">No se pudo cargar.<br><small>'+r.error.message+'</small></div>'; return; }
   var arr=r.data||[];
-  if(!arr.length){ body.innerHTML='<div class="vacio">Sin ventas en el período.</div>'; return; }
-  var recs=arr.map(function(x){
+  if(!arr.length){ body.innerHTML='<div class="vacio">Sin ventas en el período.</div>'; document.getElementById('pv-chart-wrap').hidden=true; return; }
+  PV_RECS=arr.map(function(x){
     var f=new Date(x.fecha+'T00:00:00');
     return { 'Local':x.local, 'Año':String(f.getFullYear()), 'Mes':p2(f.getMonth()+1)+' '+MESN[f.getMonth()],
              'Día semana':DOWL[(f.getDay()+6)%7], 'Categoría':x.categoria, 'Producto':x.producto,
              'Importe':Math.round(Number(x.importe)||0), 'Kg':Math.round((Number(x.kg)||0)*100)/100,
              'Unidades':Math.round(Number(x.unidades)||0) };
   });
-  PV_RECS=recs; PV_CFG=null;
-  body.innerHTML='<div id="pivot"></div>';
-  // Español si el locale trae el agregador "Suma"; si no, inglés (siempre funciona).
+  pintarPivot();
+}
+// La MEDIDA (qué se mide) se elige con los botones de arriba; el desplegable de
+// valor de la librería queda oculto por CSS. 'ImporteKg' usa un agregador propio
+// que muestra Importe y Kg juntos en cada celda.
+function setPvMedida(m){
+  PV_MEDIDA=m;
+  var b=document.querySelectorAll('#pv-medida .chip'); for(var i=0;i<b.length;i++) b[i].classList.toggle('on', b[i].getAttribute('data-m')===m);
+  if(PV_RECS && PV_RECS.length) pintarPivot();   // re-dibuja conservando filas/columnas/vista
+}
+function pintarPivot(){
+  var $=window.jQuery; if(!$ || !$.fn || !$.fn.pivotUI) return;
+  var body=document.getElementById('pivot-body'); body.innerHTML='<div id="pivot"></div>';
   var loc = ($.pivotUtilities && $.pivotUtilities.locales && $.pivotUtilities.locales.es) ? $.pivotUtilities.locales.es : null;
   var useEs = !!(loc && loc.aggregators && loc.aggregators['Suma']);
-  // Por defecto, CONSOLIDADO (negocio entero): Categoría en filas, sin partir por
-  // Local, y ORDENADO por total de mayor a menor (filas y columnas). Arrastrá
-  // "Local" cuando quieras comparar locales.
-  var base = { rows:['Categoría'], cols:[], vals:['Importe'],
-    rowOrder:'value_z_to_a', colOrder:'value_z_to_a',
+  var combo=(PV_MEDIDA==='ImporteKg');
+  // Conserva el armado del usuario (filas/columnas/vista/orden) entre cambios de
+  // medida y de período. Default: consolidado por Categoría, orden por total desc.
+  var rows=(PV_CFG&&PV_CFG.rows)||['Categoría'];
+  var cols=(PV_CFG&&PV_CFG.cols)||[];
+  var renderer=(PV_CFG&&PV_CFG.rendererName)||(useEs?'Tabla':'Table');
+  var opts={ rows:rows, cols:cols, rendererName:renderer,
+    rowOrder:(PV_CFG&&PV_CFG.rowOrder)||'value_z_to_a',
+    colOrder:(PV_CFG&&PV_CFG.colOrder)||'value_z_to_a',
     onRefresh:function(cfg){ PV_CFG=cfg; drawPivotChart(); } };
-  var opts = useEs
-    ? Object.assign({}, base, { aggregatorName:'Suma', rendererName:'Tabla' })
-    : Object.assign({}, base, { aggregatorName:'Sum',  rendererName:'Table' });
-  try{ $('#pivot').pivotUI(recs, opts, true, useEs?'es':'en'); }
+  if(combo){
+    opts.aggregators={}; opts.aggregators['Importe + Kg']=aggImpKg; opts.aggregatorName='Importe + Kg';
+  } else {
+    var ag=(PV_CFG&&PV_CFG.aggregatorName)||(useEs?'Suma':'Sum');
+    if(ag==='Importe + Kg') ag=(useEs?'Suma':'Sum');   // venía del modo combinado
+    opts.aggregatorName=ag; opts.vals=[PV_MEDIDA];
+  }
+  try{ $('#pivot').pivotUI(PV_RECS, opts, true, useEs?'es':'en'); }
   catch(e){
-    try{ $('#pivot').empty().pivotUI(recs, { rows:['Categoría'], cols:[], vals:['Importe'], aggregatorName:'Sum', rendererName:'Table', rowOrder:'value_z_to_a', colOrder:'value_z_to_a', onRefresh:function(cfg){ PV_CFG=cfg; drawPivotChart(); } }, true); }
+    try{ $('#pivot').empty().pivotUI(PV_RECS, { rows:['Categoría'], cols:[], vals:[combo?'Importe':PV_MEDIDA], aggregatorName:'Sum', rendererName:'Table', rowOrder:'value_z_to_a', colOrder:'value_z_to_a', onRefresh:function(cfg){ PV_CFG=cfg; drawPivotChart(); } }, true); }
     catch(e2){ body.innerHTML='<div class="vacio">No se pudo dibujar el explorador.<br><small>'+(e2.message||e2)+'</small></div>'; document.getElementById('pv-chart-wrap').hidden=true; return; }
   }
+  var pv=document.getElementById('pivot'); if(pv) pv.classList.toggle('combo', combo);
   document.getElementById('pv-chart-wrap').hidden=false;
   drawPivotChart();
 }
 
 // ============================ GRÁFICO DEL EXPLORADOR ============================
-var PV_RECS=[], PV_CFG=null, PV_CHART=null, PV_CT='auto';
+var PV_RECS=[], PV_CFG=null, PV_CHART=null, PV_CT='auto', PV_MEDIDA='Importe';
+// Agregador propio: suma Importe y Kg y los muestra juntos ("$123.456 · 45,2 kg").
+// numInputs:0 = no usa el desplegable de valor (toma Importe y Kg fijos).
+function aggImpKg(){
+  return function(){
+    var imp=0, kg=0;
+    return { push:function(r){ imp+=(Number(r['Importe'])||0); kg+=(Number(r['Kg'])||0); },
+      value:function(){ return imp; },
+      format:function(){ return '$'+Math.round(imp).toLocaleString('es-AR')+' · '+(Math.round(kg*100)/100).toLocaleString('es-AR')+' kg'; },
+      numInputs:0 };
+  };
+}
 var PV_PAL=['#2563eb','#16a34a','#f59e0b','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#4f46e5','#0d9488','#ca8a04'];
 var PV_TIME={'Año':1,'Mes':1,'Día semana':1};
 // Cerrar el popup de filtro de un campo (el del triangulito ▾) al hacer clic
