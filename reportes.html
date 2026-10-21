@@ -6,8 +6,7 @@
 <title>Reportes — Carnicería</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="estilos.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/themes/base/jquery-ui.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.css">
+<link rel="stylesheet" href="https://cdn.webdatarocks.com/latest/webdatarocks.min.css">
 <style>
   header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
   header .ttl{font-size:var(--fs-xl);font-weight:700;}
@@ -37,19 +36,9 @@
   .pos{color:var(--good);} .neg{color:var(--bad);}
   .card-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
   .nota{font-size:var(--fs-xs);color:var(--muted);margin-top:10px;}
-  /* Explorador (PivotTable.js) — estética alineada al sistema de diseño */
-  #pivot{overflow:auto;font-size:var(--fs-sm);}
-  #pivot .pvtUi{color:var(--ink);font-family:var(--font);border-collapse:separate;}
-  #pivot .pvtUi select{font-family:inherit;font-size:var(--fs-xs);padding:3px 24px 3px 7px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);background-color:#fff;background-position:right 7px center;background-size:10px;}
-  #pivot .pvtAxisContainer,#pivot .pvtVals,#pivot .pvtRenderers{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:7px;}
-  #pivot .pvtAxisContainer li span.pvtAttr{background:#fff;border:1px solid #d7dded;border-radius:6px;padding:3px 9px;box-shadow:var(--shadow);transition:border-color .12s,box-shadow .12s;}
-  #pivot .pvtAxisContainer li span.pvtAttr:hover{border-color:var(--brand);box-shadow:var(--shadow-md);}
-  #pivot .pvtTriangle{color:var(--brand);}
-  #pivot table.pvtTable{border-collapse:separate;border-spacing:0;}
-  #pivot table.pvtTable thead tr th,#pivot table.pvtTable tbody tr th{background:var(--surface-2);color:var(--ink-soft);font-weight:600;border:1px solid var(--line);padding:6px 11px;}
-  #pivot table.pvtTable tbody tr td{border:1px solid var(--line);padding:6px 11px;font-variant-numeric:tabular-nums;text-align:right;}
-  #pivot table.pvtTable .pvtTotal,#pivot table.pvtTable .pvtGrandTotal{font-weight:700;background:var(--surface-2);}
-  #pivot table.pvtTable tbody tr:hover td{background:#eef3fb;}
+  /* Explorador (tabla dinámica — WebDataRocks) */
+  #wdr{height:560px;}
+  #wdr .wdr-ui{font-family:var(--font);}
   /* Gráfico debajo de la tabla dinámica */
   .pv-chart-wrap{margin-top:18px;border-top:1px solid var(--line);padding-top:14px;}
   .pv-chart-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
@@ -164,7 +153,7 @@
         </div>
       </div>
       <div class="card">
-        <p class="muted" style="margin-bottom:12px;">Abre <b>consolidado</b> (todos los locales juntos) y <b>ordenado por total, de mayor a menor</b>. Arrastrá los campos (<b>Producto, Categoría, Local, Año, Mes, Día semana</b>) a <b>filas</b> y <b>columnas</b> — poné <b>Local</b> cuando quieras comparar locales. Elegí el <b>valor</b> con el selector de arriba a la izquierda: <b>Importe + Kg</b> (muestra los dos; ordena por importe), <b>Suma</b> de Importe, de Kg o de Unidades. El <b>gráfico de abajo</b> acompaña lo que tengas en filas/columnas.</p>
+        <p class="muted" style="margin-bottom:12px;">Tabla dinámica estilo Excel. Abre <b>consolidada</b> (todos los locales) con <b>Importe y Kg juntos</b>, ordenada por importe de mayor a menor. Tocá <b>“Campos” (Fields)</b> en la barra —o arrastrá directamente— para poner campos (<b>Producto, Categoría, Local, Año, Mes, Día semana</b>) en <b>filas</b> y <b>columnas</b>, y <b>varias medidas</b> (<b>Importe, Kg, Unidades</b>) en el <b>centro</b>, cada una con su <b>función</b> (Suma, Promedio…). El <b>gráfico de abajo</b> grafica la 1ª medida según filas/columnas.</p>
         <div id="pivot-body"><div class="vacio">Elegí un período y tocá “Ver”.</div></div>
         <div id="pv-chart-wrap" class="pv-chart-wrap" hidden>
           <div class="pv-chart-head">
@@ -213,10 +202,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.es.min.js"></script>
+<script src="https://cdn.webdatarocks.com/latest/webdatarocks.toolbar.min.js"></script>
+<script src="https://cdn.webdatarocks.com/latest/webdatarocks.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>window.APP_BUILD='2026-10-16.2';</script>
 <script src="sb-api.js?v=2026-10-16.2"></script>
@@ -441,70 +428,72 @@ async function renderRank(){
     '<div class="nota">Período '+desde+' → '+hasta+' · '+sucNombre()+'.</div>';
 }
 
-// ============================ EXPLORADOR (PIVOT) ============================
+// ================= EXPLORADOR (TABLA DINÁMICA — WebDataRocks) =================
+var WDR=null, PV_RECS=[], PV_CHART=null, PV_CT='auto';
+var PV_SLICE={ dim:'Categoría', ser:null, valField:'Importe', agg:'sum' };
+var PV_PAL=['#2563eb','#16a34a','#f59e0b','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#4f46e5','#0d9488','#ca8a04'];
+var PV_TIME={'Año':1,'Mes':1,'Día semana':1};
+
 async function renderPivot(){
   var desde=document.getElementById('pv-desde').value, hasta=document.getElementById('pv-hasta').value, suc=sucSel();
-  var body=document.getElementById('pivot-body'); body.innerHTML='<div class="vacio">Cargando…</div>';
-  var $=window.jQuery;
-  if(!$ || !$.fn || !$.fn.pivotUI){ body.innerHTML='<div class="vacio">No se pudo cargar el explorador (librería no disponible). Revisá la conexión y recargá.</div>'; return; }
+  var body=document.getElementById('pivot-body');
+  if(typeof WebDataRocks==='undefined'){ body.innerHTML='<div class="vacio">No se pudo cargar la tabla dinámica (librería no disponible). Revisá la conexión y recargá.</div>'; return; }
+  if(!WDR) body.innerHTML='<div class="vacio">Cargando…</div>';
   var r=await sb.rpc('reporte_pivot',{ p_desde:desde, p_hasta:hasta, p_suc:suc });
-  if(r.error){ body.innerHTML='<div class="vacio">No se pudo cargar.<br><small>'+r.error.message+'</small></div>'; return; }
+  if(r.error){ body.innerHTML='<div class="vacio">No se pudo cargar.<br><small>'+r.error.message+'</small></div>'; WDR=null; document.getElementById('pv-chart-wrap').hidden=true; return; }
   var arr=r.data||[];
-  if(!arr.length){ body.innerHTML='<div class="vacio">Sin ventas en el período.</div>'; return; }
-  var recs=arr.map(function(x){
+  if(!arr.length){ body.innerHTML='<div class="vacio">Sin ventas en el período.</div>'; WDR=null; document.getElementById('pv-chart-wrap').hidden=true; return; }
+  PV_RECS=arr.map(function(x){
     var f=new Date(x.fecha+'T00:00:00');
     return { 'Local':x.local, 'Año':String(f.getFullYear()), 'Mes':p2(f.getMonth()+1)+' '+MESN[f.getMonth()],
              'Día semana':DOWL[(f.getDay()+6)%7], 'Categoría':x.categoria, 'Producto':x.producto,
              'Importe':Math.round(Number(x.importe)||0), 'Kg':Math.round((Number(x.kg)||0)*100)/100,
              'Unidades':Math.round(Number(x.unidades)||0) };
   });
-  PV_RECS=recs; PV_CFG=null;
-  body.innerHTML='<div id="pivot"></div>';
-  // Español si el locale trae el agregador "Suma"; si no, inglés (siempre funciona).
-  var loc = ($.pivotUtilities && $.pivotUtilities.locales && $.pivotUtilities.locales.es) ? $.pivotUtilities.locales.es : null;
-  var useEs = !!(loc && loc.aggregators && loc.aggregators['Suma']);
-  // Agregadores: los del locale + uno propio "Importe + Kg" que muestra ambos en
-  // cada celda y ORDENA por importe (value()=importe) → al ordenar por total
-  // prioriza el importe. numInputs:0 = no pide elegir campo (usa Importe y Kg fijos).
-  var baseAggs = (useEs && loc.aggregators) ? loc.aggregators : ($.pivotUtilities ? $.pivotUtilities.aggregators : null);
-  var aggs = baseAggs ? Object.assign({}, baseAggs) : null; if(aggs) aggs[AGG_IMPKG]=aggImpKg;
-  // Por defecto, CONSOLIDADO (negocio entero): Categoría en filas, sin partir por
-  // Local, mostrando Importe + Kg, y ORDENADO por total de mayor a menor (filas y
-  // columnas). Arrastrá "Local" cuando quieras comparar locales.
-  var base = { rows:['Categoría'], cols:[], vals:['Importe'],
-    rowOrder:'value_z_to_a', colOrder:'value_z_to_a',
-    onRefresh:function(cfg){ PV_CFG=cfg; drawPivotChart(); } };
-  if(aggs) base.aggregators=aggs;
-  var opts = Object.assign({}, base, { aggregatorName:(aggs?AGG_IMPKG:(useEs?'Suma':'Sum')), rendererName:(useEs?'Tabla':'Table') });
-  try{ $('#pivot').pivotUI(recs, opts, true, useEs?'es':'en'); }
-  catch(e){
-    try{ $('#pivot').empty().pivotUI(recs, { rows:['Categoría'], cols:[], vals:['Importe'], aggregatorName:'Sum', rendererName:'Table', rowOrder:'value_z_to_a', colOrder:'value_z_to_a', onRefresh:function(cfg){ PV_CFG=cfg; drawPivotChart(); } }, true); }
-    catch(e2){ body.innerHTML='<div class="vacio">No se pudo dibujar el explorador.<br><small>'+(e2.message||e2)+'</small></div>'; document.getElementById('pv-chart-wrap').hidden=true; return; }
-  }
+  // Si la tabla ya existe, sólo refresco los datos y conservo el armado del usuario.
+  if(WDR){ try{ WDR.updateData({ data:PV_RECS }); document.getElementById('pv-chart-wrap').hidden=false; return; }catch(e){ WDR=null; } }
+  body.innerHTML='<div id="wdr"></div>';
+  try{
+    WDR=new WebDataRocks({
+      container:'#wdr', toolbar:true,
+      report:{
+        dataSource:{ data:PV_RECS },
+        // Por defecto CONSOLIDADO (negocio entero): Categoría en filas, mostrando
+        // Importe y Kg juntos, ordenado por Importe de mayor a menor. Arrastrá los
+        // campos que quieras a Filas/Columnas y varias medidas al centro.
+        slice:{
+          rows:[{uniqueName:'Categoría'}],
+          columns:[{uniqueName:'[Measures]'}],
+          measures:[ {uniqueName:'Importe',aggregation:'sum',format:'moneda'}, {uniqueName:'Kg',aggregation:'sum',format:'kg'} ],
+          sorting:{ column:{ type:'desc', tuple:[], measure:{ uniqueName:'Importe', aggregation:'sum' } } }
+        },
+        formats:[
+          {name:'moneda',thousandsSeparator:'.',decimalSeparator:',',decimalPlaces:0,currencySymbol:'$',currencySymbolAlign:'left'},
+          {name:'kg',thousandsSeparator:'.',decimalSeparator:',',decimalPlaces:2},
+          {name:'u',thousandsSeparator:'.',decimalSeparator:',',decimalPlaces:0}
+        ],
+        options:{ grid:{ type:'compact', showTotals:'on', showGrandTotals:'rows' } }
+      },
+      reportcomplete:function(){ drawFromWdr(); },   // fin de render (inicial y tras updateData)
+      reportchange:function(){ drawFromWdr(); }       // el usuario cambió el armado
+    });
+  }catch(e){ body.innerHTML='<div class="vacio">No se pudo dibujar la tabla dinámica.<br><small>'+(e.message||e)+'</small></div>'; document.getElementById('pv-chart-wrap').hidden=true; WDR=null; return; }
   document.getElementById('pv-chart-wrap').hidden=false;
-  drawPivotChart();
 }
 
-// Agregador propio para el Explorador: suma Importe y Kg y los muestra juntos en
-// cada celda ("$123.456 · 45,2 kg"). value() devuelve el Importe, así el orden por
-// total (value_z_to_a) prioriza el importe cuando se ven las dos medidas.
-var AGG_IMPKG='Importe + Kg';
-function aggImpKg(){
-  return function(){
-    var imp=0, kg=0;
-    return {
-      push:function(r){ imp+=(Number(r['Importe'])||0); kg+=(Number(r['Kg'])||0); },
-      value:function(){ return imp; },
-      format:function(){ return '$'+Math.round(imp).toLocaleString('es-AR')+' · '+(Math.round(kg*100)/100).toLocaleString('es-AR')+' kg'; },
-      numInputs:0
-    };
-  };
+// Lee el armado actual de la tabla (filas / columnas / 1ª medida) y redibuja el gráfico.
+function drawFromWdr(){
+  try{
+    if(!WDR || !WDR.getReport) return;
+    var slice=(WDR.getReport()||{}).slice||{};
+    function real(a){ if(!a) return null; for(var i=0;i<a.length;i++){ var u=a[i].uniqueName; if(u && u!=='[Measures]') return u; } return null; }
+    var meas=(slice.measures&&slice.measures[0])||null;
+    PV_SLICE={ dim:real(slice.rows), ser:real(slice.columns), valField:(meas?meas.uniqueName:'Importe'), agg:(meas&&meas.aggregation)||'sum' };
+    drawPivotChart();
+  }catch(e){}
 }
 
 // ============================ GRÁFICO DEL EXPLORADOR ============================
-var PV_RECS=[], PV_CFG=null, PV_CHART=null, PV_CT='auto';
-var PV_PAL=['#2563eb','#16a34a','#f59e0b','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#4f46e5','#0d9488','#ca8a04'];
-var PV_TIME={'Año':1,'Mes':1,'Día semana':1};
 function setPvChart(ct){
   PV_CT=ct;
   var btns=document.querySelectorAll('#pv-chart-btns .chip');
@@ -515,7 +504,8 @@ function pvFmt(val, campo){
   var n=Number(val)||0;
   if(campo==='Importe') return '$'+Math.round(n).toLocaleString('es-AR');
   if(campo==='Kg') return (Math.round(n*100)/100).toLocaleString('es-AR')+' kg';
-  return Math.round(n).toLocaleString('es-AR')+(campo==='Unidades'?' u':'');
+  if(campo==='Unidades') return Math.round(n).toLocaleString('es-AR')+' u';
+  return Math.round(n).toLocaleString('es-AR');
 }
 // Orden natural: Día semana por su orden real; el resto alfabético/numérico suave.
 function pvOrden(campo, vals){
@@ -526,45 +516,42 @@ function drawPivotChart(){
   if(typeof Chart==='undefined') return;
   var note=document.getElementById('pv-chart-note'), canvas=document.getElementById('pv-canvas');
   if(!canvas) return;
-  var cfg=PV_CFG||{};
-  var rowF=(cfg.rows&&cfg.rows[0])||null, colF=(cfg.cols&&cfg.cols[0])||null;
-  var valF=(cfg.vals&&cfg.vals[0])||'Importe';
-  var isCount=/cuenta|count/i.test(cfg.aggregatorName||'');
-  if(isCount) valF='__cuenta';
-  var dim=rowF||colF, ser=(rowF&&colF)?colF:null;
+  var dim=PV_SLICE.dim, ser=PV_SLICE.ser, valF=PV_SLICE.valField||'Importe', agg=(PV_SLICE.agg||'sum');
+  var isCount=/count/i.test(agg), isAvg=/average|avg/i.test(agg);
   if(PV_CHART){ PV_CHART.destroy(); PV_CHART=null; }
-  if(!dim){ note.textContent='Arrastrá un campo a Filas (o Columnas) para ver el gráfico.'; return; }
-  // Agregar desde los registros crudos por dim × serie.
-  var dimVals={}, serVals={}, acc={};
+  if(!dim){ note.textContent='Poné un campo en Filas para ver el gráfico (el gráfico grafica la 1ª medida).'; return; }
+  // Agrega desde los registros crudos por dim × serie, respetando la función.
+  var dimVals={}, serVals={}, sum={}, cnt={};
   PV_RECS.forEach(function(r){
     var dk=r[dim]; if(dk==null) return; dimVals[dk]=1;
     var sk=ser?r[ser]:'__uni'; if(ser) serVals[sk]=1;
-    var v=isCount?1:(Number(r[valF])||0);
-    acc[dk]=acc[dk]||{}; acc[dk][sk]=(acc[dk][sk]||0)+v;
+    var v=Number(r[valF])||0;
+    sum[dk]=sum[dk]||{}; cnt[dk]=cnt[dk]||{};
+    sum[dk][sk]=(sum[dk][sk]||0)+v; cnt[dk][sk]=(cnt[dk][sk]||0)+1;
   });
+  function acc(dk,sk){ if(isCount) return (cnt[dk]&&cnt[dk][sk])||0; var s=(sum[dk]&&sum[dk][sk])||0; if(isAvg){ var c=(cnt[dk]&&cnt[dk][sk])||0; return c?s/c:0; } return s; }
   var labels=pvOrden(dim, Object.keys(dimVals));
   var series=ser?pvOrden(ser, Object.keys(serVals)):['__uni'];
   var tipo=PV_CT;
   if(tipo==='auto'){ tipo = PV_TIME[dim] ? 'line' : ((!ser && labels.length<=8) ? 'pie' : 'bar'); }
-  var campoLbl=isCount?'Conteo':valF;
   var fmtCampo=isCount?'':valF;   // '' = número pelado (sin $/kg/u)
+  var campoLbl=isCount?'Cantidad':((isAvg?'Promedio de ':'')+valF);
 
   if(tipo==='pie'){
-    // Torta = reparto por dim (suma de todas las series).
-    var data=labels.map(function(l){ var o=acc[l]||{},t=0; for(var k in o) t+=o[k]; return t; });
+    var data=labels.map(function(l){ var t=0; series.forEach(function(sk){ t+=acc(l,sk); }); return t; });
     PV_CHART=new Chart(canvas,{ type:'pie',
       data:{ labels:labels, datasets:[{ data:data, backgroundColor:labels.map(function(_,i){return PV_PAL[i%PV_PAL.length];}), borderColor:'#fff', borderWidth:1.5 }] },
       options:{ responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{ position:'right', labels:{ font:{family:'Inter'} } },
           tooltip:{ callbacks:{ label:function(c){ var tot=c.dataset.data.reduce(function(s,x){return s+x;},0)||1; return c.label+': '+pvFmt(c.parsed, fmtCampo)+' ('+Math.round(c.parsed/tot*100)+'%)'; } } } } }
     });
-    note.textContent='Reparto de '+campoLbl+' por '+dim+(ser?(' (se suman las columnas '+ser+')'):'')+'.';
+    note.textContent=campoLbl+' por '+dim+(ser?(' (sumando '+ser+')'):'')+'.';
     return;
   }
   var stacked=(tipo==='stacked');
   var datasets=series.map(function(sk,i){
     return { label: ser?sk:campoLbl,
-      data: labels.map(function(l){ return (acc[l]&&acc[l][sk])||0; }),
+      data: labels.map(function(l){ return acc(l,sk); }),
       backgroundColor: (tipo==='line')?'transparent':PV_PAL[i%PV_PAL.length],
       borderColor: PV_PAL[i%PV_PAL.length], borderWidth:2,
       pointRadius:(tipo==='line')?3:0, tension:.25, fill:false };
