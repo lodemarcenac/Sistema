@@ -107,6 +107,26 @@ table.data tr.inactivo td{ color:#aeb4c0; font-style:italic; }
 input.cell, select.cell{ width:100px; padding:4px 6px; border:1px solid #dbe2ee; border-radius:var(--radius-xs); font-size:var(--fs-sm); font-family:inherit; text-align:right; font-variant-numeric:tabular-nums; }
 input.cell:focus, select.cell:focus{ border-color:var(--brand-2); outline:none; }
 input.cell.ro{ background:#f2f4f8; color:var(--muted); }
+/* ---- Desplegables (select) con estética unificada ---------------------------
+   Reemplaza la flecha nativa del SO por una propia y da borde/hover/foco base.
+   Trae su propio borde/fondo/radio para que los select "pelados" (sin clase) no
+   queden sin borde al sacar la flecha nativa. Los que tienen estilo propio de
+   mayor especificidad (header #selSuc, #pivot .pvtUi select) ajustan lo suyo. */
+select:not([multiple]){
+  -webkit-appearance:none; -moz-appearance:none; appearance:none;
+  padding:8px 32px 8px 11px;
+  border:1px solid var(--border-inp); border-radius:var(--radius-sm); background-color:#fff; color:var(--ink);
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat:no-repeat; background-position:right 11px center; background-size:11px;
+  cursor:pointer; transition:border-color .12s, box-shadow .12s, background-color .12s;
+}
+select:not([multiple]):hover{ border-color:var(--brand-2); }
+select:not([multiple]):focus{ border-color:var(--brand-2); outline:none; box-shadow:0 0 0 3px rgba(47,123,230,.14); }
+select:not([multiple]):disabled{ background-color:var(--surface-2); color:var(--muted); cursor:not-allowed; opacity:.75; }
+/* Celdas compactas de tablas: padding chico y flecha pegada al borde. */
+select.cell:not([multiple]){ padding:4px 22px 4px 6px; border-radius:var(--radius-xs); background-position:right 6px center; background-size:10px; }
+/* Selector de local del encabezado: asegura espacio para la flecha propia. */
+select#selSuc{ padding-right:30px; background-position:right 10px center; }
 .mini-btn{ padding:3px 9px; font-size:var(--fs-xs); border:1px solid var(--border-inp); background:#fff; border-radius:6px; cursor:pointer; margin-left:6px; font-family:inherit; }
 /* Control de borrado unificado en todo el sistema */
 .x-btn{ color:var(--bad); background:none; border:none; cursor:pointer; font-size:1rem; line-height:1; padding:2px 7px; border-radius:6px; }
