@@ -81,7 +81,7 @@
         <div class="abm-nueva">
           <div><label>Proveedor</label><div style="display:flex;gap:6px;"><select id="c-cuenta" style="flex:1;"></select><button class="btn" type="button" onclick="nuevoProvRapido()" title="Cargar un proveedor nuevo" style="padding:7px 12px;font-weight:800;font-size:1.05rem;line-height:1;">＋</button></div></div>
           <div><label>Comprobante</label><input id="c-comp" placeholder="N° factura / remito"></div>
-          <div><label>Total de la factura $</label><input id="c-total-fc" type="number" step="0.01" placeholder="0"></div>
+          <div><label>Total de la factura $</label><input id="c-total-fc" type="text" inputmode="decimal" placeholder="0" oninput="fmtMilesInput(this)"></div>
           <div><label>Forma de pago</label><select id="c-fp" onchange="onFormaCompra()"></select></div>
           <div id="c-caja-wrap" hidden><label>Caja</label><select id="c-caja"><option>Caja del día</option><option>Caja guardada</option></select></div>
         </div>
@@ -134,7 +134,7 @@
           <div><label>Fecha</label><input id="g-fecha" type="date"></div>
           <div style="grid-column:span 2;min-width:220px;"><label>Categoría</label><select id="g-cat" onchange="onCatGasto()"></select><span id="g-cat-grupo" class="muted" style="display:block;font-size:var(--fs-xs);margin-top:3px;min-height:1em;"></span></div>
           <div style="grid-column:1/-1;"><label id="g-prov-lbl">Proveedor (opc)</label><div style="display:flex;gap:6px;"><select id="g-prov" style="flex:1;min-width:0;"></select><button class="btn" type="button" onclick="nuevoProvRapido()" title="Cargar un proveedor nuevo" style="flex:0 0 auto;padding:7px 12px;font-weight:800;font-size:1.05rem;line-height:1;">＋</button></div></div>
-          <div><label>Monto $</label><input id="g-monto" type="number" step="0.01" oninput="onMontoGasto()"></div>
+          <div><label>Monto $</label><input id="g-monto" type="text" inputmode="decimal" oninput="fmtMilesInput(this);onMontoGasto()"></div>
           <div style="grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:10px;">
             <label style="font-size:var(--fs-xs);color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin:0;">Imputar a</label>
             <label style="font-weight:600;font-size:var(--fs-xs);display:inline-flex;align-items:center;gap:5px;margin:0;white-space:nowrap;"><input type="checkbox" id="g-multi" onchange="renderImput()"> Varios locales</label>
@@ -197,7 +197,7 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-10-22.2';</script>
+<script>window.APP_BUILD='2026-10-22.3';</script>
 <script src="sb-api.js?v=2026-10-22.2"></script>
 <script src="auth-guard.js?v=2026-10-16.2"></script>
 <script src="nav.js?v=2026-10-16.2"></script>
@@ -207,6 +207,16 @@ var PRODS={}, SUCS=[], PROVS=[], CG=[], FORMAS=['Efectivo','Tarjeta','Virtual','
 var sucActual='', GASTOS=[], gastoEditId=null, SUCID={};
 var PROVS_LOCAL=[], PROV_LOCS={}, REP_DEF={}, REPCAT={};  // PROVS_LOCAL: proveedores del local donde estás parado; PROV_LOCS: {provId:[locales]}; REP_DEF: reparto general por local; REPCAT: {catId:{localNombre:pct}} por categoría (manda este)
 function fmt$(n){ return '$'+Math.round(Number(n)||0).toLocaleString('es-AR'); }
+// Monto con separador de miles mientras se tipea (ej. 1.250.000). Guarda el nº crudo con parseMiles().
+function fmtMilesInput(el){
+  var raw=String(el.value||''); var neg=/^\s*-/.test(raw);
+  var coma=raw.indexOf(','); var dec='';
+  if(coma>=0){ dec=','+raw.slice(coma+1).replace(/[^0-9]/g,''); raw=raw.slice(0,coma); }
+  var ent=raw.replace(/[^0-9]/g,'');
+  var out=ent?Number(ent).toLocaleString('es-AR'):(dec?'0':'');
+  el.value=(neg&&out?'-':'')+out+dec;
+}
+function parseMiles(str){ if(str==null) return 0; var s=String(str).replace(/\./g,'').replace(/,/g,'.').replace(/[^0-9.\-]/g,''); return Number(s)||0; }
 function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
 
 document.getElementById('login-form').addEventListener('submit', async function(e){
@@ -305,7 +315,7 @@ async function crearCompraUI(){
   if(!provId){ toast('Elegí un proveedor','error'); document.getElementById('c-cuenta').focus(); return; }
   var comp=document.getElementById('c-comp').value.trim();
   if(!comp){ toast('Poné el comprobante (N° de factura o remito)','error'); document.getElementById('c-comp').focus(); return; }
-  var totalFC=Number(document.getElementById('c-total-fc').value)||0;
+  var totalFC=parseMiles(document.getElementById('c-total-fc').value);
   if(!(totalFC>0) && !confirm('El total de la factura es 0. ¿Continuar igual?')) return;
   var forma=efectivaForma('c-fp','c-caja');
   var pago=/cuenta\s*corriente/i.test(forma)?0:totalFC;   // cuenta corriente = queda a deber; otra forma = pagada
@@ -480,7 +490,7 @@ function renderImput(){
     var one=document.getElementById('g-local-uno'); if(one && sucActual) one.value=sucActual;
     return;
   }
-  var total=Number(document.getElementById('g-monto').value)||0, prevM={}, prevC=null;
+  var total=parseMiles(document.getElementById('g-monto').value), prevM={}, prevC=null;
   cont.querySelectorAll('.gi-monto').forEach(function(i){ prevM[i.getAttribute('data-loc')]=i.value; });
   if(cont.querySelector('.gi-loc')){ prevC={}; cont.querySelectorAll('.gi-loc').forEach(function(c){ prevC[c.value]=c.checked; }); }
   var rep=repartoActivo().mapa;
@@ -496,7 +506,7 @@ function renderImput(){
   sumImput();
 }
 function aplicarRepartoDefecto(){
-  var total=Number(document.getElementById('g-monto').value)||0, cont=document.getElementById('g-imput'), sumPct=0, rep=repartoActivo().mapa;
+  var total=parseMiles(document.getElementById('g-monto').value), cont=document.getElementById('g-imput'), sumPct=0, rep=repartoActivo().mapa;
   cont.querySelectorAll('.gi-loc:checked').forEach(function(c){ sumPct+=(Number(rep[c.value])||0); });
   var base=sumPct>0?sumPct:100;
   cont.querySelectorAll('.gi-monto').forEach(function(i){ var l=i.getAttribute('data-loc'); var on=cont.querySelector('.gi-loc[value="'+l.replace(/"/g,'&quot;')+'"]'); if(on&&on.checked){ var pct=Number(rep[l])||0; i.value=total?(Math.round(total*pct/base*100)/100):''; } else { i.value=''; } });
@@ -504,7 +514,7 @@ function aplicarRepartoDefecto(){
 }
 function sumImput(){
   var cont=document.getElementById('g-imput'); if(!cont) return;
-  var total=Number(document.getElementById('g-monto').value)||0, sum=0;
+  var total=parseMiles(document.getElementById('g-monto').value), sum=0;
   cont.querySelectorAll('.gi-loc').forEach(function(c){ var mi=cont.querySelector('.gi-monto[data-loc="'+c.value.replace(/"/g,'&quot;')+'"]'); if(mi){ mi.disabled=!c.checked; if(c.checked) sum+=Number(mi.value)||0; } });
   var el=document.getElementById('gi-sum'); if(!el) return;
   if(Math.abs(sum-total)<0.01){ el.textContent='Suma locales: '+fmt$(sum)+' = monto ✓'; el.style.color='var(--good)'; }
@@ -512,7 +522,7 @@ function sumImput(){
 }
 
 async function guardarGastoUI(){
-  var montoTotal=Number(document.getElementById('g-monto').value)||0;
+  var montoTotal=parseMiles(document.getElementById('g-monto').value);
   if(!(montoTotal>0)){ toast('Poné un monto','error'); return; }
   var forma=efectivaForma('g-fp','g-caja'), desc=document.getElementById('g-desc').value.trim();
   if(!desc){ toast('Poné el detalle del gasto','error'); document.getElementById('g-desc').focus(); return; }
@@ -552,7 +562,7 @@ function editarGasto(id){
   gastoEditId=id; document.getElementById('g-titulo').textContent='Editar gasto'; document.getElementById('g-cancel').hidden=false;
   document.getElementById('g-fecha').value=g.fecha?g.fecha.slice(0,10):'';
   document.getElementById('g-cat').value=g.categoriaId||''; onCatGasto(); document.getElementById('g-prov').value=g.proveedorId||'';
-  document.getElementById('g-monto').value=g.monto; document.getElementById('g-comp').value=g.comprobante||''; document.getElementById('g-desc').value=g.descripcion||'';
+  document.getElementById('g-monto').value=g.monto; fmtMilesInput(document.getElementById('g-monto')); document.getElementById('g-comp').value=g.comprobante||''; document.getElementById('g-desc').value=g.descripcion||'';
   var fpv=g.formaPago||'';
   if(/caja|efectivo/i.test(fpv)){ var ef=(FORMAS.filter(function(f){return /efectivo/i.test(f);})[0]||'Efectivo'); document.getElementById('g-fp').value=ef; toggleCaja('g-fp','g-caja-wrap'); var gc=document.getElementById('g-caja'); if(gc) gc.value=(/guard/i.test(fpv)?'Caja guardada':'Caja del día'); }
   else { document.getElementById('g-fp').value=fpv; toggleCaja('g-fp','g-caja-wrap'); }
