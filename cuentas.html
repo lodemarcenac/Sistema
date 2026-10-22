@@ -127,10 +127,13 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>window.APP_BUILD='2026-10-16.2';</script>
-<script src="sb-api.js?v=2026-10-16.2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script>window.APP_BUILD='2026-10-22';</script>
+<script src="sb-api.js?v=2026-10-22"></script>
 <script src="auth-guard.js?v=2026-10-16.2"></script>
 <script src="nav.js?v=2026-10-16.2"></script>
+<script src="pdf-export.js?v=2026-10-22"></script>
 <script>
 var sb=window.sbClient;
 var CLIENTES=[], PROVS=[], SUCS=[], SUCID={}, FORMAS=['Efectivo','Tarjeta','Virtual'], sucActual='';
@@ -223,6 +226,9 @@ function pintarDeudas(){
     '</div>';
   }).join('');
 }
+var PROVHIST={};   // provId -> { nom, esJunta, saldo, movs (orden original), movsVista (invertido) }
+function fechaCortaProv(m){ return m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; }
+function esCompraMov(m){ return (m.descripcion||'')==='Compra' && !!m.comprobante; }
 async function toggleHist(provId){
   var el=document.getElementById('hist-'+provId); if(!el) return;
   if(!el.hidden){ el.hidden=true; return; }
@@ -235,11 +241,82 @@ async function toggleHist(provId){
   var alcance = (d&&d.todos) ? '' : ((d&&(d.scope||[]).length)?('&sucursales='+encodeURIComponent(d.scope.join(','))):('&sucursal='+encodeURIComponent(sucActual)));
   var r=await window.sf('getMovProveedor&id='+provId+alcance); var movs=(r.ok?r.movimientos:[])||[];
   var esJunta=!!(d&&(d.junta||d.todos));
-  el.innerHTML='<div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th>'+(esJunta?'<th>Local</th>':'')+'<th>Detalle</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th><th></th></tr></thead><tbody>'+
-    (movs.slice().reverse().map(function(m){ var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; var esPago=/pago/i.test(m.tipo);
-      var des=(m.descripcion||''); var borrable=m.id && !(des==='Compra'||des==='Pago en la compra'||/^Gasto a cuenta/i.test(des));
-      return '<tr><td>'+f+'</td>'+(esJunta?('<td>'+(m.local||'')+'</td>'):'')+'<td>'+(m.descripcion||'')+'</td><td>'+(m.comprobante||'')+'</td><td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td><td style="white-space:nowrap;text-align:right;">'+(borrable?('<button class="x-btn" title="Eliminar este movimiento" onclick="borrarMovProv('+m.id+','+provId+')">✕</button>'):'')+'</td></tr>';
-    }).join('') || '<tr><td colspan="'+(esJunta?8:7)+'" class="muted">Sin movimientos.</td></tr>')+'</tbody></table></div>';
+  var movsVista=movs.slice().reverse();
+  PROVHIST[provId]={ nom:(d&&d.proveedor)||('Proveedor '+provId), esJunta:esJunta, saldo:(r.ok?r.saldo:0), movs:movs, movsVista:movsVista };
+  var ncol=(esJunta?8:7);
+  var botones='<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;">'+
+    '<button class="btn-sec" onclick="exportarProvExcel('+provId+')">📥 Excel</button>'+
+    '<button class="btn-sec" onclick="exportarProvPdf('+provId+')">🧾 PDF</button></div>';
+  var filas=movsVista.map(function(m,i){
+    var f=fechaCortaProv(m); var esPago=/pago/i.test(m.tipo);
+    var des=(m.descripcion||''); var esCompra=esCompraMov(m);
+    var borrable=m.id && !(des==='Compra'||des==='Pago en la compra'||/^Gasto a cuenta/i.test(des));
+    var verDet=esCompra?('<button class="mini-btn" onclick="toggleCompraDet('+provId+','+i+')">Ver detalle</button>'):'';
+    var acc=verDet+(borrable?('<button class="x-btn" title="Eliminar este movimiento" onclick="borrarMovProv('+m.id+','+provId+')">✕</button>'):'');
+    return '<tr'+(esCompra?' style="cursor:pointer;" onclick="toggleCompraDet('+provId+','+i+')"':'')+'><td>'+f+'</td>'+(esJunta?('<td>'+(m.local||'')+'</td>'):'')+'<td>'+(m.descripcion||'')+'</td><td>'+(m.comprobante||'')+'</td><td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td><td style="white-space:nowrap;text-align:right;" onclick="event.stopPropagation()">'+acc+'</td></tr>'+
+      (esCompra?('<tr id="cpd-'+provId+'-'+i+'" hidden><td colspan="'+ncol+'" style="background:var(--surface-2);padding:0;"><div id="cpd-box-'+provId+'-'+i+'" style="padding:10px 12px;"></div></td></tr>'):'');
+  }).join('');
+  el.innerHTML=botones+'<div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th>'+(esJunta?'<th>Local</th>':'')+'<th>Detalle</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th><th></th></tr></thead><tbody>'+
+    (filas || '<tr><td colspan="'+ncol+'" class="muted">Sin movimientos.</td></tr>')+'</tbody></table></div>';
+}
+// Detalle expandible de una compra en la cuenta del proveedor (qué se compró).
+var PROVCOMPRADET={};   // 'provId-i' -> {compra, detalle}
+async function toggleCompraDet(provId, i){
+  var row=document.getElementById('cpd-'+provId+'-'+i), box=document.getElementById('cpd-box-'+provId+'-'+i);
+  if(!row||!box) return;
+  if(!row.hidden){ row.hidden=true; return; }
+  row.hidden=false; box.innerHTML='<p class="muted" style="margin:0;">Cargando…</p>';
+  var h=PROVHIST[provId]; var m=(h&&h.movsVista[i])||{};
+  var r=await window.sf('getCompraDetallePorComprobante&proveedorId='+provId+'&comprobante='+encodeURIComponent(m.comprobante||''));
+  if(!r.ok){ box.innerHTML='<p class="muted" style="margin:0;">No se pudo cargar el detalle: '+(r.error||'?')+'</p>'; return; }
+  PROVCOMPRADET[provId+'-'+i]=r;
+  var c=r.compra||{}, det=r.detalle||[];
+  var filas=det.map(function(it){ return '<tr><td>'+(it.nombre||'')+'</td><td class="num">'+it.cantidad+'</td><td class="num">'+fmt$(it.costo_unit)+'</td><td class="num">'+fmt$(it.costo)+'</td></tr>'; }).join('');
+  box.innerHTML='<div style="margin-bottom:6px;"><b>'+(c.comprobante||'')+'</b> <span class="muted">· '+(c.sucursal||'')+' · Total factura '+fmt$(c.total)+'</span></div>'+
+    '<div class="tblwrap"><table class="data"><thead><tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Costo unit.</th><th class="num">Subtotal</th></tr></thead><tbody>'+
+    (filas || '<tr><td colspan="4" class="muted">Sin productos cargados en esta compra.</td></tr>')+'</tbody></table></div>';
+}
+async function exportarProvExcel(provId){
+  var h=PROVHIST[provId]; if(!h || !h.movs.length){ toast('No hay movimientos para exportar','error'); return; }
+  if(typeof XLSX==='undefined'){ toast('No se pudo cargar el exportador','error'); return; }
+  var wb=XLSX.utils.book_new();
+  // Hoja 1: movimientos (estado de cuenta)
+  var aoa=[['Fecha'].concat(h.esJunta?['Local']:[]).concat(['Detalle','Comprobante','Cargo','Pago','Saldo'])];
+  h.movs.forEach(function(m){ var esPago=/pago/i.test(m.tipo);
+    aoa.push([fechaCortaProv(m)].concat(h.esJunta?[m.local||'']:[]).concat([ m.descripcion||'', m.comprobante||'', (esPago?'':Number(m.monto)), (esPago?Number(m.monto):''), Number(m.saldo) ]));
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Cuenta proveedor');
+  // Hoja 2: detalle de cada compra (qué se compró)
+  var compras=h.movs.filter(esCompraMov);
+  if(compras.length){
+    toast('Generando detalle de '+compras.length+' compra(s)…');
+    var det=[['Comprobante','Fecha','Local','Producto','Cantidad','Costo unit.','Subtotal']];
+    for(var i=0;i<compras.length;i++){
+      var m=compras[i], f=fechaCortaProv(m);
+      var r=await window.sf('getCompraDetallePorComprobante&proveedorId='+provId+'&comprobante='+encodeURIComponent(m.comprobante));
+      if(r.ok && (r.detalle||[]).length){
+        r.detalle.forEach(function(it){ det.push([m.comprobante, f, m.local||'', (it.nombre||''), Number(it.cantidad)||0, Number(it.costo_unit)||0, Number(it.costo)||0]); });
+      } else { det.push([m.comprobante, f, m.local||'', '(sin detalle)', '', '', '']); }
+    }
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(det), 'Detalle de compras');
+  }
+  XLSX.writeFile(wb, 'cuenta_'+String(h.nom).replace(/[^\w]+/g,'-')+'.xlsx');
+}
+function exportarProvPdf(provId){
+  var h=PROVHIST[provId]; if(!h || !h.movs.length){ toast('No hay movimientos para exportar','error'); return; }
+  if(!window.POSPDF){ toast('No se pudo cargar el exportador PDF','error'); return; }
+  var cols=['Fecha'].concat(h.esJunta?['Local']:[]).concat(['Detalle','Comprob.','Cargo','Pago','Saldo']);
+  var base=h.esJunta?1:0;
+  var filas=h.movs.map(function(m){ var esPago=/pago/i.test(m.tipo);
+    return [fechaCortaProv(m)].concat(h.esJunta?[m.local||'']:[]).concat([ m.descripcion||'', m.comprobante||'', (esPago?'':fmt$(m.monto)), (esPago?fmt$(m.monto):''), fmt$(m.saldo) ]);
+  });
+  POSPDF.tabla({
+    titulo:'Cuenta de proveedor', entidad:h.nom,
+    metaLineas:[ h.movs.length+' movimiento(s)' ],
+    saldo:h.saldo, saldoTipo:'proveedor',
+    columnas:cols, filas:filas, numericas:[base+3,base+4,base+5],
+    archivo:'cuenta_'+String(h.nom).replace(/[^\w]+/g,'-')+'.pdf'
+  });
 }
 async function borrarMovProv(movId, provId){
   if(!confirm('¿Eliminar este movimiento de la cuenta del proveedor? El saldo se recalcula.')) return;

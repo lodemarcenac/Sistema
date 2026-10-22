@@ -445,6 +445,18 @@
       var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
       return {ok:true, movimientos:(r.data||[]).map(function(x){ return { fecha:x.fecha, delta:Number(x.delta)||0, tipo:x.tipo, ref:x.ref||'', local:idToName[x.sucursal_id]||'' }; })};
     },
+    // Movimientos de stock de un local (sucursal) o de TODA la empresa (sin sucursal),
+    // con rango de fechas opcional. Para el export de movimientos de stock.
+    getMovimientosStock: async function(params){
+      params=params||{};
+      var q=sb.from('stock_movimientos').select('delta,tipo,ref,fecha,sucursal_id,producto:productos(nombre,codigo_interno)').order('fecha',{ascending:false}).limit(10000);
+      if(params.sucursal){ var m=await sucIdMap(); var sid=m[params.sucursal]; if(!sid) return {ok:true, movimientos:[]}; q=q.eq('sucursal_id',sid); }
+      if(params.desde) q=q.gte('fecha',desdeAR(params.desde));
+      if(params.hasta) q=q.lte('fecha',hastaAR(params.hasta));
+      var r=await q; if(r.error) throw r.error;
+      var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
+      return {ok:true, movimientos:(r.data||[]).map(function(x){ return { fecha:x.fecha, delta:Number(x.delta)||0, tipo:x.tipo, ref:x.ref||'', local:idToName[x.sucursal_id]||'', codigo:(x.producto?x.producto.codigo_interno:''), nombre:(x.producto?x.producto.nombre:'') }; })};
+    },
     getStock: async function(){
       var r=await sb.from('stock').select('cantidad, prod:productos(codigo_interno), suc:sucursales(nombre)');
       if(r.error) throw r.error;
@@ -506,6 +518,21 @@
       var r=await sb.from('compras_detalle').select('id,cantidad,costo_unit,costo,producto:productos(codigo_interno,nombre)').eq('compra_id', params.id).order('id');
       if(r.error) throw r.error;
       return {ok:true, detalle:(r.data||[]).map(function(d){ return { id:d.id, codigo:(d.producto?d.producto.codigo_interno:''), nombre:(d.producto?d.producto.nombre:''), cantidad:Number(d.cantidad)||0, costo_unit:Number(d.costo_unit)||0, costo:Number(d.costo)||0 }; })};
+    },
+    // Detalle de una compra CONFIRMADA a partir de su comprobante (+ proveedor, para
+    // desambiguar). Se usa en la cuenta del proveedor para ver qué se compró, igual que
+    // "Ver detalle" de una venta en la cuenta corriente del cliente.
+    getCompraDetallePorComprobante: async function(params){
+      var comp=params&&params.comprobante; if(!comp) throw new Error('Falta comprobante');
+      var q=sb.from('compras').select('id,comprobante,total,fecha,forma_pago,sucursal:sucursales(nombre),detalle:compras_detalle(cantidad,costo_unit,costo,producto:productos(nombre,codigo_interno))').eq('comprobante',comp).eq('estado','completa');
+      if(params.proveedorId) q=q.eq('proveedor_id',params.proveedorId);
+      var r=await q.order('id',{ascending:false}).limit(1).maybeSingle();
+      if(r.error) throw r.error;
+      if(!r.data) return {ok:false, error:'No se encontró la compra '+comp};
+      var c=r.data;
+      return {ok:true,
+        compra:{ id:c.id, comprobante:c.comprobante||'', total:Number(c.total)||0, fecha:c.fecha, formaPago:c.forma_pago||'', sucursal:(c.sucursal?c.sucursal.nombre:'') },
+        detalle:(c.detalle||[]).map(function(d){ return { nombre:(d.producto?(d.producto.nombre||d.producto.codigo_interno):'(s/producto)'), codigo:(d.producto?d.producto.codigo_interno:''), cantidad:Number(d.cantidad)||0, costo_unit:Number(d.costo_unit)||0, costo:Number(d.costo)||0 }; })};
     },
     getComprasConfirmadas: async function(params){
       var m=await sucIdMap(); var sid=params&&params.sucursal?m[params.sucursal]:null;

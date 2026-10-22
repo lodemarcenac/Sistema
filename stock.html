@@ -55,6 +55,18 @@
       <span class="muted" id="imp-res"></span>
     </div>
 
+    <div class="card" style="margin-bottom:14px;">
+      <h3 style="font-size:var(--fs-lg);margin-bottom:4px;">Exportar movimientos de stock</h3>
+      <p class="hint">Entradas y salidas (compras, ventas, ajustes, elaboración, remitos) de un local o de <b>toda la empresa</b>, en un rango de fechas. El PDF sale en formato de reporte.</p>
+      <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+        <div><label style="display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;">Desde</label><input id="mv-desde" type="date" style="padding:7px 9px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></div>
+        <div><label style="display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;">Hasta</label><input id="mv-hasta" type="date" style="padding:7px 9px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></div>
+        <div><label style="display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;">Local</label><select id="mv-local" style="padding:7px 9px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;background:#fff;"></select></div>
+        <button class="btn" onclick="exportMovStock('excel')">📥 Excel</button>
+        <button class="btn-sec" onclick="exportMovStock('pdf')">🧾 PDF</button>
+      </div>
+    </div>
+
     <div class="barra">
       <input type="text" id="q" placeholder="Buscar por código o nombre…" oninput="render()">
       <label class="muted"><input type="checkbox" id="soloBajo" onchange="render()"> Solo bajo mínimo</label>
@@ -77,10 +89,13 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>window.APP_BUILD='2026-10-16.2';</script>
-<script src="sb-api.js?v=2026-10-16.2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script>window.APP_BUILD='2026-10-22';</script>
+<script src="sb-api.js?v=2026-10-22"></script>
 <script src="auth-guard.js?v=2026-10-16.2"></script>
 <script src="nav.js?v=2026-10-16.2"></script>
+<script src="pdf-export.js?v=2026-10-22"></script>
 <script>
 var sb=window.sbClient;
 var PRODS={}, LOCS=[], LOCS_ALL=[], STK={};   // STK: codigo -> { local: cantidad }
@@ -109,7 +124,7 @@ async function iniciar(){
   document.getElementById('resumen').textContent='Cargando…';
   var rp=await window.sf('getProductos'); if(!rp.ok){ toast('Error: '+rp.error,'error'); return; } PRODS=rp.productos||{};
   var rs=await window.sf('getSucursales'); LOCS_ALL=(rs.ok?(rs.sucursales||[]).map(function(s){return s.nombre;}):[]); LOCS=LOCS_ALL;
-  poblarExpLocs();
+  poblarExpLocs(); poblarMvLocal();
   await cargarStock();
   render();
 }
@@ -187,6 +202,45 @@ function exportarExcel(){
   var ws=XLSX.utils.aoa_to_sheet(aoa); var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Stock');
   var nom = sel.length===LOCS.length ? 'stock_base.xlsx' : ('stock_'+sel.join('_').replace(/[^\w]+/g,'-')+'.xlsx');
   XLSX.writeFile(wb, nom);
+}
+
+// ---- EXPORT MOVIMIENTOS DE STOCK (por local o toda la empresa) ----
+function poblarMvLocal(){
+  var sel=document.getElementById('mv-local'); if(!sel) return;
+  sel.innerHTML='<option value="__todos__">Toda la empresa</option>'+LOCS.map(function(l){ return '<option value="'+String(l).replace(/"/g,'&quot;')+'">'+l+'</option>'; }).join('');
+}
+async function exportMovStock(fmtOut){
+  var loc=document.getElementById('mv-local').value;
+  var desde=document.getElementById('mv-desde').value, hasta=document.getElementById('mv-hasta').value;
+  var qs='getMovimientosStock';
+  if(loc && loc!=='__todos__') qs+='&sucursal='+encodeURIComponent(loc);
+  if(desde) qs+='&desde='+desde; if(hasta) qs+='&hasta='+hasta;
+  toast('Generando…');
+  var r=await window.sf(qs); var movs=(r.ok?r.movimientos:[])||[];
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  if(!movs.length){ toast('No hay movimientos para el filtro elegido','error'); return; }
+  var ambito=(loc && loc!=='__todos__')?loc:'Toda la empresa';
+  var nomArch='movimientos_stock_'+ambito.replace(/[^\w]+/g,'-');
+  function fechaLarga(f){ return f?new Date(f).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; }
+  if(fmtOut==='excel'){
+    var aoa=[['Fecha','Local','Código','Producto','Tipo','Referencia','Δ (kg/u)']];
+    movs.forEach(function(m){ aoa.push([ fechaLarga(m.fecha), m.local||'', m.codigo||'', m.nombre||'', m.tipo||'', m.ref||'', Number(m.delta)||0 ]); });
+    var ws=XLSX.utils.aoa_to_sheet(aoa); var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Movimientos');
+    XLSX.writeFile(wb, nomArch+'.xlsx');
+  } else {
+    if(!window.POSPDF){ toast('No se pudo cargar el exportador PDF','error'); return; }
+    var filas=movs.map(function(m){ return [
+      new Date(m.fecha).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}),
+      m.local||'', m.nombre||m.codigo||'', m.tipo||'', m.ref||'', (Number(m.delta)>=0?'+':'')+fmt(m.delta)
+    ]; });
+    var rango=(desde||hasta)?('Período: '+(desde||'inicio')+' → '+(hasta||'hoy')):'Todas las fechas';
+    POSPDF.tabla({
+      titulo:'Movimientos de stock', entidad:ambito,
+      metaLineas:[ rango, movs.length+' movimiento(s)' ],
+      columnas:['Fecha','Local','Producto','Tipo','Ref.','Δ (kg/u)'], filas:filas, numericas:[5],
+      landscape:true, archivo:nomArch+'.pdf'
+    });
+  }
 }
 
 // ---- IMPORT ----

@@ -86,7 +86,7 @@
       <div class="card" id="ccx-detalle" hidden>
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
           <h3 style="margin:0;" id="ccx-nom">Cliente</h3>
-          <div style="display:flex;gap:8px;align-items:center;"><span class="saldo" id="ccx-saldo"></span><button class="btn-sec" onclick="exportarCC()">📥 Exportar Excel</button></div>
+          <div style="display:flex;gap:8px;align-items:center;"><span class="saldo" id="ccx-saldo"></span><button class="btn-sec" onclick="exportarCC()">📥 Excel</button><button class="btn-sec" onclick="exportarCCpdf()">🧾 PDF</button></div>
         </div>
         <div class="abm-nueva" style="border-top:none;padding-top:8px;" id="ccx-pago">
           <div><label>Registrar pago $</label><input id="ccx-monto" type="number" step="0.01"></div>
@@ -119,10 +119,13 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>window.APP_BUILD='2026-10-16.2';</script>
-<script src="sb-api.js?v=2026-10-16.2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script>window.APP_BUILD='2026-10-22';</script>
+<script src="sb-api.js?v=2026-10-22"></script>
 <script src="auth-guard.js?v=2026-10-16.2"></script>
 <script src="nav.js?v=2026-10-16.2"></script>
+<script src="pdf-export.js?v=2026-10-22"></script>
 <script>
 var sb=window.sbClient;
 var CLIENTES=[], LISTAS=[], SUCS=[], LISTAS_FULL=[], FORMAS=['Efectivo','Tarjeta','Virtual'], SALDOSCLI=[], ccxSel=null, ccxMovs=[], ccxNom='', ccxMovsVista=[], ccxVentaCache={};
@@ -351,12 +354,48 @@ async function pagarCCx(){
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   document.getElementById('ccx-monto').value=''; toast('Pago registrado'); verClienteCC(ccxSel,ccxNom); renderCtaCte();
 }
-function exportarCC(){
+function fechaCortaCC(m){ return m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; }
+async function exportarCC(){
   if(!ccxMovs.length){ toast('No hay movimientos para exportar','error'); return; }
+  var wb=XLSX.utils.book_new();
+  // Hoja 1: movimientos (estado de cuenta)
   var aoa=[['Fecha','Concepto','Comprobante','Local','Cargo','Pago','Saldo']];
-  ccxMovs.forEach(function(m){ var esPago=/pago/i.test(m.tipo); aoa.push([ (m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''), m.concepto||'', m.comprobante||'', m.sucursal||'', (esPago?'':Number(m.monto)), (esPago?Number(m.monto):''), Number(m.saldo) ]); });
-  var ws=XLSX.utils.aoa_to_sheet(aoa); var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'CtaCte');
+  ccxMovs.forEach(function(m){ var esPago=/pago/i.test(m.tipo); aoa.push([ fechaCortaCC(m), m.concepto||'', m.comprobante||'', m.sucursal||'', (esPago?'':Number(m.monto)), (esPago?Number(m.monto):''), Number(m.saldo) ]); });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Cuenta corriente');
+  // Hoja 2: detalle de cada venta a cuenta corriente (qué se compró)
+  var ventas=ccxMovs.filter(function(m){ return !/pago/i.test(m.tipo) && m.comprobante; });
+  if(ventas.length){
+    toast('Generando detalle de '+ventas.length+' venta(s)…');
+    var det=[['Comprobante','Fecha','Local','Producto','Cantidad','Importe']];
+    for(var i=0;i<ventas.length;i++){
+      var m=ventas[i], f=fechaCortaCC(m);
+      var r=await window.sf('getVentaDetallePorComprobante&comprobante='+encodeURIComponent(m.comprobante));
+      if(r.ok && (r.detalle||[]).length){
+        r.detalle.forEach(function(it){
+          var esPes=(it.peso!=null && Number(it.peso)>0);
+          var cant=esPes?(Number(it.peso).toFixed(3)+' kg'):((Number(it.cantidad)||1)+' u');
+          det.push([m.comprobante, f, m.sucursal||'', (it.nombre||''), cant, Number(it.precio)||0]);
+        });
+      } else { det.push([m.comprobante, f, m.sucursal||'', '(sin detalle)', '', '']); }
+    }
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(det), 'Detalle de ventas');
+  }
   XLSX.writeFile(wb, 'ctacte_'+String(ccxNom).replace(/[^\w]+/g,'-')+'.xlsx');
+}
+function exportarCCpdf(){
+  if(!ccxMovs.length){ toast('No hay movimientos para exportar','error'); return; }
+  if(!window.POSPDF){ toast('No se pudo cargar el exportador PDF','error'); return; }
+  var saldo=ccxMovs.length?ccxMovs[ccxMovs.length-1].saldo:0;
+  var filas=ccxMovs.map(function(m){ var esPago=/pago/i.test(m.tipo); return [
+    fechaCortaCC(m), m.concepto||'', m.comprobante||'', (esPago?'':fmt$(m.monto)), (esPago?fmt$(m.monto):''), fmt$(m.saldo)
+  ]; });
+  POSPDF.tabla({
+    titulo:'Cuenta corriente', entidad:ccxNom,
+    metaLineas:[ ccxMovs.length+' movimiento(s)' ],
+    saldo:saldo, saldoTipo:'cliente',
+    columnas:['Fecha','Concepto','Comprob.','Cargo','Pago','Saldo'], filas:filas, numericas:[3,4,5],
+    archivo:'ctacte_'+String(ccxNom).replace(/[^\w]+/g,'-')+'.pdf'
+  });
 }
 document.addEventListener('click', function(e){ var b=document.getElementById('ccx-sug'); if(b && !b.hidden && !e.target.closest('#t-ctacte .card')) b.hidden=true; });
 function poblarSelects(){
