@@ -248,8 +248,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.es.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script>window.APP_BUILD='2026-10-16.2';</script>
-<script src="sb-api.js?v=2026-10-16.2"></script>
+<script>window.APP_BUILD='2026-10-22.2';</script>
+<script src="sb-api.js?v=2026-10-22.2"></script>
 <script src="auth-guard.js?v=2026-10-16.2"></script>
 <script src="nav.js?v=2026-10-16.2"></script>
 <script>
@@ -348,6 +348,14 @@ async function renderTablero(){
   // Formas de pago
   var formas=d.formas||{}, sumF=0; Object.keys(formas).forEach(function(k){ sumF+=Number(formas[k])||0; });
   var itemsF=Object.keys(formas).map(function(k){ var v=Number(formas[k])||0; return {label:k, val:v, pct:sumF>0?v/sumF*100:0}; }).sort(function(a,b){return b.val-a.val;});
+  // Cheques emitidos (saldo actual, no del día): suma de los NO anulados del alcance elegido.
+  var chequesTot=0;
+  try{ var rchq=await window.sf('getCheques'+(suc?('&sucursal='+encodeURIComponent(sucNombre())):'')); if(rchq.ok && !rchq.sinTabla){ (rchq.cheques||[]).forEach(function(c){ if(!/anulad/i.test(c.estado||'')) chequesTot+=Number(c.monto)||0; }); } }catch(e){}
+  // Ventas por local (solo con "Todos los locales"): un renglón por local con la venta del día.
+  var itemsLoc=null;
+  if(!suc){
+    try{ var rpl=await sb.rpc('reporte_pnl',{ p_desde:f, p_hasta:f }); if(!rpl.error){ var tl=0; var arr=(rpl.data||[]).map(function(x){ var v=Number(x.ventas)||0; tl+=v; return {label:x.sucursal, val:v}; }); arr.sort(function(a,b){return b.val-a.val;}); arr.forEach(function(it){ it.pct=tl>0?it.val/tl*100:0; }); itemsLoc=arr; } }catch(e){}
+  }
 
   body.innerHTML=
     '<div class="kpis">'+
@@ -357,14 +365,18 @@ async function renderTablero(){
       kpi('Estado de caja', cajaTxt, sucNombre(), cajaCls)+
     '</div>'+
     '<div class="kpis" style="margin-top:12px;">'+
-      kpi('Stock bajo mínimo', fmtN(d.bajo_minimo), 'productos a reponer', Number(d.bajo_minimo)>0?'warn':'good')+
       kpi('A cobrar', fmt$(d.a_cobrar), 'cta cte clientes', '')+
       kpi('A pagar', fmt$(d.a_pagar), 'deuda proveedores', Number(d.a_pagar)>0?'bad':'good')+
+      kpi('Cheques emitidos', fmt$(chequesTot), 'a pagar (no anulados)', Number(chequesTot)>0?'warn':'good')+
+    '</div>'+
+    '<div class="kpis" style="margin-top:12px;">'+
+      kpi('Stock bajo mínimo', fmtN(d.bajo_minimo), 'productos a reponer', Number(d.bajo_minimo)>0?'warn':'good')+
       kpi('Remitos pendientes', fmtN(d.remitos_pend), 'en tránsito', Number(d.remitos_pend)>0?'warn':'good')+
     '</div>'+
     '<div class="seccion">💳 Ventas por forma de pago</div>'+
     '<div class="card">'+barList(itemsF, true)+'</div>'+
-    '<div class="nota">Fecha: '+f+' · '+sucNombre()+'. «A cobrar / A pagar» son saldos actuales (no del día). Margen = ventas − costo (último costo).</div>';
+    (itemsLoc?('<div class="seccion">🏪 Ventas por local</div><div class="card">'+barList(itemsLoc, true)+'</div>'):'')+
+    '<div class="nota">Fecha: '+f+' · '+sucNombre()+'. «A cobrar / A pagar / Cheques emitidos» son saldos actuales (no del día). Margen = ventas − costo (último costo).</div>';
   renderSemana();
 }
 function kpi(lbl,val,sub,cls){ return '<div class="kpi'+(cls?' '+cls:'')+'"><div class="k-lbl">'+lbl+'</div><div class="k-val">'+val+'</div><div class="k-sub">'+sub+'</div></div>'; }

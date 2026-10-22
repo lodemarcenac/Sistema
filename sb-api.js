@@ -239,9 +239,9 @@
     },
     getMovimientosCC: async function(params){
       var id=params&&params.id; if(!id) return {ok:true, movimientos:[], saldo:0};
-      var r=await sb.from('cuenta_corriente').select('fecha,tipo,monto,concepto,comprobante,forma_pago,sucursal_id,ref').eq('cliente_id',id).order('fecha'); if(r.error) throw r.error;
+      var r=await sb.from('cuenta_corriente').select('*').eq('cliente_id',id).order('fecha'); if(r.error) throw r.error;
       var idToName={}; try{ var sn=await sb.from('sucursales').select('id,nombre'); (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; }); }catch(e){}
-      var saldo=0; var movs=(r.data||[]).map(function(m){ var v=Number(m.monto)||0; if(/pago/i.test(m.tipo)) saldo-=v; else saldo+=v; return { fecha:m.fecha, tipo:m.tipo, monto:v, concepto:m.concepto||'', comprobante:m.comprobante||'', formaPago:m.forma_pago||'', sucursalId:m.sucursal_id||null, sucursal:(m.sucursal_id?idToName[m.sucursal_id]||'':''), ref:m.ref||'', saldo:saldo }; });
+      var saldo=0; var movs=(r.data||[]).map(function(m){ var v=Number(m.monto)||0; if(/pago/i.test(m.tipo)) saldo-=v; else saldo+=v; return { fecha:m.fecha, tipo:m.tipo, monto:v, concepto:m.concepto||'', comprobante:m.comprobante||'', formaPago:m.forma_pago||'', sucursalId:m.sucursal_id||null, sucursal:(m.sucursal_id?idToName[m.sucursal_id]||'':''), ref:m.ref||'', observaciones:(m.observaciones||''), saldo:saldo }; });
       return {ok:true, movimientos:movs, saldo:saldo};
     },
     // Detalle de una venta a partir de su comprobante (SIGLA-AAAAMMDD-NNNN).
@@ -264,10 +264,10 @@
       else if(params&&params.sucursal){ var m1=await sucIdMap(); filtrado=true; var one=m1[params.sucursal]; sids=one?[one]:[]; }
       if(filtrado && (!sids||!sids.length)) return {ok:true, movimientos:[], saldo:0};
       var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
-      var q=sb.from('deuda_proveedores').select('id,fecha,tipo,monto,descripcion,comprobante,forma_pago,sucursal_id').eq('proveedor_id',id);
+      var q=sb.from('deuda_proveedores').select('*').eq('proveedor_id',id);
       if(filtrado) q=q.in('sucursal_id',sids);
       var r=await q.order('fecha'); if(r.error) throw r.error;
-      var saldo=0; var movs=(r.data||[]).map(function(m){ var v=Number(m.monto)||0; if(/pago/i.test(m.tipo)) saldo-=v; else saldo+=v; return { id:m.id, fecha:m.fecha, tipo:m.tipo, monto:v, descripcion:m.descripcion||'', comprobante:m.comprobante||'', formaPago:m.forma_pago||'', local:idToName[m.sucursal_id]||'', saldo:saldo }; });
+      var saldo=0; var movs=(r.data||[]).map(function(m){ var v=Number(m.monto)||0; if(/pago/i.test(m.tipo)) saldo-=v; else saldo+=v; return { id:m.id, fecha:m.fecha, tipo:m.tipo, monto:v, descripcion:m.descripcion||'', comprobante:m.comprobante||'', formaPago:m.forma_pago||'', local:idToName[m.sucursal_id]||'', observaciones:(m.observaciones||''), saldo:saldo }; });
       return {ok:true, movimientos:movs, saldo:saldo};
     },
     getProveedoresDeLocal: async function(params){
@@ -919,8 +919,10 @@
     registrarPagoCC: async function(p){
       var m=await sucIdMap();
       var recibeId=(p.sucursal?m[p.sucursal]:null);
-      var pay={ cliente_id:p.clienteId, sucursal_id:recibeId, tipo:(p.tipo||'pago'), monto:Number(p.monto)||0, forma_pago:(p.formaPago||null), concepto:(p.concepto||(p.tipo==='cargo'?'Cargo':'Pago')) };
-      var r=await sb.from('cuenta_corriente').insert(pay); if(r.error) throw r.error;
+      var pay={ cliente_id:p.clienteId, sucursal_id:recibeId, tipo:(p.tipo||'pago'), monto:Number(p.monto)||0, forma_pago:(p.formaPago||null), concepto:(p.concepto||(p.tipo==='cargo'?'Cargo':'Pago')), observaciones:(p.observaciones||null) };
+      var r=await sb.from('cuenta_corriente').insert(pay);
+      if(r.error && /observ/i.test(r.error.message||'')){ delete pay.observaciones; r=await sb.from('cuenta_corriente').insert(pay); }  // columna sin crear: guardar sin observaciones
+      if(r.error) throw r.error;
       // Cuenta financiera entre locales: si el pago lo recibió un local != administrador del cliente,
       // el local que cobró le debe esa plata al local administrador (dueño de la cuenta).
       if(recibeId && (p.tipo||'pago')!=='cargo' && (Number(p.monto)||0)>0){
@@ -947,8 +949,10 @@
     registrarPagoProveedor: async function(p){
       var m=await sucIdMap();
       var fondo=fondoDeForma(p.formaPago);
-      var pay={ proveedor_id:(p.proveedorId||null), cuenta_id:(p.cuentaId||null), sucursal_id:(p.sucursal?m[p.sucursal]:null), tipo:(p.tipo||'pago'), monto:Number(p.monto)||0, forma_pago:(p.formaPago||null), fondo:fondo, descripcion:(p.descripcion||(p.tipo==='cargo'?'Cargo':'Pago')) };
-      var r=await sb.from('deuda_proveedores').insert(pay).select('id').single(); if(r.error) throw r.error;
+      var pay={ proveedor_id:(p.proveedorId||null), cuenta_id:(p.cuentaId||null), sucursal_id:(p.sucursal?m[p.sucursal]:null), tipo:(p.tipo||'pago'), monto:Number(p.monto)||0, forma_pago:(p.formaPago||null), fondo:fondo, descripcion:(p.descripcion||(p.tipo==='cargo'?'Cargo':'Pago')), observaciones:(p.observaciones||null) };
+      var r=await sb.from('deuda_proveedores').insert(pay).select('id').single();
+      if(r.error && /observ/i.test(r.error.message||'')){ delete pay.observaciones; r=await sb.from('deuda_proveedores').insert(pay).select('id').single(); }  // columna sin crear: guardar sin observaciones
+      if(r.error) throw r.error;
       var deudaId=(r.data?r.data.id:null);
       // Si se paga desde la Caja guardada (reserva), descontar la reserva del local.
       if((p.tipo||'pago')==='pago' && fondo==='reserva' && pay.sucursal_id && (Number(p.monto)||0)>0){
