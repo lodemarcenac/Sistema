@@ -15,6 +15,7 @@
   header button{background:#fff;color:var(--brand);border:none;padding:7px 13px;border-radius:var(--radius-sm);font-weight:600;cursor:pointer;font-size:var(--fs-sm);}
   .barra{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
   .barra > input{flex:1;min-width:200px;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;}
+  .barra > select{padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;background:#fff;}
   .barra label{font-size:var(--fs-sm);color:var(--ink-soft);display:flex;align-items:center;gap:5px;}
   .resumen{margin-bottom:8px;}
   .card2{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);}
@@ -108,6 +109,7 @@
     </details>
     <div class="barra">
       <input id="q" placeholder="Buscar por código o nombre..." oninput="render()">
+      <select id="fCat" onchange="render()" title="Filtrar por categoría"><option value="">Todas las categorías</option></select>
       <label><input type="checkbox" id="soloAct" onchange="render()"> Solo activos</label>
       <label title="Permite editar a mano las listas derivadas (Mayorista/Colaborador). Normalmente se calculan solas desde Minorista."><input type="checkbox" id="unlockDeriv" onchange="render()"> <span id="lockIco">🔒</span> Editar derivadas (admin)</label>
       <button class="mini-btn" type="button" onclick="exportarProductos()" style="margin-left:auto;" title="Baja un Excel con todos los productos: datos, costo, precios por lista y stock por sucursal.">⬇️ Exportar a Excel</button>
@@ -297,6 +299,7 @@ function poblarAlta(){
     .concat(Object.keys(PRODS).map(function(c){return PRODS[c].categoria;}).filter(Boolean));
   cats=[...new Set(cats)].sort();
   document.getElementById('cats-list').innerHTML=cats.map(function(c){ return '<option value="'+c+'">'; }).join('');
+  var fc=document.getElementById('fCat'); if(fc){ var sel=fc.value; fc.innerHTML='<option value="">Todas las categorías</option>'+cats.map(function(c){ return '<option value="'+escAttr(c)+'">'+c+'</option>'; }).join(''); fc.value=sel; }
   document.getElementById('alta-precios').innerHTML=LISTAS.map(function(l){
     var d=LDEF[l]||{tipo:'especial'}; var esBase=(d.tipo==='base'), esDeriv=(d.tipo==='derivada');
     var attr = esBase ? ' oninput="recalcAlta()"' : (esDeriv ? ' readonly' : '');
@@ -470,8 +473,9 @@ function acShow(input){
   var r=input.getBoundingClientRect();
   pop.style.left=(r.left+window.scrollX)+'px'; pop.style.top=(r.bottom+window.scrollY)+'px'; pop.style.width=Math.max(r.width,240)+'px'; pop.hidden=false;
 }
-function acPick(ev,i){ if(ev) ev.preventDefault(); var c=acMatches[i]; if(acInput && c) acInput.value=c; document.getElementById('ac-pop').hidden=true; }
-document.addEventListener('input', function(e){ if(e.target.classList && e.target.classList.contains('prod-ac')) acShow(e.target); });
+function codDe(el){ if(!el) return ''; if(el.dataset && el.dataset.cod && PRODS[el.dataset.cod]) return el.dataset.cod; return resolverCod(el.value); }
+function acPick(ev,i){ if(ev) ev.preventDefault(); var c=acMatches[i]; if(acInput && c){ var p=PRODS[c]; acInput.dataset.cod=c; acInput.value=(p&&p.nombre)?p.nombre:c; } document.getElementById('ac-pop').hidden=true; }
+document.addEventListener('input', function(e){ if(e.target.classList && e.target.classList.contains('prod-ac')){ if(e.target.dataset) delete e.target.dataset.cod; acShow(e.target); } });
 document.addEventListener('click', function(e){ var pop=document.getElementById('ac-pop'); if(pop && !pop.hidden && e.target!==acInput && !pop.contains(e.target) && !(e.target.classList&&e.target.classList.contains('prod-ac'))) pop.hidden=true; });
 // ---- Ayuda (cómo cargar oferta / combo) ----
 function ayuda(tipo){
@@ -503,12 +507,12 @@ async function renderOfertasList(){
   }).join('') : '<tr><td colspan="7" style="color:#8891a3">Sin ofertas.</td></tr>';
 }
 async function crearOfertaUI(){
-  var cod=resolverCod(document.getElementById('of-cod').value); var precio=document.getElementById('of-precio').value;
+  var cod=codDe(document.getElementById('of-cod')); var precio=document.getElementById('of-precio').value;
   if(!cod||!PRODS[cod]){ toast('Elegí un producto válido','error'); return; }
   if(precio===''||Number(precio)<=0){ toast('Precio inválido','error'); return; }
   var r=await window.sp('crearOferta',{ codigo:cod, precio:precio, tipo:document.getElementById('of-tipo').value, kilaje:document.getElementById('of-kil').value, kilajeMax:document.getElementById('of-kilmax').value, desde:document.getElementById('of-desde').value, hasta:document.getElementById('of-hasta').value, locales:(document.getElementById('of-loc').value||'todos').trim(), formaPago:document.getElementById('of-forma').value });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
-  toast('Oferta guardada'); ['of-cod','of-precio','of-kil','of-kilmax','of-desde','of-hasta'].forEach(function(id){document.getElementById(id).value='';});
+  toast('Oferta guardada'); ['of-cod','of-precio','of-kil','of-kilmax','of-desde','of-hasta'].forEach(function(id){var el=document.getElementById(id); el.value=''; if(el.dataset) delete el.dataset.cod;});
   renderOfertasList();
 }
 async function eliminarOfertaUI(cod){ if(!confirm('¿Eliminar la oferta de '+cod+'?')) return; var r=await window.sp('eliminarOferta',{codigo:cod}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } toast('Oferta eliminada'); renderOfertasList(); }
@@ -533,7 +537,7 @@ async function crearComboUI(){
   var tipo=document.getElementById('cb-tipo').value;
   var comps=[];
   document.querySelectorAll('#cb-comps .abm-nueva').forEach(function(row){
-    var cod=resolverCod(row.querySelector('.cb-cod').value); if(!cod||!PRODS[cod]) return;
+    var cod=codDe(row.querySelector('.cb-cod')); if(!cod||!PRODS[cod]) return;
     comps.push({ codigo:cod, minimo:row.querySelector('.cb-min').value, precioPromo:row.querySelector('.cb-pp').value, pesoUnitario:row.querySelector('.cb-pu').value });
   });
   if(tipo==='cerrado'){
@@ -646,10 +650,12 @@ async function crearProductoUI(){
 function render(){
   var q=(document.getElementById('q').value||'').trim().toLowerCase();
   var soloAct=document.getElementById('soloAct').checked;
+  var fCatEl=document.getElementById('fCat'); var fCat=fCatEl?(fCatEl.value||''):'';
   var li=document.getElementById('lockIco'); if(li) li.textContent=unlockDeriv()?'🔓':'🔒';
   var codes=Object.keys(PRODS).filter(function(cod){
     var p=PRODS[cod];
     if(soloAct && p.activo===false) return false;
+    if(fCat && (p.categoria||'')!==fCat) return false;
     if(q){ if((cod+' '+(p.nombre||'')).toLowerCase().indexOf(q)<0) return false; }
     return true;
   }).sort(function(a,b){ return (PRODS[a].nombre||'').localeCompare(PRODS[b].nombre||''); });
