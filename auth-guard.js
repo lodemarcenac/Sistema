@@ -18,7 +18,7 @@
   function ocultarContenido(){ if(document.getElementById('auth-cargando')) return; try{ var c=document.createElement('div'); c.id='auth-cargando'; c.style.cssText='position:fixed;inset:0;z-index:99998;background:#fff;display:flex;align-items:center;justify-content:center;color:#8891a3;font:14px system-ui,sans-serif;'; c.textContent='Cargando…'; (document.body||document.documentElement).appendChild(c); setTimeout(mostrarContenido,8000); }catch(e){} }
   function mostrarContenido(){ var c=document.getElementById('auth-cargando'); if(c&&c.parentNode) c.parentNode.removeChild(c); }
   function mostrarLogin(){ mostrarContenido(); var st=document.getElementById('hide-login-flash'); if(st) st.remove(); var lg=document.getElementById('login'); if(lg){ lg.hidden=false; lg.style.display=''; } }
-  var NAVMAP = { 'index.html':'tableros','reportes.html':'reportes','productos.html':'productos','clientes.html':'clientes','stock.html':'stock','compras.html':'compras','remitos.html':'remitos','cuentas.html':'cuentas','conciliacion.html':'conciliacion','caja.html':'caja','ventas.html':'ventas','configuracion.html':'configuracion','usuarios.html':'usuarios' };
+  var NAVMAP = { 'index.html':'tableros','reportes.html':'reportes','productos.html':'productos','clientes.html':'clientes','stock.html':'stock','compras.html':'compras','remitos.html':'remitos','cuentas.html':'cuentas','conciliacion.html':'conciliacion','caja.html':'caja','ventas.html':'ventas','auditoria.html':'auditoria','configuracion.html':'configuracion','usuarios.html':'usuarios' };
   function mkPuede(esAdmin, permisos){ var set={}; (permisos||[]).forEach(function(p){ set[p]=true; }); return function(k){ return !!(esAdmin || set['*'] || set[k]); }; }
   async function applyGuard(){
     try{
@@ -57,7 +57,7 @@
     var here=(location.pathname.split('/').pop()||'index.html').toLowerCase();
     var mod=NAVMAP[here];
     if(!mod || window.PERM.puede(mod)) return false;   // página sin módulo, o permitida
-    var orden=['ventas.html','caja.html','index.html','productos.html','clientes.html','stock.html','compras.html','remitos.html','cuentas.html','conciliacion.html','reportes.html','configuracion.html','usuarios.html'];
+    var orden=['ventas.html','caja.html','index.html','productos.html','clientes.html','stock.html','compras.html','remitos.html','cuentas.html','conciliacion.html','auditoria.html','reportes.html','configuracion.html','usuarios.html'];
     for(var i=0;i<orden.length;i++){ var m=NAVMAP[orden[i]]; if(m && orden[i]!==here && window.PERM.puede(m)){ location.replace(orden[i]); return true; } }
     return false;   // no tiene ninguna página permitida: no redirige (evita loop)
   }

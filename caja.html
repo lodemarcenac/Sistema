@@ -110,7 +110,7 @@
 
     <div class="card" style="margin-top:16px;">
       <h3>Historial de cajas</h3>
-      <div class="tblwrap"><table class="data"><thead><tr><th>Local</th><th>Cajero</th><th>Apertura</th><th>Cierre</th><th class="num">Apertura $</th><th class="num">Esperado</th><th class="num">Contado</th><th class="num">Diferencia</th><th class="num">A reserva</th><th class="num">Clover sistema</th><th class="num">Clover informado</th><th class="num">Clover dif.</th></tr></thead><tbody id="hist-tbody"></tbody></table></div>
+      <div class="tblwrap"><table class="data"><thead><tr><th>Local</th><th>Cajero</th><th>Apertura</th><th>Cierre</th><th class="num">Apertura $</th><th class="num">Esperado</th><th class="num">Contado</th><th class="num">Diferencia</th><th class="num">A reserva</th><th class="num">Clover sistema</th><th class="num">Clover informado</th><th class="num">Clover dif.</th><th></th></tr></thead><tbody id="hist-tbody"></tbody></table></div>
     </div>
   </main>
 </div>
@@ -118,10 +118,10 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-10-22.3';</script>
-<script src="sb-api.js?v=2026-10-22.2"></script>
-<script src="auth-guard.js?v=2026-10-16.2"></script>
-<script src="nav.js?v=2026-10-16.2"></script>
+<script>window.APP_BUILD='2026-10-26.1';</script>
+<script src="sb-api.js?v=2026-10-26.1"></script>
+<script src="auth-guard.js?v=2026-10-26.1"></script>
+<script src="nav.js?v=2026-10-26.1"></script>
 <script>
 var sb=window.sbClient;
 var SUCS=[], sucActual='', cajaActual=null;
@@ -145,7 +145,7 @@ async function iniciar(){
 }
 function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarTodo(); }
 async function cargarTodo(){ await cargarCaja(); await cargarReserva(); await cargarHist(); }
-document.addEventListener('perm-listo', function(){ var ca=document.getElementById('ab-cajero'); if(ca && !ca.value) ca.value=(window.PERM&&(window.PERM.nombre||window.PERM.usuario||window.PERM.email))||''; });
+document.addEventListener('perm-listo', function(){ var ca=document.getElementById('ab-cajero'); if(ca && !ca.value) ca.value=(window.PERM&&(window.PERM.nombre||window.PERM.usuario||window.PERM.email))||''; if(sucActual) cargarHist(); });
 
 async function cargarCaja(){
   var r=await window.sf('getCajaAbierta&sucursal='+encodeURIComponent(sucActual)); cajaActual=(r.ok?r.caja:null);
@@ -269,8 +269,23 @@ async function cargarHist(){
     var cInf=(c.cloverInformado!=null?fmt$(c.cloverInformado):'—');
     var cDif='—', cDifcls='';
     if(c.cloverSistema!=null && c.cloverInformado!=null){ var dd=+(c.cloverInformado-c.cloverSistema).toFixed(2); cDif=(dd>=0?'+':'')+fmt$(dd); cDifcls=Math.abs(dd)<0.5?'':'style="color:var(--bad);font-weight:700;"'; }
-    return '<tr><td>'+c.local+'</td><td>'+(c.cajero||'')+'</td><td>'+fa+'</td><td>'+fc+'</td><td class="num">'+fmt$(c.apertura)+'</td><td class="num">'+(c.cerrada?fmt$(c.esperado):'—')+'</td><td class="num">'+(c.cerrada?fmt$(c.contado):'—')+'</td><td class="num" '+difcls+'>'+(c.cerrada?((c.diferencia>=0?'+':'')+fmt$(c.diferencia)):'—')+'</td><td class="num">'+(c.cerrada?fmt$(c.aReserva):'—')+'</td><td class="num">'+cSis+'</td><td class="num">'+cInf+'</td><td class="num" '+cDifcls+'>'+cDif+'</td></tr>';
-  }).join('') || '<tr><td colspan="12" class="muted">Sin cajas.</td></tr>';
+    var adm='';
+    if(window.PERM && window.PERM.esAdmin){
+      adm=(c.cerrada?'<button class="mini-btn" onclick="reabrirCajaUI('+c.id+')">Reabrir</button>':'')+
+          '<button class="mini-btn" style="color:var(--bad);border-color:#f0c9c9;" onclick="eliminarCajaUI('+c.id+')">Eliminar</button>';
+    }
+    return '<tr><td>'+c.local+'</td><td>'+(c.cajero||'')+'</td><td>'+fa+'</td><td>'+fc+'</td><td class="num">'+fmt$(c.apertura)+'</td><td class="num">'+(c.cerrada?fmt$(c.esperado):'—')+'</td><td class="num">'+(c.cerrada?fmt$(c.contado):'—')+'</td><td class="num" '+difcls+'>'+(c.cerrada?((c.diferencia>=0?'+':'')+fmt$(c.diferencia)):'—')+'</td><td class="num">'+(c.cerrada?fmt$(c.aReserva):'—')+'</td><td class="num">'+cSis+'</td><td class="num">'+cInf+'</td><td class="num" '+cDifcls+'>'+cDif+'</td><td style="white-space:nowrap;">'+adm+'</td></tr>';
+  }).join('') || '<tr><td colspan="13" class="muted">Sin cajas.</td></tr>';
+}
+async function reabrirCajaUI(id){
+  if(!confirm('¿Reabrir este cierre? La caja vuelve a quedar ABIERTA y se revierte el depósito a la reserva. Después podés re-cerrarla con los números corregidos.')) return;
+  try{ var r=await window.sp('reabrirCaja',{ id:id }); if(!r.ok){ toast('Error: '+(r.error||''),'error'); return; } toast('Cierre reabierto'); cargarTodo(); }
+  catch(e){ toast('Error: '+(e.message||e),'error'); }
+}
+async function eliminarCajaUI(id){
+  if(!confirm('¿ELIMINAR esta caja por completo? Se borra la apertura y el cierre, y se revierte el depósito a la reserva. Esta acción no se puede deshacer.')) return;
+  try{ var r=await window.sp('eliminarCaja',{ id:id }); if(!r.ok){ toast('Error: '+(r.error||''),'error'); return; } toast('Caja eliminada'); cargarTodo(); }
+  catch(e){ toast('Error: '+(e.message||e),'error'); }
 }
 </script>
 </body>

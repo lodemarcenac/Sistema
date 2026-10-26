@@ -17,6 +17,7 @@
     ['remitos.html','🔄','Remitos internos','remitos'],
     ['cuentas.html','📒','Deudas a Pagar','cuentas'],
     ['conciliacion.html','💳','Conciliación Clover','conciliacion'],
+    ['auditoria.html','🔎','Auditoría','auditoria'],
     ['configuracion.html','⚙️','Configuración','configuracion'],
     ['usuarios.html','👤','Usuarios y roles','usuarios']
   ];

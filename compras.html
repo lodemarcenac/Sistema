@@ -197,10 +197,10 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-10-22.3';</script>
-<script src="sb-api.js?v=2026-10-22.2"></script>
-<script src="auth-guard.js?v=2026-10-16.2"></script>
-<script src="nav.js?v=2026-10-16.2"></script>
+<script>window.APP_BUILD='2026-10-26.1';</script>
+<script src="sb-api.js?v=2026-10-26.1"></script>
+<script src="auth-guard.js?v=2026-10-26.1"></script>
+<script src="nav.js?v=2026-10-26.1"></script>
 <script>
 var sb=window.sbClient;
 var PRODS={}, SUCS=[], PROVS=[], CG=[], FORMAS=['Efectivo','Tarjeta','Virtual','Cuenta Corriente'];
@@ -555,7 +555,19 @@ async function guardarGastoUI(){
   if(/guard/i.test(forma)){ await window.sp('movReserva',{ sucursal:sucActual, tipo:'egreso', monto:sum, concepto:'Gasto'+(desc?(': '+desc):'') }); }
   // Gasto a cuenta corriente del proveedor -> genera deuda con ese proveedor
   if(/cuenta\s*corriente/i.test(forma) && base.proveedorId){ await window.sp('registrarPagoProveedor',{ proveedorId:Number(base.proveedorId), sucursal:sucActual, tipo:'cargo', monto:sum, formaPago:forma, descripcion:'Gasto a cuenta'+(desc?(': '+desc):'') }); }
-  toast('Gasto guardado'+(splits.length>1?(' en '+splits.length+' locales'):'')); cancelarEdicionGasto(); cargarGastos();
+  toast('Gasto guardado'+(splits.length>1?(' en '+splits.length+' locales'):'')); limpiarFormGasto(); cargarGastos();
+}
+// Deja el formulario de gasto en blanco (todos los campos) para cargar el siguiente.
+function limpiarFormGasto(){
+  ['g-desc','g-comp','g-monto'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
+  var fc=document.getElementById('g-fecha'); if(fc) fc.value=new Date().toLocaleDateString('en-CA');
+  var cat=document.getElementById('g-cat'); if(cat) cat.value=''; onCatGasto();
+  var prov=document.getElementById('g-prov'); if(prov) prov.value='';
+  var fp=document.getElementById('g-fp'); if(fp) fp.selectedIndex=0; onFormaGasto();
+  var mu=document.getElementById('g-multi'); if(mu) mu.checked=false;
+  var one=document.getElementById('g-local-uno'); if(one) one.value=sucActual;
+  renderImput();
+  var d=document.getElementById('g-desc'); if(d) d.focus();
 }
 function editarGasto(id){
   var g=GASTOS.find(function(x){return x.id===id;}); if(!g) return;
@@ -570,7 +582,7 @@ function editarGasto(id){
   var nombre=SUCID[g.destinatarioId]||''; var one=document.getElementById('g-local-uno'); if(one && nombre) one.value=nombre;
   window.scrollTo({top:0,behavior:'smooth'});
 }
-function cancelarEdicionGasto(){ gastoEditId=null; document.getElementById('g-titulo').textContent='Nuevo gasto'; document.getElementById('g-cancel').hidden=true; ['g-monto','g-comp','g-desc'].forEach(function(id){document.getElementById(id).value='';}); var mu=document.getElementById('g-multi'); if(mu) mu.checked=false; renderImput(); }
+function cancelarEdicionGasto(){ gastoEditId=null; document.getElementById('g-titulo').textContent='Nuevo gasto'; document.getElementById('g-cancel').hidden=true; limpiarFormGasto(); }
 async function borrarGasto(id){ if(!confirm('¿Eliminar este gasto?')) return; var r=await window.sp('eliminarGasto',{id:id}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } toast('Gasto eliminado'); cargarGastos(); }
 
 // ---- ELABORACIÓN ----
