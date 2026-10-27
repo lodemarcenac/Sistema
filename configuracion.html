@@ -166,7 +166,7 @@
       </div>
       <div class="card">
         <h3>Aranceles y plazos por medio de pago</h3>
-        <p class="hint">% de descuento y días hábiles hasta el depósito, por medio. Sirve para calcular el <b>neto esperado</b> y la <b>fecha estimada de acreditación</b> en Conciliación. El «Medio» debe coincidir con el nombre que manda tu terminal Clover. Hoy tu terminal reporta: <b>Debit Card</b>, <b>Credit Card</b>, <b>Prepaid Card</b> y <b>QR PosNet</b> (no distingue mayúsculas/espacios).</p>
+        <p class="hint">% de descuento y días hábiles hasta el depósito, por <b>medio de pago</b> (el «Medio» es la primera columna). Se usa en dos lugares: (1) el <b>neto esperado</b> en Conciliación — ahí el medio coincide con lo que reporta tu terminal Clover (<b>Debit Card</b>, <b>Credit Card</b>, <b>Prepaid Card</b>, <b>QR PosNet</b>); y (2) el <b>neto que se cruza al grupo cobrador</b> cuando vendés con tarjeta en otro grupo — ahí el medio coincide con la <b>forma de pago</b> que elegís al cobrar en Ventas. Abajo se listan solos todos los medios posibles: completá % y días y tocá <b>Agregar</b>. Si el medio no está cargado, el cruce se hace en bruto (0%).</p>
         <div class="tblwrap"><table class="cfg"><thead><tr><th>Medio</th><th>Arancel %</th><th>Días hábiles</th><th></th></tr></thead><tbody id="cv-aranc-tbody"></tbody></table></div>
         <div class="fp-row" style="border:none;margin-top:8px;">
           <input type="text" id="cv-na-medio" placeholder="Medio (ej. Credit Card)">
@@ -211,10 +211,10 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-10-26.1';</script>
-<script src="sb-api.js?v=2026-10-26.1"></script>
-<script src="auth-guard.js?v=2026-10-26.1"></script>
-<script src="nav.js?v=2026-10-26.1"></script>
+<script>window.APP_BUILD='2026-10-27.2';</script>
+<script src="sb-api.js?v=2026-10-27.2"></script>
+<script src="auth-guard.js?v=2026-10-27.2"></script>
+<script src="nav.js?v=2026-10-27.2"></script>
 <script>
 var sb=window.sbClient;
 var FORMAS=[{nombre:'Efectivo',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Tarjeta',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Virtual',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Cuenta Corriente',cta:true,facturar:false,cobro:true,pago:true}];
@@ -364,15 +364,43 @@ async function quitarCvCuenta(sid){
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   toast('Quitada'); var r1=await window.sf('getCloverCuentas'); CV_ESTADO=(r1.ok?r1.cuentas:{})||{}; renderCvTerm();
 }
+// Medios POSIBLES que el sistema va "recolectando": los que reporta la terminal Clover
+// (para Conciliación) + las formas de pago no-efectivo configuradas (lo que ve la venta,
+// para el cruce entre grupos). Se listan solos como filas a completar.
+var CV_SUG=[];
+function medioEsEfectivo(n){ return /efectivo/i.test(String(n||'')); }
+function mediosPosibles(){
+  var set={}, orden=[];
+  ['Debit Card','Credit Card','Prepaid Card','QR PosNet'].forEach(function(m){ var k=m.toLowerCase(); if(!set[k]){ set[k]=m; orden.push(m); } });
+  (FORMAS||[]).forEach(function(f){ if(f && f.nombre && !f.cta && !medioEsEfectivo(f.nombre)){ var k=String(f.nombre).toLowerCase(); if(!set[k]){ set[k]=f.nombre; orden.push(f.nombre); } } });
+  return orden;
+}
 function renderCvAranc(){
-  document.getElementById('cv-aranc-tbody').innerHTML = CV_ARANC.map(function(a,i){
+  var saved={}; CV_ARANC.forEach(function(a){ saved[String(a.medio||'').toLowerCase()]=true; });
+  var filas = CV_ARANC.map(function(a,i){
     return '<tr>'+
-      '<td>'+a.medio+'</td>'+
+      '<td>'+escAttr(a.medio)+'</td>'+
       '<td><input type="number" step="0.01" class="w-cod" id="cva-p-'+i+'" value="'+a.arancel_pct+'" onchange="guardarCvArancel('+i+')"></td>'+
       '<td><input type="number" class="w-cod" id="cva-d-'+i+'" value="'+a.dias+'" onchange="guardarCvArancel('+i+')"></td>'+
       '<td><button class="x-btn" title="Eliminar" onclick="delCvArancel('+i+')">✕</button></td>'+
     '</tr>';
-  }).join('') || '<tr><td colspan="4" style="color:var(--muted)">Sin aranceles. Agregá abajo.</td></tr>';
+  });
+  CV_SUG = mediosPosibles().filter(function(m){ return !saved[m.toLowerCase()]; });
+  var sug = CV_SUG.map(function(m,j){
+    return '<tr>'+
+      '<td>'+escAttr(m)+' <span class="muted" style="font-size:.82em;">· sin cargar</span></td>'+
+      '<td><input type="number" step="0.01" class="w-cod" id="cvs-p-'+j+'" placeholder="0"></td>'+
+      '<td><input type="number" class="w-cod" id="cvs-d-'+j+'" placeholder="0"></td>'+
+      '<td><button class="btn-sec" onclick="agregarSug('+j+')">Agregar</button></td>'+
+    '</tr>';
+  });
+  document.getElementById('cv-aranc-tbody').innerHTML = (filas.join('')+sug.join('')) || '<tr><td colspan="4" style="color:var(--muted)">Sin medios. Agregá abajo.</td></tr>';
+}
+async function agregarSug(j){
+  var medio=CV_SUG[j]; if(!medio) return;
+  var r=await window.sp('guardarCloverArancel',{ medio:medio, arancel_pct:document.getElementById('cvs-p-'+j).value, dias:document.getElementById('cvs-d-'+j).value });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  var r2=await window.sf('getCloverAranceles'); CV_ARANC=(r2.ok?r2.aranceles:[])||[]; renderCvAranc(); toast('Arancel agregado');
 }
 async function guardarCvArancel(i){
   var a=CV_ARANC[i];
@@ -480,10 +508,10 @@ function renderGrupos(){
       return '<span class="tag">'+escAttr(l.nombre)+'<button class="x-btn" title="Sacar del grupo" onclick="sacarLocal('+l.id+')">✕</button></span>';
     }).join('') || '<span class="muted" style="font-size:.85em;">Sin locales</span>';
     var opts=todos.filter(function(l){ return l.grupo!==g.id; }).map(function(l){ return '<option value="'+l.id+'">'+escAttr(l.nombre)+(l.grupo==null?' (sin grupo)':'')+'</option>'; }).join('');
-    return '<div class="card" style="margin-bottom:10px;padding:12px;">'+
+    return '<div style="border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;background:var(--surface-2);">'+
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'+
         '<input type="text" value="'+escAttr(g.nombre)+'" onchange="renombrarGrupo('+g.id+',this.value)" style="max-width:220px;font-weight:600;">'+
-        '<label style="display:flex;align-items:center;gap:5px;font-size:.9em;'+(g.cobrador?'color:var(--ok,#16a34a);font-weight:600;':'')+'"><input type="radio" name="grp-cobrador" '+(g.cobrador?'checked':'')+' onchange="marcarCobrador('+g.id+')"> 💳 Cobrador no-efectivo</label>'+
+        '<label style="display:flex;align-items:center;gap:5px;font-size:var(--fs-sm);'+(g.cobrador?'color:var(--good);font-weight:700;':'color:var(--muted);')+'"><input type="radio" name="grp-cobrador" '+(g.cobrador?'checked':'')+' onchange="marcarCobrador('+g.id+')"> 💳 Cobrador no-efectivo</label>'+
         '<button class="x-btn" title="Eliminar grupo" style="margin-left:auto;" onclick="delGrupo('+g.id+',\''+escAttr(g.nombre).replace(/'/g,"\\'")+'\')">✕</button>'+
       '</div>'+
       '<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'+chips+'</div>'+

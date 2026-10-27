@@ -122,12 +122,12 @@
       <div class="card" style="margin-bottom:14px;">
         <h3>Entrega de dinero entre grupos</h3>
         <p class="resumen" style="margin-bottom:12px;">Registrá una entrega de efectivo de un grupo a otro. El grupo que <b>recibe</b> queda debiéndole al que <b>entrega</b> (y si había saldo al revés, lo compensa).</p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
-          <label>Entrega (da)<br><select id="ent-origina"></select></label>
-          <label>Recibe<br><select id="ent-recibe"></select></label>
-          <label>Monto<br><input type="number" id="ent-monto" min="0" step="0.01" style="max-width:140px;"></label>
-          <label style="flex:1;min-width:160px;">Concepto (opcional)<br><input type="text" id="ent-concepto" placeholder="Ej. adelanto, préstamo…"></label>
-          <button class="btn-sec" onclick="registrarEntrega()">Registrar entrega</button>
+        <div class="abm-nueva">
+          <div><label>Entrega (da)</label><select id="ent-origina"></select></div>
+          <div><label>Recibe</label><select id="ent-recibe"></select></div>
+          <div><label>Monto $</label><input type="number" id="ent-monto" min="0" step="0.01"></div>
+          <div style="grid-column:1/-1;"><label>Concepto (opcional)</label><input type="text" id="ent-concepto" placeholder="Ej. adelanto, préstamo…"></div>
+          <button class="btn" onclick="registrarEntrega()">Registrar entrega</button>
         </div>
       </div>
       <div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th><th>Origen (debe)</th><th>Destino (acreedor)</th><th>Concepto</th><th class="num">Monto</th></tr></thead><tbody id="inter-tbody"></tbody></table></div></div>
@@ -141,10 +141,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script>window.APP_BUILD='2026-10-26.1';</script>
-<script src="sb-api.js?v=2026-10-26.1"></script>
-<script src="auth-guard.js?v=2026-10-26.1"></script>
-<script src="nav.js?v=2026-10-26.1"></script>
+<script>window.APP_BUILD='2026-10-27.2';</script>
+<script src="sb-api.js?v=2026-10-27.2"></script>
+<script src="auth-guard.js?v=2026-10-27.2"></script>
+<script src="nav.js?v=2026-10-27.2"></script>
 <script src="pdf-export.js?v=2026-10-22.2"></script>
 <script>
 var sb=window.sbClient;
