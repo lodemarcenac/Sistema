@@ -590,6 +590,65 @@
   // se trata como grupo propio ('L'+id) para no fusionarlo por error con otros.
   var _grpMap=null;
   async function grupoMap(){ if(_grpMap) return _grpMap; var r=await sb.from('sucursales').select('id,grupo_id'); _grpMap={}; (r.data||[]).forEach(function(s){ _grpMap[s.id]= s.grupo_id || ('L'+s.id); }); return _grpMap; }
+
+  // Al CERRAR la caja de un local, genera el cruce diario al GRUPO cobrador (el que cobra
+  // todas las liquidaciones, marcado en Config → Grupos). Fuente de verdad = Clover, NO la
+  // forma de pago de la venta (que puede estar mal marcada). Dos movimientos:
+  //   1) Clover (tarjeta/QR): NETO estimado = bruto por medio − arancel − impuestos (misma
+  //      fórmula que Conciliación; aranceles + IVA/percepción/IIBB de Config → Clover).
+  //   2) Virtual: total de ventas con forma de pago Virtual del turno, DIRECTO (sin descuento),
+  //      porque no pasa por Clover pero lo cobra el mismo grupo por otro canal.
+  // El grupo cobrador queda debiéndole esos montos al grupo del local. Idempotente por caja
+  // (borra los cruces previos de esa caja antes de reinsertar). Nunca rompe el cierre.
+  async function generarCruceCloverVirtual(cajaId){
+    var cj=await sb.from('cajas').select('sucursal_id,abierta_at,cerrada_at').eq('id',cajaId).maybeSingle();
+    if(cj.error || !cj.data) return;
+    var sid=cj.data.sucursal_id, ini=cj.data.abierta_at, fin=cj.data.cerrada_at||new Date().toISOString();
+    var gm=await grupoMap();
+    var grupoVenta=gm[sid];
+    var cob=await sb.from('grupos').select('id').eq('cobra_no_efectivo',true).maybeSingle();
+    var grupoCobrador=(cob.data?cob.data.id:null);
+    if(!grupoVenta || !grupoCobrador || String(grupoVenta)===String(grupoCobrador)) return;  // mismo grupo / sin cobrador: no hay cruce
+    // Limpiar cruces previos de esta caja (re-cierre / re-proceso) para no duplicar.
+    await sb.from('cuentas_internas').delete().in('ref',['caja:'+cajaId+':clover','caja:'+cajaId+':virtual']);
+
+    // 1) CLOVER (neto estimado por medio).
+    try{
+      var ca=await readers.getCloverAutoCaja({id:cajaId});
+      if(ca && ca.ok && ca.configurado && ca.porMedio){
+        var ar=await readers.getCloverAranceles(); var ARA={}; ((ar&&ar.aranceles)||[]).forEach(function(a){ ARA[String(a.medio||'').toLowerCase().trim()]=Number(a.arancel_pct)||0; });
+        var IMP={iva:21,percep:3,iibb:0.5};
+        try{ var cg=await readers.getConfigGeneral(); if(cg&&cg.ok&&cg.config&&cg.config.clover_imp){ var o=JSON.parse(cg.config.clover_imp)||{}; if(o.iva!=null)IMP.iva=Number(o.iva); if(o.percep!=null)IMP.percep=Number(o.percep); if(o.iibb!=null)IMP.iibb=Number(o.iibb); } }catch(e){}
+        var neto=0;
+        Object.keys(ca.porMedio).forEach(function(medio){
+          var bruto=Number(ca.porMedio[medio])||0; if(!(bruto>0)) return;
+          var pct=ARA[String(medio||'').toLowerCase().trim()]||0;            // sin arancel cargado → 0% (va casi bruto)
+          var arancel=bruto*pct/100;
+          var imp=arancel*((Number(IMP.iva)||0)+(Number(IMP.percep)||0))/100 + bruto*(Number(IMP.iibb)||0)/100;
+          neto += (bruto - arancel - imp);
+        });
+        neto=Math.round(neto*100)/100;
+        if(neto>0){
+          await sb.from('cuentas_internas').insert({ grupo_origen:grupoCobrador, grupo_destino:grupoVenta, tipo:'clover', concepto:'Clover (neto estimado) acreditado al grupo cobrador', monto:neto, ref:'caja:'+cajaId+':clover' });
+        }
+      }
+    }catch(e){}
+
+    // 2) VIRTUAL (total del turno, directo).
+    try{
+      var vq=await sb.from('ventas').select('id').eq('sucursal_id',sid).gte('fecha',ini).lte('fecha',fin).neq('estado','anulada');
+      var ids=((vq.data)||[]).map(function(v){ return v.id; });
+      var virt=0;
+      if(ids.length){
+        var pq=await sb.from('pagos').select('monto,metodo').in('venta_id',ids).ilike('metodo','virtual%');
+        ((pq.data)||[]).forEach(function(x){ virt += Number(x.monto)||0; });
+      }
+      virt=Math.round(virt*100)/100;
+      if(virt>0){
+        await sb.from('cuentas_internas').insert({ grupo_origen:grupoCobrador, grupo_destino:grupoVenta, tipo:'virtual', concepto:'Virtual acreditado al grupo cobrador', monto:virt, ref:'caja:'+cajaId+':virtual' });
+      }
+    }catch(e){}
+  }
   // Mapa auth.uid -> nombre de usuario (para "cargado por"). Cacheado por sesión.
   var _perfN=null;
   async function perfilNombres(){ if(_perfN) return _perfN; _perfN={}; try{ var r=await sb.from('perfiles').select('usuario_id,nombre,usuario'); (r.data||[]).forEach(function(p){ if(p.usuario_id) _perfN[p.usuario_id]=p.nombre||p.usuario||''; }); }catch(e){} return _perfN; }
@@ -1178,7 +1237,10 @@
       var r=await sb.rpc('cerrar_caja',{ p_caja_id:p.id, p_contado:Number(p.contado)||0, p_queda:Number(p.queda)||0, p_reserva:Number(p.reserva)||0,
         p_clover_sistema:(p.cloverSistema==null||p.cloverSistema===''?null:Number(p.cloverSistema)),
         p_clover_informado:(p.cloverInformado==null||p.cloverInformado===''?null:Number(p.cloverInformado)) });
-      if(r.error) throw r.error; return r.data||{ok:true};
+      if(r.error) throw r.error;
+      // Cruce diario al grupo cobrador (Clover neto + Virtual). No rompe el cierre si falla.
+      try{ await generarCruceCloverVirtual(p.id); }catch(e){}
+      return r.data||{ok:true};
     },
     reabrirCaja: async function(p){
       var r=await sb.rpc('reabrir_caja',{ p_caja_id:p.id }); if(r.error) throw r.error; return r.data||{ok:true};

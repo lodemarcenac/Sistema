@@ -26,6 +26,9 @@
   table.cfg td{padding:6px 8px;border-bottom:1px solid var(--line-2);}
   table.cfg input, table.cfg select{width:100%;padding:6px 8px;border:1px solid var(--border-inp);border-radius:var(--radius-xs);font-family:inherit;font-size:var(--fs-sm);}
   table.cfg input.w-cod{max-width:70px;}
+  .abm-nueva{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end;}
+  .abm-nueva label{display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;text-transform:uppercase;letter-spacing:.03em;}
+  .abm-nueva input,.abm-nueva select{width:100%;padding:8px 11px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;background:#fff;}
 </style>
 </head>
 <body>
@@ -166,7 +169,7 @@
       </div>
       <div class="card">
         <h3>Aranceles y plazos por medio de pago</h3>
-        <p class="hint">% de descuento y días hábiles hasta el depósito, por <b>medio de pago</b> (el «Medio» es la primera columna). Se usa en dos lugares: (1) el <b>neto esperado</b> en Conciliación — ahí el medio coincide con lo que reporta tu terminal Clover (<b>Debit Card</b>, <b>Credit Card</b>, <b>Prepaid Card</b>, <b>QR PosNet</b>); y (2) el <b>neto que se cruza al grupo cobrador</b> cuando vendés con tarjeta en otro grupo — ahí el medio coincide con la <b>forma de pago</b> que elegís al cobrar en Ventas. Abajo se listan solos todos los medios posibles: completá % y días y tocá <b>Agregar</b>. Si el medio no está cargado, el cruce se hace en bruto (0%).</p>
+        <p class="hint">% de descuento y días hábiles hasta el depósito, por <b>medio</b> (el «Medio» es la primera columna). Abajo se listan solos los medios que <b>reporta tu terminal Clover</b> (<b>Debit Card</b>, <b>Credit Card</b>, <b>Prepaid Card</b>, <b>QR PosNet</b>): completá % y días y tocá <b>Agregar</b>. Se usan para el <b>neto esperado</b> en Conciliación. Si además querés que el <b>cruce de tarjeta entre grupos</b> salga neto en la venta, agregá a mano (en el renglón de abajo) un medio con el nombre EXACTO de tu <b>forma de pago</b> de Ventas (ej. Tarjeta, Virtual) y su arancel; si no, ese cruce se hace en bruto (0%).</p>
         <div class="tblwrap"><table class="cfg"><thead><tr><th>Medio</th><th>Arancel %</th><th>Días hábiles</th><th></th></tr></thead><tbody id="cv-aranc-tbody"></tbody></table></div>
         <div class="fp-row" style="border:none;margin-top:8px;">
           <input type="text" id="cv-na-medio" placeholder="Medio (ej. Credit Card)">
@@ -211,10 +214,10 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-10-27.2';</script>
-<script src="sb-api.js?v=2026-10-27.2"></script>
-<script src="auth-guard.js?v=2026-10-27.2"></script>
-<script src="nav.js?v=2026-10-27.2"></script>
+<script>window.APP_BUILD='2026-10-27.4';</script>
+<script src="sb-api.js?v=2026-10-27.4"></script>
+<script src="auth-guard.js?v=2026-10-27.4"></script>
+<script src="nav.js?v=2026-10-27.4"></script>
 <script>
 var sb=window.sbClient;
 var FORMAS=[{nombre:'Efectivo',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Tarjeta',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Virtual',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Cuenta Corriente',cta:true,facturar:false,cobro:true,pago:true}];
@@ -368,12 +371,10 @@ async function quitarCvCuenta(sid){
 // (para Conciliación) + las formas de pago no-efectivo configuradas (lo que ve la venta,
 // para el cruce entre grupos). Se listan solos como filas a completar.
 var CV_SUG=[];
-function medioEsEfectivo(n){ return /efectivo/i.test(String(n||'')); }
 function mediosPosibles(){
-  var set={}, orden=[];
-  ['Debit Card','Credit Card','Prepaid Card','QR PosNet'].forEach(function(m){ var k=m.toLowerCase(); if(!set[k]){ set[k]=m; orden.push(m); } });
-  (FORMAS||[]).forEach(function(f){ if(f && f.nombre && !f.cta && !medioEsEfectivo(f.nombre)){ var k=String(f.nombre).toLowerCase(); if(!set[k]){ set[k]=f.nombre; orden.push(f.nombre); } } });
-  return orden;
+  // Solo los medios que reporta la terminal Clover (los verificados). Las formas de pago
+  // del POS no se listan acá; si hiciera falta un medio propio, se agrega a mano abajo.
+  return ['Debit Card','Credit Card','Prepaid Card','QR PosNet'];
 }
 function renderCvAranc(){
   var saved={}; CV_ARANC.forEach(function(a){ saved[String(a.medio||'').toLowerCase()]=true; });
