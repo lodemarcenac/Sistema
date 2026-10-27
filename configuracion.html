@@ -55,6 +55,7 @@
     <div class="tabs sec-tabs">
       <button class="tab on" data-s="pagos" onclick="switchSec('pagos')">💳 Formas de pago</button>
       <button class="tab" data-s="locales" onclick="switchSec('locales')">🏬 Locales</button>
+      <button class="tab" data-s="grupos" onclick="switchSec('grupos')">👥 Grupos</button>
       <button class="tab" data-s="balanzas" onclick="switchSec('balanzas')">⚖️ Balanzas</button>
       <button class="tab" data-s="gastos" onclick="switchSec('gastos')">🧾 Compras y Gastos</button>
       <button class="tab" data-s="clover" onclick="switchSec('clover')">💳 Clover</button>
@@ -86,6 +87,19 @@
         <p class="hint">Nombre, sigla (prefijo de comprobantes), dirección y teléfono. La <b>dirección y el teléfono salen en el ticket</b>. La sigla arma el comprobante (ej. <code>FAB-20260916-0001</code>).</p>
         <div class="tblwrap"><table class="cfg"><thead><tr><th>Nombre</th><th>Sigla</th><th>Dirección</th><th>Teléfono</th><th></th></tr></thead><tbody id="loc-tbody"></tbody></table></div>
         <button class="btn-sec" onclick="addLoc()" style="margin-top:10px;">+ Agregar local</button>
+      </div>
+    </div>
+
+    <!-- GRUPOS DE LOCALES -->
+    <div id="s-grupos" hidden>
+      <div class="card">
+        <h3>Grupos de locales</h3>
+        <p class="hint">Un <b>grupo</b> junta los locales que comparten la misma bolsa. El <b>saldo entre locales</b> se lleva entre grupos: lo que pasa entre locales del mismo grupo <b>no</b> genera deuda; solo cruza entre grupos distintos. Marcá un grupo como <b>cobrador</b> para que ahí recaigan los cobros no-efectivo (tarjeta/QR/virtual).</p>
+        <div id="grp-wrap"></div>
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="text" id="grp-nuevo" placeholder="Nombre del grupo nuevo" style="max-width:260px;">
+          <button class="btn-sec" onclick="addGrupo()">+ Crear grupo</button>
+        </div>
       </div>
     </div>
 
@@ -246,7 +260,8 @@ async function iniciar(){
 }
 function switchSec(name){
   document.querySelectorAll('.sec-tabs .tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-s')===name); });
-  ['pagos','locales','balanzas','gastos','clover','prov','historico'].forEach(function(s){ document.getElementById('s-'+s).hidden=(s!==name); });
+  ['pagos','locales','grupos','balanzas','gastos','clover','prov','historico'].forEach(function(s){ document.getElementById('s-'+s).hidden=(s!==name); });
+  if(name==='grupos') cargarGrupos();
   if(name==='gastos') renderGastos();
   if(name==='clover') cargarClover();
   if(name==='prov') cargarCfgProv();
@@ -447,6 +462,58 @@ async function delLoc(i){
   var rs=await window.sf('getSucursales'); if(rs.ok) SUCS=rs.sucursales||[];
   var rb=await window.sf('getBalanzas'); if(rb.ok) BALS=rb.balanzas||{};
   renderLoc(); renderBal();
+}
+
+// ---- GRUPOS DE LOCALES ----
+var GRP={grupos:[], sinGrupo:[]};
+async function cargarGrupos(){
+  var r=await window.sf('getGrupos'); GRP=(r.ok?{grupos:r.grupos||[], sinGrupo:r.sinGrupo||[]}:{grupos:[],sinGrupo:[]});
+  renderGrupos();
+}
+function renderGrupos(){
+  var wrap=document.getElementById('grp-wrap'); if(!wrap) return;
+  if(!GRP.grupos.length){ wrap.innerHTML='<p class="muted">Todavía no hay grupos.</p>'; return; }
+  // opciones para mover un local a este grupo (locales sin grupo + los de otros grupos)
+  var todos=[]; GRP.grupos.forEach(function(g){ g.locales.forEach(function(l){ todos.push({id:l.id,nombre:l.nombre,grupo:g.id}); }); }); GRP.sinGrupo.forEach(function(l){ todos.push({id:l.id,nombre:l.nombre,grupo:null}); });
+  var html=GRP.grupos.map(function(g){
+    var chips=g.locales.map(function(l){
+      return '<span class="tag">'+escAttr(l.nombre)+'<button class="x-btn" title="Sacar del grupo" onclick="sacarLocal('+l.id+')">✕</button></span>';
+    }).join('') || '<span class="muted" style="font-size:.85em;">Sin locales</span>';
+    var opts=todos.filter(function(l){ return l.grupo!==g.id; }).map(function(l){ return '<option value="'+l.id+'">'+escAttr(l.nombre)+(l.grupo==null?' (sin grupo)':'')+'</option>'; }).join('');
+    return '<div class="card" style="margin-bottom:10px;padding:12px;">'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'+
+        '<input type="text" value="'+escAttr(g.nombre)+'" onchange="renombrarGrupo('+g.id+',this.value)" style="max-width:220px;font-weight:600;">'+
+        '<label style="display:flex;align-items:center;gap:5px;font-size:.9em;'+(g.cobrador?'color:var(--ok,#16a34a);font-weight:600;':'')+'"><input type="radio" name="grp-cobrador" '+(g.cobrador?'checked':'')+' onchange="marcarCobrador('+g.id+')"> 💳 Cobrador no-efectivo</label>'+
+        '<button class="x-btn" title="Eliminar grupo" style="margin-left:auto;" onclick="delGrupo('+g.id+',\''+escAttr(g.nombre).replace(/'/g,"\\'")+'\')">✕</button>'+
+      '</div>'+
+      '<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'+chips+'</div>'+
+      (opts? '<div style="margin-top:8px;"><select onchange="if(this.value){asignarLocal(this.value,'+g.id+');this.value=\'\';}"><option value="">+ Agregar local a este grupo…</option>'+opts+'</select></div>':'')+
+    '</div>';
+  }).join('');
+  if(GRP.sinGrupo.length){ html+='<p class="hint" style="margin-top:6px;">Locales sin grupo: '+GRP.sinGrupo.map(function(l){return escAttr(l.nombre);}).join(', ')+'. Agregalos a un grupo con el selector de cada grupo.</p>'; }
+  wrap.innerHTML=html;
+}
+async function addGrupo(){
+  var el=document.getElementById('grp-nuevo'); var nombre=(el.value||'').trim(); if(!nombre){ toast('Poné un nombre','error'); return; }
+  var r=await window.sp('guardarGrupo',{nombre:nombre}); if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  el.value=''; toast('Grupo creado'); cargarGrupos();
+}
+async function renombrarGrupo(id,nombre){
+  nombre=(nombre||'').trim(); if(!nombre) return;
+  var r=await window.sp('guardarGrupo',{id:id,nombre:nombre}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } toast('Grupo guardado');
+}
+async function delGrupo(id,nombre){
+  if(!confirm('¿Eliminar el grupo "'+nombre+'"? Sus locales quedan sin grupo.')) return;
+  var r=await window.sp('eliminarGrupo',{id:id}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } toast('Grupo eliminado'); cargarGrupos();
+}
+async function asignarLocal(sucursalId,grupoId){
+  var r=await window.sp('setLocalGrupo',{sucursalId:Number(sucursalId),grupoId:grupoId}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } cargarGrupos();
+}
+async function sacarLocal(sucursalId){
+  var r=await window.sp('setLocalGrupo',{sucursalId:Number(sucursalId),grupoId:null}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } cargarGrupos();
+}
+async function marcarCobrador(id){
+  var r=await window.sp('setGrupoCobrador',{id:id}); if(!r.ok){ toast('Error: '+r.error,'error'); return; } toast('Grupo cobrador actualizado'); cargarGrupos();
 }
 
 // ---- BALANZAS ---- (guardado automático; sin botón Guardar)

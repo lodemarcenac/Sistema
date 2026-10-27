@@ -586,6 +586,10 @@
   async function catIdMap(){ if(_catId) return _catId; var r=await sb.from('categorias').select('id,nombre'); _catId={}; (r.data||[]).forEach(function(c){ _catId[c.nombre]=c.id; }); return _catId; }
   var _sucId=null;
   async function sucIdMap(){ if(_sucId) return _sucId; var r=await sb.from('sucursales').select('id,nombre,sigla'); _sucId={}; (r.data||[]).forEach(function(s){ _sucId[s.nombre]=s.id; if(s.sigla) _sucId[s.sigla]=s.id; }); return _sucId; }
+  // Mapa local_id -> grupo_id (al que pertenece el local). Si el local no tiene grupo,
+  // se trata como grupo propio ('L'+id) para no fusionarlo por error con otros.
+  var _grpMap=null;
+  async function grupoMap(){ if(_grpMap) return _grpMap; var r=await sb.from('sucursales').select('id,grupo_id'); _grpMap={}; (r.data||[]).forEach(function(s){ _grpMap[s.id]= s.grupo_id || ('L'+s.id); }); return _grpMap; }
   // Mapa auth.uid -> nombre de usuario (para "cargado por"). Cacheado por sesión.
   var _perfN=null;
   async function perfilNombres(){ if(_perfN) return _perfN; _perfN={}; try{ var r=await sb.from('perfiles').select('usuario_id,nombre,usuario'); (r.data||[]).forEach(function(p){ if(p.usuario_id) _perfN[p.usuario_id]=p.nombre||p.usuario||''; }); }catch(e){} return _perfN; }
@@ -957,10 +961,34 @@
       }
       return {ok:true};
     },
+    // Saldo ENTRE GRUPOS. Cada movimiento se resuelve a grupo: grupo_* si está
+    // cargado (entregas/tarjetas/liquidación), si no se deriva del local vía su grupo.
+    // Se descartan los movimientos internos de un mismo grupo (misma bolsa).
     getCuentasInternas: async function(){
-      var r=await sb.from('cuentas_internas').select('local_origen,local_destino,fecha,tipo,concepto,monto').order('fecha',{ascending:false}).limit(500);
+      var r=await sb.from('cuentas_internas').select('local_origen,local_destino,grupo_origen,grupo_destino,fecha,tipo,concepto,monto').order('fecha',{ascending:false}).limit(500);
       if(r.error) throw r.error;
-      return {ok:true, movimientos:(r.data||[]).map(function(x){ return { origenId:x.local_origen, destinoId:x.local_destino, fecha:x.fecha, tipo:x.tipo, concepto:x.concepto||'', monto:Number(x.monto)||0 }; })};
+      var gm=await grupoMap();
+      var rg=await sb.from('grupos').select('id,nombre'); var gname={}; (rg.data||[]).forEach(function(g){ gname[g.id]=g.nombre; });
+      var movs=(r.data||[]).map(function(x){
+        var go = x.grupo_origen  || gm[x.local_origen]  || null;
+        var gd = x.grupo_destino || gm[x.local_destino] || null;
+        return { origenId:go, destinoId:gd, origen:(gname[go]||''), destino:(gname[gd]||''), fecha:x.fecha, tipo:x.tipo, concepto:x.concepto||'', monto:Number(x.monto)||0 };
+      }).filter(function(m){ return m.origenId && m.destinoId && String(m.origenId)!==String(m.destinoId); });
+      return {ok:true, movimientos:movs, grupos:gname};
+    },
+    // Grupos + sus locales (para ABM y selectores). cobrador = recibe lo no-efectivo.
+    getGrupos: async function(){
+      var rg=await sb.from('grupos').select('id,nombre,cobra_no_efectivo,activo').order('nombre');
+      if(rg.error) throw rg.error;
+      var rs=await sb.from('sucursales').select('id,nombre,grupo_id,activo');
+      if(rs.error) throw rs.error;
+      var locs=(rs.data||[]).filter(function(s){ return s.activo!==false; });
+      var grupos=(rg.data||[]).filter(function(g){ return g.activo!==false; }).map(function(g){
+        return { id:g.id, nombre:g.nombre, cobrador:!!g.cobra_no_efectivo,
+                 locales: locs.filter(function(s){ return s.grupo_id===g.id; }).map(function(s){ return {id:s.id, nombre:s.nombre}; }) };
+      });
+      var sinGrupo = locs.filter(function(s){ return !s.grupo_id; }).map(function(s){ return {id:s.id, nombre:s.nombre}; });
+      return {ok:true, grupos:grupos, sinGrupo:sinGrupo};
     },
     // deudor paga al acreedor → saldar deuda entre locales
     registrarLiquidacion: async function(p){
@@ -968,6 +996,40 @@
       if(!deu||!acr) throw new Error('Locales inválidos');
       var r=await sb.from('cuentas_internas').insert({ local_origen:acr, local_destino:deu, tipo:'liquidacion', concepto:(p.concepto||'Liquidación / pago entre locales'), monto:Number(p.monto)||0 });
       if(r.error) throw r.error; return {ok:true};
+    },
+    // Entrega de dinero entre GRUPOS. Semántica: "origina" = quien da la plata,
+    // "recibe" = quien la recibe. En cuentas_internas origen=quien debe, destino=acreedor,
+    // así que el que RECIBE la plata queda debiéndole al que la ORIGINA (y si había deuda
+    // al revés, la compensa). Sirve igual para saldar un saldo mostrado (el deudor "origina"
+    // el pago al acreedor).
+    registrarEntregaGrupo: async function(p){
+      var origina=Number(p.origina), recibe=Number(p.recibe);
+      if(!origina || !recibe || origina===recibe) throw new Error('Elegí dos grupos distintos (quién entrega y quién recibe)');
+      var monto=Number(p.monto)||0; if(!(monto>0)) throw new Error('Monto inválido');
+      var r=await sb.from('cuentas_internas').insert({ grupo_origen:recibe, grupo_destino:origina, tipo:(p.tipo||'entrega'), concepto:(p.concepto||'Entrega de dinero entre grupos'), monto:monto });
+      if(r.error) throw r.error; return {ok:true};
+    },
+    // ABM de grupos de locales.
+    guardarGrupo: async function(p){
+      var nombre=String(p.nombre||'').trim(); if(!nombre) throw new Error('Falta el nombre del grupo');
+      if(p.id){ var r=await sb.from('grupos').update({nombre:nombre}).eq('id',p.id); if(r.error) throw r.error; _grpMap=null; return {ok:true, id:p.id}; }
+      var ins=await sb.from('grupos').insert({nombre:nombre}).select('id').single(); if(ins.error) throw ins.error; _grpMap=null; return {ok:true, id:ins.data.id};
+    },
+    eliminarGrupo: async function(p){
+      if(!p || !p.id) throw new Error('Falta el grupo');
+      await sb.from('sucursales').update({grupo_id:null}).eq('grupo_id',p.id);   // desasigna sus locales
+      var r=await sb.from('grupos').delete().eq('id',p.id); if(r.error) throw r.error; _grpMap=null; return {ok:true};
+    },
+    // Asigna (o saca) un local a un grupo.
+    setLocalGrupo: async function(p){
+      if(!p || !p.sucursalId) throw new Error('Falta el local');
+      var r=await sb.from('sucursales').update({grupo_id:(p.grupoId||null)}).eq('id',p.sucursalId); if(r.error) throw r.error; _grpMap=null; return {ok:true};
+    },
+    // Marca un grupo como el único cobrador de lo no-efectivo (apaga el resto).
+    setGrupoCobrador: async function(p){
+      if(!p || !p.id) throw new Error('Falta el grupo');
+      await sb.from('grupos').update({cobra_no_efectivo:false}).neq('id',p.id);
+      var r=await sb.from('grupos').update({cobra_no_efectivo:true}).eq('id',p.id); if(r.error) throw r.error; return {ok:true};
     },
     registrarPagoProveedor: async function(p){
       var m=await sucIdMap();
@@ -980,6 +1042,22 @@
       // Si se paga desde la Caja guardada (reserva), descontar la reserva del local.
       if((p.tipo||'pago')==='pago' && fondo==='reserva' && pay.sucursal_id && (Number(p.monto)||0)>0){
         await sb.from('efectivo_reserva_mov').insert({ sucursal_id:pay.sucursal_id, tipo:'egreso', monto:Number(p.monto)||0, concepto:'Pago a proveedor' });
+      }
+      // Pago a proveedor CROSS-GROUP: si el grupo de este local paga una cuenta cuyos
+      // locales pertenecen todos a OTRO grupo, ese grupo le queda debiendo lo pagado.
+      // (Solo el caso claro: la cuenta es de un único grupo distinto al que paga. Si la
+      //  cuenta es junta entre varios grupos no se asienta — el reparto sería ambiguo.)
+      if((p.tipo||'pago')==='pago' && pay.cuenta_id && pay.sucursal_id && (Number(p.monto)||0)>0){
+        try{
+          var gm=await grupoMap();
+          var grupoPaga=gm[pay.sucursal_id];
+          var rl=await sb.from('proveedor_cuenta_locales').select('sucursal_id').eq('cuenta_id',pay.cuenta_id);
+          var gset={}; (rl.data||[]).forEach(function(x){ var g=gm[x.sucursal_id]; if(g) gset[String(g)]=g; });
+          var gids=Object.keys(gset);
+          if(gids.length===1 && String(gset[gids[0]])!==String(grupoPaga)){
+            await sb.from('cuentas_internas').insert({ grupo_origen:gset[gids[0]], grupo_destino:grupoPaga, tipo:'pago_proveedor_cruzado', concepto:'Pago de cuenta de proveedor de otro grupo', monto:Number(p.monto)||0, ref:('deuda:'+deudaId) });
+          }
+        }catch(e){ /* si el cruce falla, el pago igual quedó registrado */ }
       }
       // Cheques emitidos (forma de pago cheque): se guardan para el listado y quedan
       // vinculados al pago (deuda_id) para poder anularlos/revertirlos juntos.
@@ -1010,6 +1088,8 @@
         return {ok:false, error:'Este movimiento viene de una compra o gasto. Borralo o anulalo desde Compras o Gastos.'};
       }
       var d=await sb.from('deuda_proveedores').delete().eq('id',p.id); if(d.error) throw d.error;
+      // Revertir el cruce cross-group de este pago, si lo hubo (atado por ref=deuda:<id>).
+      try{ await sb.from('cuentas_internas').delete().eq('tipo','pago_proveedor_cruzado').eq('ref','deuda:'+p.id); }catch(e){}
       if((mov.tipo||'')==='pago' && mov.fondo==='reserva' && mov.sucursal_id && (Number(mov.monto)||0)>0){
         await sb.from('efectivo_reserva_mov').insert({ sucursal_id:mov.sucursal_id, tipo:'ingreso', monto:Number(mov.monto)||0, concepto:'Reversa pago a proveedor (borrado)' });
       }

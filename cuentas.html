@@ -49,7 +49,7 @@
   <main>
     <div class="tabs">
       <button class="tab on" data-t="prov" onclick="switchTab('prov')">Deuda a proveedores</button>
-      <button class="tab" data-t="inter" onclick="switchTab('inter')">Entre locales</button>
+      <button class="tab" data-t="inter" onclick="switchTab('inter')">Entre grupos</button>
       <button class="tab" data-t="cheques" onclick="switchTab('cheques')">Cheques emitidos</button>
     </div>
 
@@ -115,9 +115,20 @@
 
     <div id="t-inter" hidden>
       <div class="card" style="margin-bottom:14px;">
-        <h3>Saldos entre locales</h3>
-        <p class="resumen" style="margin-bottom:12px;">Cuando un local cobra la cuenta corriente de un cliente que <b>administra otro local</b>, esa plata queda debiéndose entre locales. Acá se ve el neto.</p>
+        <h3>Saldos entre grupos</h3>
+        <p class="resumen" style="margin-bottom:12px;">Saldo neto entre <b>grupos de locales</b> (ventas/cobros de cta cte de otro grupo, remitos, tarjetas al grupo cobrador y entregas de dinero). Lo que pasa entre locales del mismo grupo no cuenta. Los grupos se arman en <b>Configuración → Grupos</b>.</p>
         <div id="inter-net"></div>
+      </div>
+      <div class="card" style="margin-bottom:14px;">
+        <h3>Entrega de dinero entre grupos</h3>
+        <p class="resumen" style="margin-bottom:12px;">Registrá una entrega de efectivo de un grupo a otro. El grupo que <b>recibe</b> queda debiéndole al que <b>entrega</b> (y si había saldo al revés, lo compensa).</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+          <label>Entrega (da)<br><select id="ent-origina"></select></label>
+          <label>Recibe<br><select id="ent-recibe"></select></label>
+          <label>Monto<br><input type="number" id="ent-monto" min="0" step="0.01" style="max-width:140px;"></label>
+          <label style="flex:1;min-width:160px;">Concepto (opcional)<br><input type="text" id="ent-concepto" placeholder="Ej. adelanto, préstamo…"></label>
+          <button class="btn-sec" onclick="registrarEntrega()">Registrar entrega</button>
+        </div>
       </div>
       <div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th><th>Origen (debe)</th><th>Destino (acreedor)</th><th>Concepto</th><th class="num">Monto</th></tr></thead><tbody id="inter-tbody"></tbody></table></div></div>
     </div>
@@ -182,23 +193,43 @@ function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=S
 function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarCuentasProv(); }
 async function cargarCuentasProv(){ cerrarPagoProv(); await renderDeudas(); }
 function switchTab(name){ document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); }); ['prov','inter','cheques'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); }); if(name==='inter') cargarInter(); if(name==='prov') cargarCuentasProv(); if(name==='cheques') cargarCheques(); }
+var GNAME={};   // grupo_id -> nombre
 async function cargarInter(){
   var r=await window.sf('getCuentasInternas'); var movs=(r.ok?r.movimientos:[])||[];
+  GNAME=(r.ok&&r.grupos)?r.grupos:{};
+  poblarGruposEntrega();
   // neto por par: origen le debe a destino
   var net={};
   movs.forEach(function(m){ var k=m.origenId+'>'+m.destinoId; net[k]=(net[k]||0)+m.monto; });
   // combinar A>B con B>A
   var vistos={}, filas=[];
   Object.keys(net).forEach(function(k){ var pa=k.split('>'); var a=pa[0], b=pa[1]; if(vistos[k]) return; var inv=b+'>'+a; var val=net[k]-(net[inv]||0); vistos[k]=true; vistos[inv]=true; if(Math.abs(val)>0.5){ if(val>0) filas.push({deudor:a, acreedor:b, monto:val}); else filas.push({deudor:b, acreedor:a, monto:-val}); } });
-  document.getElementById('inter-net').innerHTML = filas.length ? filas.map(function(f){ return '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;"><span><b>'+(SUCID[f.deudor]||f.deudor)+'</b> le debe a <b>'+(SUCID[f.acreedor]||f.acreedor)+'</b>: <span style="color:var(--bad);font-weight:700;">'+fmt$(f.monto)+'</span></span><button class="btn-sec" onclick="saldarInter('+f.deudor+','+f.acreedor+','+f.monto+')">Saldar / registrar pago</button></div>'; }).join('') : '<div class="muted">No hay saldos pendientes entre locales.</div>';
-  document.getElementById('inter-tbody').innerHTML = movs.length ? movs.map(function(m){ var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; return '<tr><td>'+f+'</td><td>'+(SUCID[m.origenId]||'')+'</td><td>'+(SUCID[m.destinoId]||'')+'</td><td>'+(m.concepto||'')+'</td><td class="num">'+fmt$(m.monto)+'</td></tr>'; }).join('') : '<tr><td colspan="5" class="muted">Sin movimientos.</td></tr>';
+  document.getElementById('inter-net').innerHTML = filas.length ? filas.map(function(f){ return '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;"><span><b>'+(GNAME[f.deudor]||f.deudor)+'</b> le debe a <b>'+(GNAME[f.acreedor]||f.acreedor)+'</b>: <span style="color:var(--bad);font-weight:700;">'+fmt$(f.monto)+'</span></span><button class="btn-sec" onclick="saldarInter(\''+f.deudor+'\',\''+f.acreedor+'\','+f.monto+')">Saldar / registrar pago</button></div>'; }).join('') : '<div class="muted">No hay saldos pendientes entre grupos.</div>';
+  document.getElementById('inter-tbody').innerHTML = movs.length ? movs.map(function(m){ var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; return '<tr><td>'+f+'</td><td>'+(m.origen||'')+'</td><td>'+(m.destino||'')+'</td><td>'+(m.concepto||'')+'</td><td class="num">'+fmt$(m.monto)+'</td></tr>'; }).join('') : '<tr><td colspan="5" class="muted">Sin movimientos.</td></tr>';
 }
+function poblarGruposEntrega(){
+  var ops='<option value="">—</option>'+Object.keys(GNAME).map(function(id){ return '<option value="'+id+'">'+GNAME[id]+'</option>'; }).join('');
+  var a=document.getElementById('ent-origina'), b=document.getElementById('ent-recibe');
+  if(a) a.innerHTML=ops; if(b) b.innerHTML=ops;
+}
+// Saldar un saldo mostrado: el deudor "entrega" (paga) al acreedor que "recibe".
 async function saldarInter(deudorId, acreedorId, monto){
-  var m=prompt('¿Qué monto salda '+(SUCID[deudorId]||'')+' → '+(SUCID[acreedorId]||'')+'?', Math.round(monto));
+  var m=prompt('¿Qué monto salda '+(GNAME[deudorId]||'')+' → '+(GNAME[acreedorId]||'')+'?', Math.round(monto));
   if(m===null) return; var val=Number(m); if(!(val>0)){ toast('Monto inválido','error'); return; }
-  var r=await window.sp('registrarLiquidacion',{ deudor:(SUCID[deudorId]||deudorId), acreedor:(SUCID[acreedorId]||acreedorId), monto:val });
+  var r=await window.sp('registrarEntregaGrupo',{ origina:deudorId, recibe:acreedorId, monto:val, tipo:'liquidacion', concepto:'Liquidación entre grupos' });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   toast('Liquidación registrada'); cargarInter();
+}
+async function registrarEntrega(){
+  var origina=document.getElementById('ent-origina').value, recibe=document.getElementById('ent-recibe').value;
+  var monto=Number(document.getElementById('ent-monto').value)||0;
+  if(!origina||!recibe){ toast('Elegí quién entrega y quién recibe','error'); return; }
+  if(origina===recibe){ toast('Tienen que ser grupos distintos','error'); return; }
+  if(!(monto>0)){ toast('Monto inválido','error'); return; }
+  var r=await window.sp('registrarEntregaGrupo',{ origina:origina, recibe:recibe, monto:monto, concepto:(document.getElementById('ent-concepto').value||'').trim() });
+  if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  document.getElementById('ent-monto').value=''; document.getElementById('ent-concepto').value='';
+  toast('Entrega registrada'); cargarInter();
 }
 function pintarSaldo(el, s, etiquetaDebe, etiquetaFavor){ if(s>0.5){ el.className='saldo debe'; el.textContent=fmt$(s); } else if(s<-0.5){ el.className='saldo favor'; el.textContent=fmt$(-s)+' a favor'; } else { el.className='saldo cero'; el.textContent='$0'; } }
 
