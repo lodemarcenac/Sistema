@@ -141,10 +141,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script>window.APP_BUILD='2026-10-27.4';</script>
-<script src="sb-api.js?v=2026-10-27.4"></script>
-<script src="auth-guard.js?v=2026-10-27.4"></script>
-<script src="nav.js?v=2026-10-27.4"></script>
+<script>window.APP_BUILD='2026-10-28.1';</script>
+<script src="sb-api.js?v=2026-10-28.1"></script>
+<script src="auth-guard.js?v=2026-10-28.1"></script>
+<script src="nav.js?v=2026-10-28.1"></script>
 <script src="pdf-export.js?v=2026-10-22.2"></script>
 <script>
 var sb=window.sbClient;
@@ -464,10 +464,14 @@ function flujoPorFecha(arr){
 }
 function pintarCheques(){
   var arr=chequesFiltrados();
-  var total=arr.reduce(function(s,c){ return s+(c.monto||0); },0);
-  document.getElementById('chq-total').innerHTML='Total: <b>'+fmt$(total)+'</b> · '+arr.length+' cheque(s)';
-  // flujo por fecha
-  var fl=flujoPorFecha(arr);
+  // Totales y flujo: solo cheques vigentes (los anulados no se van a pagar).
+  // Igual se listan abajo en el detalle, marcados como anulados.
+  var vig=arr.filter(function(c){ return !/anulad/i.test(c.estado||''); });
+  var total=vig.reduce(function(s,c){ return s+(c.monto||0); },0);
+  var nAnul=arr.length-vig.length;
+  document.getElementById('chq-total').innerHTML='Total: <b>'+fmt$(total)+'</b> · '+vig.length+' cheque(s)'+(nAnul?(' <span class="muted">(+'+nAnul+' anulado'+(nAnul!==1?'s':'')+')</span>'):'');
+  // flujo por fecha (solo vigentes)
+  var fl=flujoPorFecha(vig);
   document.getElementById('chq-flujo-tbody').innerHTML = fl.length ? fl.map(function(f){
     return '<tr><td>'+(f.fecha==='(sin fecha)'?'(sin fecha)':fechaCorta(f.fecha))+'</td><td class="num">'+f.n+'</td><td class="num">'+fmt$(f.total)+'</td><td class="num"><b>'+fmt$(f.acum)+'</b></td></tr>';
   }).join('') : '<tr><td colspan="4" class="muted">Sin cheques para el filtro elegido.</td></tr>';
@@ -494,8 +498,8 @@ function exportarCheques(){
   arr.slice().sort(function(a,b){ return String(a.fecha||'').localeCompare(String(b.fecha||'')); }).forEach(function(c){
     det.push([fechaCorta(c.fecha), c.banco||'', c.numero||'', c.proveedor||'', c.local||'', c.estado||'', Math.round(c.monto||0)]);
   });
-  // Hoja 2: flujo por fecha
-  var fl=flujoPorFecha(arr); var flu=[['Fecha de pago','Cheques','A pagar ese día','Acumulado']];
+  // Hoja 2: flujo por fecha (solo cheques vigentes, sin anulados)
+  var fl=flujoPorFecha(arr.filter(function(c){ return !/anulad/i.test(c.estado||''); })); var flu=[['Fecha de pago','Cheques','A pagar ese día','Acumulado']];
   fl.forEach(function(f){ flu.push([f.fecha==='(sin fecha)'?'(sin fecha)':fechaCorta(f.fecha), f.n, Math.round(f.total), Math.round(f.acum)]); });
   var wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(flu), 'Flujo por fecha');

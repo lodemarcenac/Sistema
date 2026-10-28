@@ -19,9 +19,17 @@
   .filtros .field{display:flex;flex-direction:column;}
   .filtros label{font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;text-transform:uppercase;letter-spacing:.03em;}
   .filtros input,.filtros select{padding:7px 10px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;background:#fff;}
-  .ops{display:flex;gap:6px;flex-wrap:wrap;}
-  .ops label{display:inline-flex;align-items:center;gap:5px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:var(--fs-sm);font-weight:600;color:var(--ink-soft);cursor:pointer;text-transform:none;letter-spacing:0;}
-  .ops input{margin:0;}
+  /* Operaciones: selector desplegable multi-opción (mismo look que los demás filtros) */
+  .dd{position:relative;}
+  .dd-btn{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:210px;padding:7px 10px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-size:var(--fs-base);font-family:inherit;color:var(--ink);background:#fff;cursor:pointer;text-align:left;}
+  .dd-btn:focus{border-color:var(--brand-2);outline:none;box-shadow:0 0 0 3px rgba(47,123,230,.14);}
+  .dd-btn .car{color:var(--muted);font-size:.62rem;transition:transform .12s;}
+  .dd.open .dd-btn .car{transform:rotate(180deg);}
+  .dd-panel{position:absolute;z-index:40;top:calc(100% + 4px);left:0;min-width:230px;background:#fff;border:1px solid var(--line);border-radius:var(--radius-sm);box-shadow:var(--shadow-pop);padding:5px;display:none;}
+  .dd.open .dd-panel{display:block;}
+  .dd-panel label{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--radius-xs);font-size:var(--fs-sm);font-weight:600;color:var(--ink-soft);cursor:pointer;white-space:nowrap;text-transform:none;letter-spacing:0;}
+  .dd-panel label:hover{background:var(--surface-2);}
+  .dd-panel input{margin:0;}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.72rem;font-weight:700;background:var(--surface-3);color:var(--ink-soft);}
   .pill.compra{background:#e6f0ff;color:#1b4f8a;} .pill.gasto{background:#fdeede;color:#9a5a12;}
   .pill.remito{background:#e8f6ee;color:#1e7a46;} .pill.stock{background:#eee9fb;color:#5b3fa0;}
@@ -57,18 +65,23 @@
         <div class="field"><label>Desde</label><input id="f-desde" type="date" onchange="cargar()"></div>
         <div class="field"><label>Hasta</label><input id="f-hasta" type="date" onchange="cargar()"></div>
         <div class="field"><label>Usuario</label><select id="f-usuario" onchange="cargar()"></select></div>
+        <div class="field"><label>Operaciones</label>
+          <div class="dd" id="dd-ops">
+            <button type="button" class="dd-btn" id="dd-ops-btn" onclick="toggleOps(event)" aria-haspopup="true" aria-expanded="false">
+              <span id="dd-ops-lbl">Todas</span><span class="car">▼</span>
+            </button>
+            <div class="dd-panel" id="f-ops">
+              <label><input type="checkbox" value="compra" checked onchange="cargar()"> Compras</label>
+              <label><input type="checkbox" value="gasto" checked onchange="cargar()"> Gastos</label>
+              <label><input type="checkbox" value="stock" checked onchange="cargar()"> Movimientos de stock</label>
+              <label><input type="checkbox" value="remito" checked onchange="cargar()"> Remitos</label>
+              <label><input type="checkbox" value="caja" checked onchange="cargar()"> Caja</label>
+              <label><input type="checkbox" value="venta" onchange="cargar()"> Ventas</label>
+            </div>
+          </div>
+        </div>
         <div class="field" style="flex:1;min-width:200px;"><label>Buscar</label><input id="f-q" placeholder="Detalle, comprobante…" oninput="render()"></div>
         <button class="btn-sec" onclick="exportar()">⬇ Excel</button>
-      </div>
-      <div class="field" style="margin-bottom:4px;"><label>Operaciones</label>
-        <div class="ops" id="f-ops">
-          <label><input type="checkbox" value="compra" checked onchange="cargar()"> Compras</label>
-          <label><input type="checkbox" value="gasto" checked onchange="cargar()"> Gastos</label>
-          <label><input type="checkbox" value="stock" checked onchange="cargar()"> Movimientos de stock</label>
-          <label><input type="checkbox" value="remito" checked onchange="cargar()"> Remitos</label>
-          <label><input type="checkbox" value="caja" checked onchange="cargar()"> Caja</label>
-          <label><input type="checkbox" value="venta" onchange="cargar()"> Ventas</label>
-        </div>
       </div>
       <div id="resumen" class="muted" style="font-size:var(--fs-sm);margin:10px 0 6px;">—</div>
       <div class="tblwrap"><table class="data compact"><thead><tr>
@@ -82,10 +95,10 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>window.APP_BUILD='2026-10-27.4';</script>
-<script src="sb-api.js?v=2026-10-27.4"></script>
-<script src="auth-guard.js?v=2026-10-27.4"></script>
-<script src="nav.js?v=2026-10-27.4"></script>
+<script>window.APP_BUILD='2026-10-28.1';</script>
+<script src="sb-api.js?v=2026-10-28.1"></script>
+<script src="auth-guard.js?v=2026-10-28.1"></script>
+<script src="nav.js?v=2026-10-28.1"></script>
 <script>
 var sb=window.sbClient;
 var SUCS=[], SUCID={}, EVENTOS=[];
@@ -119,9 +132,21 @@ async function iniciar(){
 }
 
 function opsSeleccionadas(){ var a=[]; document.querySelectorAll('#f-ops input:checked').forEach(function(c){ a.push(c.value); }); return a; }
+function toggleOps(e){ e.stopPropagation(); var dd=document.getElementById('dd-ops'); var ab=!dd.classList.contains('open'); dd.classList.toggle('open',ab); document.getElementById('dd-ops-btn').setAttribute('aria-expanded',ab?'true':'false'); }
+document.addEventListener('click', function(e){ var dd=document.getElementById('dd-ops'); if(dd && !dd.contains(e.target)){ dd.classList.remove('open'); document.getElementById('dd-ops-btn').setAttribute('aria-expanded','false'); } });
+function actualizarLblOps(){
+  var total=document.querySelectorAll('#f-ops input').length;
+  var sel=document.querySelectorAll('#f-ops input:checked');
+  var lbl=document.getElementById('dd-ops-lbl');
+  if(!sel.length){ lbl.textContent='Ninguna'; }
+  else if(sel.length===total){ lbl.textContent='Todas'; }
+  else if(sel.length<=2){ var ns=[]; sel.forEach(function(c){ ns.push(c.parentNode.textContent.trim()); }); lbl.textContent=ns.join(', '); }
+  else { lbl.textContent=sel.length+' operaciones'; }
+}
 
 async function cargar(){
   var ops=opsSeleccionadas();
+  actualizarLblOps();
   if(!ops.length){ EVENTOS=[]; render(); document.getElementById('resumen').textContent='Elegí al menos una operación.'; return; }
   var qs='getAuditoria&limit=3000'
     +'&desde='+encodeURIComponent(document.getElementById('f-desde').value)

@@ -197,16 +197,18 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-10-27.4';</script>
-<script src="sb-api.js?v=2026-10-27.4"></script>
-<script src="auth-guard.js?v=2026-10-27.4"></script>
-<script src="nav.js?v=2026-10-27.4"></script>
+<script>window.APP_BUILD='2026-10-28.1';</script>
+<script src="sb-api.js?v=2026-10-28.1"></script>
+<script src="auth-guard.js?v=2026-10-28.1"></script>
+<script src="nav.js?v=2026-10-28.1"></script>
 <script>
 var sb=window.sbClient;
 var PRODS={}, SUCS=[], PROVS=[], CG=[], FORMAS=['Efectivo','Tarjeta','Virtual','Cuenta Corriente'];
 var sucActual='', GASTOS=[], gastoEditId=null, SUCID={};
 var PROVS_LOCAL=[], PROV_LOCS={}, REP_DEF={}, REPCAT={};  // PROVS_LOCAL: proveedores del local donde estás parado; PROV_LOCS: {provId:[locales]}; REP_DEF: reparto general por local; REPCAT: {catId:{localNombre:pct}} por categoría (manda este)
 function fmt$(n){ return '$'+Math.round(Number(n)||0).toLocaleString('es-AR'); }
+// Cantidad (kg/unidad) con separador decimal AR (coma) y hasta 3 decimales.
+function fmtCant(n){ return (Number(n)||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:3}); }
 // Monto con separador de miles mientras se tipea (ej. 1.250.000). Guarda el nº crudo con parseMiles().
 function fmtMilesInput(el){
   var raw=String(el.value||''); var neg=/^\s*-/.test(raw);
@@ -338,7 +340,7 @@ async function cargarItems(){
   var suma=0;
   document.getElementById('ci-tbody').innerHTML=items.map(function(d){ suma+=d.costo;
     var u=(PRODS[d.codigo]&&PRODS[d.codigo].tipo==='unidad')?' un':' kg';
-    return '<tr><td>'+(d.nombre||d.codigo)+'</td><td class="num">'+d.cantidad+u+'</td><td class="num">'+fmt$(d.costo_unit)+'</td><td class="num">'+fmt$(d.costo)+'</td>'+
+    return '<tr><td>'+(d.nombre||d.codigo)+'</td><td class="num">'+fmtCant(d.cantidad)+u+'</td><td class="num">'+fmt$(d.costo_unit)+'</td><td class="num">'+fmt$(d.costo)+'</td>'+
       '<td><button class="x-btn" title="Quitar" onclick="quitarItemUI('+d.id+')">✕</button></td></tr>';
   }).join('') || '<tr><td colspan="5" class="muted">Todavía sin productos. Agregá arriba.</td></tr>';
   document.getElementById('c-total').textContent=fmt$(suma);
@@ -416,7 +418,7 @@ function renderConfirmadas(){
   var anul=puedeAnular();
   document.getElementById('conf-tbody').innerHTML=arr.map(function(c){
     var f=c.fecha?new Date(c.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
-    var prods=(c.items||[]).map(function(d){ return d.nombre+' — '+d.cantidad+' — '+fmt$(d.costo); }).join('<br>')||'(sin productos)';
+    var prods=(c.items||[]).map(function(d){ return d.nombre+' — '+fmtCant(d.cantidad)+' — '+fmt$(d.costo); }).join('<br>')||'(sin productos)';
     return '<tr style="cursor:pointer;" onclick="toggleConf('+c.id+')"><td style="width:18px;color:var(--muted);">▸</td><td>'+f+'</td><td>'+(c.proveedor||'')+'</td><td class="num">'+fmt$(c.total)+'</td><td>'+(c.comprobante||'')+'</td>'+
       '<td style="white-space:nowrap;" onclick="event.stopPropagation();">'+(anul?('<button class="mini-btn" onclick="editarConfirmada('+c.id+')">Editar</button><button class="x-btn" title="Anular" onclick="anularConfirmada('+c.id+')">✕</button>'):'<span class="muted" style="font-size:.72rem;">solo lectura</span>')+'</td></tr>'+
       '<tr id="cf-'+c.id+'" hidden><td></td><td colspan="5" style="background:var(--surface-2);font-size:var(--fs-sm);color:var(--ink-soft);">'+prods+'</td></tr>';
