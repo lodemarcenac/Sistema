@@ -20,6 +20,14 @@
   .saldo{font-size:var(--fs-2xl);font-weight:700;}
   .saldo.debe{color:var(--bad);} .saldo.favor{color:var(--good);} .saldo.cero{color:var(--muted);}
   table.data td.cargo{color:var(--bad);} table.data td.pago{color:var(--good);}
+  /* Flujo de fondos por semana */
+  .sem-box{border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;background:var(--surface-2);}
+  .sem-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;font-weight:600;color:var(--ink);}
+  .sem-head .sem-tot{font-weight:400;color:var(--ink-soft);font-size:var(--fs-sm);}
+  .sem-tbl{margin:8px 0 10px;background:#fff;}
+  .sem-det-ttl{font-size:var(--fs-xs);color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;}
+  .sem-det-row{display:grid;grid-template-columns:70px 1fr 1fr auto;gap:10px;padding:4px 2px;font-size:var(--fs-sm);color:var(--ink-soft);border-top:1px solid var(--line-2);}
+  .sem-det-row .num{font-weight:600;color:var(--ink);}
 </style>
 </head>
 <body>
@@ -103,9 +111,9 @@
         </div>
       </div>
       <div class="card" style="margin-bottom:14px;">
-        <h3 style="margin:0 0 6px;font-size:var(--fs-lg);">💵 Flujo de fondos · total a pagar por fecha</h3>
-        <p class="resumen" style="margin:0 0 8px;">Suma de cheques por fecha de pago (con el acumulado), según los filtros de arriba.</p>
-        <div class="tblwrap"><table class="data"><thead><tr><th>Fecha de pago</th><th class="num">Cheques</th><th class="num">A pagar ese día</th><th class="num">Acumulado</th></tr></thead><tbody id="chq-flujo-tbody"></tbody></table></div>
+        <h3 style="margin:0 0 6px;font-size:var(--fs-lg);">💵 Flujo de fondos · por semana</h3>
+        <p class="resumen" style="margin:0 0 8px;">Un cuadro por semana (lunes a domingo): el total de cada día, el total de la semana y el acumulado. Debajo, el detalle de los cheques de esa semana.</p>
+        <div id="chq-flujo"></div>
       </div>
       <div class="card">
         <h3 style="margin:0 0 8px;font-size:var(--fs-lg);">Detalle de cheques</h3>
@@ -141,10 +149,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script>window.APP_BUILD='2026-10-28.1';</script>
-<script src="sb-api.js?v=2026-10-28.1"></script>
-<script src="auth-guard.js?v=2026-10-28.1"></script>
-<script src="nav.js?v=2026-10-28.1"></script>
+<script>window.APP_BUILD='2026-10-28.2';</script>
+<script src="sb-api.js?v=2026-10-28.2"></script>
+<script src="auth-guard.js?v=2026-10-28.2"></script>
+<script src="nav.js?v=2026-10-28.2"></script>
 <script src="pdf-export.js?v=2026-10-22.2"></script>
 <script>
 var sb=window.sbClient;
@@ -286,7 +294,7 @@ async function toggleHist(provId){
   var esJunta=!!(d&&(d.junta||d.todos));
   var movsVista=movs.slice().reverse();
   PROVHIST[provId]={ nom:(d&&d.proveedor)||('Proveedor '+provId), esJunta:esJunta, saldo:(r.ok?r.saldo:0), movs:movs, movsVista:movsVista };
-  var ncol=(esJunta?8:7);
+  var ncol=9;  // Fecha, Local, Cargado por, Detalle, Comprob., Cargo, Pago, Saldo, acciones
   var botones='<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;">'+
     '<button class="btn-sec" onclick="exportarProvExcel('+provId+')">📥 Excel</button>'+
     '<button class="btn-sec" onclick="exportarProvPdf('+provId+')">🧾 PDF</button></div>';
@@ -298,11 +306,11 @@ async function toggleHist(provId){
     var verDet=esCompra?('<button class="mini-btn" onclick="toggleCompraDet('+provId+','+i+')">Ver detalle</button>')
              :(esPagoObs?('<button class="mini-btn" onclick="toggleMovObs('+provId+','+i+')">Ver detalle</button>'):'');
     var acc=verDet+(borrable?('<button class="x-btn" title="Eliminar este movimiento" onclick="borrarMovProv('+m.id+','+provId+')">✕</button>'):'');
-    return '<tr'+(esCompra?' style="cursor:pointer;" onclick="toggleCompraDet('+provId+','+i+')"':'')+'><td>'+f+'</td>'+(esJunta?('<td>'+(m.local||'')+'</td>'):'')+'<td>'+(m.descripcion||'')+'</td><td>'+(m.comprobante||'')+'</td><td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td><td style="white-space:nowrap;text-align:right;" onclick="event.stopPropagation()">'+acc+'</td></tr>'+
+    return '<tr'+(esCompra?' style="cursor:pointer;" onclick="toggleCompraDet('+provId+','+i+')"':'')+'><td>'+f+'</td><td>'+(m.local||'')+'</td><td>'+(m.cargadoPor||'—')+'</td><td>'+(m.descripcion||'')+'</td><td>'+(m.comprobante||'')+'</td><td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td><td style="white-space:nowrap;text-align:right;" onclick="event.stopPropagation()">'+acc+'</td></tr>'+
       (esCompra?('<tr id="cpd-'+provId+'-'+i+'" hidden><td colspan="'+ncol+'" style="background:var(--surface-2);padding:0;"><div id="cpd-box-'+provId+'-'+i+'" style="padding:10px 12px;"></div></td></tr>'):'')+
       (esPagoObs?('<tr id="cmo-'+provId+'-'+i+'" hidden><td colspan="'+ncol+'" style="background:var(--surface-2);padding:10px 12px;"><b>Observaciones:</b> '+esc(m.observaciones)+'</td></tr>'):'');
   }).join('');
-  el.innerHTML=botones+'<div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th>'+(esJunta?'<th>Local</th>':'')+'<th>Detalle</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th><th></th></tr></thead><tbody>'+
+  el.innerHTML=botones+'<div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th><th>Local</th><th>Cargado por</th><th>Detalle</th><th>Comprob.</th><th class="num">Cargo</th><th class="num">Pago</th><th class="num">Saldo</th><th></th></tr></thead><tbody>'+
     (filas || '<tr><td colspan="'+ncol+'" class="muted">Sin movimientos.</td></tr>')+'</tbody></table></div>';
 }
 function toggleMovObs(provId, i){ var r=document.getElementById('cmo-'+provId+'-'+i); if(r) r.hidden=!r.hidden; }
@@ -328,9 +336,9 @@ async function exportarProvExcel(provId){
   if(typeof XLSX==='undefined'){ toast('No se pudo cargar el exportador','error'); return; }
   var wb=XLSX.utils.book_new();
   // Hoja 1: movimientos (estado de cuenta)
-  var aoa=[['Fecha'].concat(h.esJunta?['Local']:[]).concat(['Detalle','Comprobante','Cargo','Pago','Saldo'])];
+  var aoa=[['Fecha','Local','Cargado por','Detalle','Comprobante','Cargo','Pago','Saldo']];
   h.movs.forEach(function(m){ var esPago=/pago/i.test(m.tipo);
-    aoa.push([fechaCortaProv(m)].concat(h.esJunta?[m.local||'']:[]).concat([ m.descripcion||'', m.comprobante||'', (esPago?'':Number(m.monto)), (esPago?Number(m.monto):''), Number(m.saldo) ]));
+    aoa.push([fechaCortaProv(m), m.local||'', m.cargadoPor||'', m.descripcion||'', m.comprobante||'', (esPago?'':Number(m.monto)), (esPago?Number(m.monto):''), Number(m.saldo) ]);
   });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Cuenta proveedor');
   // Hoja 2: detalle de cada compra (qué se compró)
@@ -352,10 +360,10 @@ async function exportarProvExcel(provId){
 function exportarProvPdf(provId){
   var h=PROVHIST[provId]; if(!h || !h.movs.length){ toast('No hay movimientos para exportar','error'); return; }
   if(!window.POSPDF){ toast('No se pudo cargar el exportador PDF','error'); return; }
-  var cols=['Fecha'].concat(h.esJunta?['Local']:[]).concat(['Detalle','Comprob.','Cargo','Pago','Saldo']);
-  var base=h.esJunta?1:0;
+  var cols=['Fecha','Local','Cargado por','Detalle','Comprob.','Cargo','Pago','Saldo'];
+  var base=2;
   var filas=h.movs.map(function(m){ var esPago=/pago/i.test(m.tipo);
-    return [fechaCortaProv(m)].concat(h.esJunta?[m.local||'']:[]).concat([ m.descripcion||'', m.comprobante||'', (esPago?'':fmt$(m.monto)), (esPago?fmt$(m.monto):''), fmt$(m.saldo) ]);
+    return [fechaCortaProv(m), m.local||'', m.cargadoPor||'', m.descripcion||'', m.comprobante||'', (esPago?'':fmt$(m.monto)), (esPago?fmt$(m.monto):''), fmt$(m.saldo) ];
   });
   POSPDF.tabla({
     titulo:'Cuenta de proveedor', entidad:h.nom,
@@ -398,12 +406,12 @@ function addChequeRow(){
   d.innerHTML='<input class="chq-banco" placeholder="Banco *">'+
     '<input class="chq-num" placeholder="N° cheque">'+
     '<input class="chq-fecha" type="date" title="Fecha de pago">'+
-    '<input class="chq-monto" type="number" step="0.01" placeholder="Monto *" oninput="sumCheques()">'+
+    '<input class="chq-monto" type="text" inputmode="decimal" placeholder="Monto *" oninput="fmtMilesInput(this);sumCheques()">'+
     '<button class="x-btn" type="button" title="Quitar" onclick="this.closest(\'.chq-row\').remove();sumCheques();">✕</button>';
   list.appendChild(d);
 }
 function sumCheques(){
-  var s=0; document.querySelectorAll('#pv-cheques-list .chq-monto').forEach(function(i){ s+=Number(i.value)||0; });
+  var s=0; document.querySelectorAll('#pv-cheques-list .chq-monto').forEach(function(i){ s+=parseMiles(i.value); });
   if(esFormaCheque()){ var mo=document.getElementById('pv-monto'); if(mo) mo.value=s?s.toLocaleString('es-AR',{maximumFractionDigits:2}):''; }
 }
 function readCheques(){
@@ -412,7 +420,7 @@ function readCheques(){
     var banco=(r.querySelector('.chq-banco').value||'').trim();
     var num=(r.querySelector('.chq-num').value||'').trim();
     var fecha=r.querySelector('.chq-fecha').value||'';
-    var monto=Number(r.querySelector('.chq-monto').value)||0;
+    var monto=parseMiles(r.querySelector('.chq-monto').value);
     if(!banco && !fecha && !monto && !num) return; // fila vacía: ignorar
     if(!banco) err='Falta el banco en un cheque';
     else if(!fecha) err='Falta la fecha de pago en un cheque';
@@ -462,6 +470,46 @@ function flujoPorFecha(arr){
   var acum=0; filas.forEach(function(f){ acum+=f.total; f.acum=acum; });
   return filas;
 }
+// --- Flujo de fondos por SEMANA (lunes a domingo) ---
+function lunesDe(iso){ var d=new Date(iso+'T00:00:00'); var dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return d; }
+function ddmm(d){ return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2); }
+function renderFlujoSemanal(arr){
+  var cont=document.getElementById('chq-flujo');
+  if(!arr.length){ cont.innerHTML='<p class="muted" style="margin:0;">Sin cheques para el filtro elegido.</p>'; return; }
+  // Agrupar por semana (clave = lunes ISO, o "zzz" para los sin fecha)
+  var byW={};
+  arr.forEach(function(c){
+    var key = c.fecha ? lunesDe(c.fecha).toISOString().slice(0,10) : 'zzz-sinfecha';
+    var o=byW[key]=byW[key]||{key:key, cheques:[], total:0};
+    o.cheques.push(c); o.total+=(c.monto||0);
+  });
+  var acum=0;
+  cont.innerHTML=Object.keys(byW).sort().map(function(k){
+    var w=byW[k]; acum+=w.total;
+    var titulo;
+    if(k==='zzz-sinfecha'){ titulo='Sin fecha de pago'; }
+    else { var L=new Date(k+'T00:00:00'), D=new Date(L); D.setDate(D.getDate()+6); titulo='Semana '+ddmm(L)+' al '+ddmm(D)+'/'+D.getFullYear(); }
+    // Totales por día dentro de la semana
+    var byD={}; w.cheques.forEach(function(c){ var d=c.fecha||'(sin fecha)'; var o=byD[d]=byD[d]||{n:0,t:0}; o.n++; o.t+=(c.monto||0); });
+    var dias=Object.keys(byD).sort().map(function(d){
+      return '<tr><td>'+(d==='(sin fecha)'?'(sin fecha)':fechaCorta(d))+'</td><td class="num">'+byD[d].n+'</td><td class="num">'+fmt$(byD[d].t)+'</td></tr>';
+    }).join('');
+    // Detalle de los cheques de la semana
+    var det=w.cheques.slice().sort(function(a,b){ return String(a.fecha||'').localeCompare(String(b.fecha||'')); }).map(function(c){
+      return '<div class="sem-det-row"><span>'+(c.fecha?fechaCorta(c.fecha):'(s/f)')+'</span>'+
+             '<span>'+(c.banco||'')+(c.numero?(' · N° '+c.numero):'')+'</span>'+
+             '<span>'+(c.proveedor||'')+(c.local?(' · '+c.local):'')+'</span>'+
+             '<span class="num">'+fmt$(c.monto)+'</span></div>';
+    }).join('');
+    return '<div class="sem-box">'+
+      '<div class="sem-head"><span>'+titulo+'</span>'+
+        '<span class="sem-tot">Total <b>'+fmt$(w.total)+'</b> · '+w.cheques.length+' cheque(s)'+
+        (k==='zzz-sinfecha'?'':(' · acum. '+fmt$(acum)))+'</span></div>'+
+      '<table class="data compact sem-tbl"><thead><tr><th>Día</th><th class="num">Cheques</th><th class="num">A pagar</th></tr></thead><tbody>'+dias+'</tbody></table>'+
+      '<div class="sem-det"><div class="sem-det-ttl">Cheques de la semana</div>'+det+'</div>'+
+    '</div>';
+  }).join('');
+}
 function pintarCheques(){
   var arr=chequesFiltrados();
   // Totales y flujo: solo cheques vigentes (los anulados no se van a pagar).
@@ -470,11 +518,8 @@ function pintarCheques(){
   var total=vig.reduce(function(s,c){ return s+(c.monto||0); },0);
   var nAnul=arr.length-vig.length;
   document.getElementById('chq-total').innerHTML='Total: <b>'+fmt$(total)+'</b> · '+vig.length+' cheque(s)'+(nAnul?(' <span class="muted">(+'+nAnul+' anulado'+(nAnul!==1?'s':'')+')</span>'):'');
-  // flujo por fecha (solo vigentes)
-  var fl=flujoPorFecha(vig);
-  document.getElementById('chq-flujo-tbody').innerHTML = fl.length ? fl.map(function(f){
-    return '<tr><td>'+(f.fecha==='(sin fecha)'?'(sin fecha)':fechaCorta(f.fecha))+'</td><td class="num">'+f.n+'</td><td class="num">'+fmt$(f.total)+'</td><td class="num"><b>'+fmt$(f.acum)+'</b></td></tr>';
-  }).join('') : '<tr><td colspan="4" class="muted">Sin cheques para el filtro elegido.</td></tr>';
+  // flujo por semana (solo vigentes)
+  renderFlujoSemanal(vig);
   // detalle
   document.getElementById('chq-tbody').innerHTML = arr.length ? arr.map(function(c){
     var anulado=/anulad/i.test(c.estado||'');

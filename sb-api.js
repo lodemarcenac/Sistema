@@ -265,10 +265,11 @@
       else if(params&&params.sucursal){ var m1=await sucIdMap(); filtrado=true; var one=m1[params.sucursal]; sids=one?[one]:[]; }
       if(filtrado && (!sids||!sids.length)) return {ok:true, movimientos:[], saldo:0};
       var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
+      var pmP=await perfilNombres();
       var q=sb.from('deuda_proveedores').select('*').eq('proveedor_id',id);
       if(filtrado) q=q.in('sucursal_id',sids);
       var r=await q.order('fecha'); if(r.error) throw r.error;
-      var saldo=0; var movs=(r.data||[]).map(function(m){ var v=Number(m.monto)||0; if(/pago/i.test(m.tipo)) saldo-=v; else saldo+=v; return { id:m.id, fecha:m.fecha, tipo:m.tipo, monto:v, descripcion:m.descripcion||'', comprobante:m.comprobante||'', formaPago:m.forma_pago||'', local:idToName[m.sucursal_id]||'', observaciones:(m.observaciones||''), saldo:saldo }; });
+      var saldo=0; var movs=(r.data||[]).map(function(m){ var v=Number(m.monto)||0; if(/pago/i.test(m.tipo)) saldo-=v; else saldo+=v; return { id:m.id, fecha:m.fecha, tipo:m.tipo, monto:v, descripcion:m.descripcion||'', comprobante:m.comprobante||'', formaPago:m.forma_pago||'', local:idToName[m.sucursal_id]||'', cargadoPor:nombreUsuario(pmP,m.usuario_id), observaciones:(m.observaciones||''), saldo:saldo }; });
       return {ok:true, movimientos:movs, saldo:saldo};
     },
     getProveedoresDeLocal: async function(params){
