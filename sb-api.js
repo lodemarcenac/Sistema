@@ -1380,6 +1380,13 @@
     }
   };
 
+  // getGrupos y getCuentasInternas son LECTURAS (se llaman con window.sf) pero quedaron
+  // definidas junto a sus escrituras; exponerlas como readers para que el dispatch las encuentre.
+  // Sin esto, sf('getGrupos') devuelve "Lectura no implementada" y Configuración→Grupos
+  // y Cuentas→Entre grupos se ven vacíos aunque los grupos existan.
+  readers.getGrupos = writers.getGrupos;
+  readers.getCuentasInternas = writers.getCuentasInternas;
+
   // ---------------- DISPATCH ----------------
   window.sf = async function(action, qs){
     var a = parseAction(action);

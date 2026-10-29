@@ -171,10 +171,10 @@
         <h3>Aranceles y plazos por medio de pago</h3>
         <p class="hint">% de descuento y días hábiles hasta el depósito, por <b>medio</b> (el «Medio» es la primera columna). Abajo se listan solos los medios que <b>reporta tu terminal Clover</b> (<b>Debit Card</b>, <b>Credit Card</b>, <b>Prepaid Card</b>, <b>QR PosNet</b>): completá % y días y tocá <b>Agregar</b>. Se usan para el <b>neto esperado</b> en Conciliación. Si además querés que el <b>cruce de tarjeta entre grupos</b> salga neto en la venta, agregá a mano (en el renglón de abajo) un medio con el nombre EXACTO de tu <b>forma de pago</b> de Ventas (ej. Tarjeta, Virtual) y su arancel; si no, ese cruce se hace en bruto (0%).</p>
         <div class="tblwrap"><table class="cfg"><thead><tr><th>Medio</th><th>Arancel %</th><th>Días hábiles</th><th></th></tr></thead><tbody id="cv-aranc-tbody"></tbody></table></div>
-        <div class="fp-row" style="border:none;margin-top:8px;">
-          <input type="text" id="cv-na-medio" placeholder="Medio (ej. Credit Card)">
-          <input type="number" id="cv-na-pct" placeholder="Arancel %" step="0.01" style="max-width:120px;flex:none;">
-          <input type="number" id="cv-na-dias" placeholder="Días" style="max-width:100px;flex:none;">
+        <div class="abm-nueva" style="margin-top:12px;">
+          <div><label>Medio</label><input type="text" id="cv-na-medio" placeholder="Ej. Credit Card"></div>
+          <div><label>Arancel %</label><input type="number" id="cv-na-pct" step="0.01" placeholder="0"></div>
+          <div><label>Días hábiles</label><input type="number" id="cv-na-dias" placeholder="0"></div>
           <button class="btn" onclick="addCvArancel()">Agregar</button>
         </div>
       </div>

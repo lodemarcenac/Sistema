@@ -20,14 +20,19 @@
   .saldo{font-size:var(--fs-2xl);font-weight:700;}
   .saldo.debe{color:var(--bad);} .saldo.favor{color:var(--good);} .saldo.cero{color:var(--muted);}
   table.data td.cargo{color:var(--bad);} table.data td.pago{color:var(--good);}
-  /* Flujo de fondos por semana */
-  .sem-box{border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;background:var(--surface-2);}
-  .sem-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;font-weight:600;color:var(--ink);}
-  .sem-head .sem-tot{font-weight:400;color:var(--ink-soft);font-size:var(--fs-sm);}
-  .sem-tbl{margin:8px 0 10px;background:#fff;}
-  .sem-det-ttl{font-size:var(--fs-xs);color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;}
-  .sem-det-row{display:grid;grid-template-columns:70px 1fr 1fr auto;gap:10px;padding:4px 2px;font-size:var(--fs-sm);color:var(--ink-soft);border-top:1px solid var(--line-2);}
-  .sem-det-row .num{font-weight:600;color:var(--ink);}
+  /* Flujo de fondos por semana (7 días) */
+  .fl-nav{display:flex;align-items:center;gap:8px;margin:0 0 10px;}
+  .fl-nav .fl-sem{font-weight:600;color:var(--ink);min-width:150px;text-align:center;}
+  .fl-nav .fl-hoy{margin-left:auto;}
+  table.fl-tbl{width:100%;border-collapse:collapse;}
+  table.fl-tbl th,table.fl-tbl td{padding:9px 12px;}
+  table.fl-tbl tbody tr{border-top:1px solid var(--line-2);}
+  table.fl-tbl td:first-child{font-weight:600;color:var(--ink);white-space:nowrap;}
+  table.fl-tbl .fl-barcell{width:42%;}
+  .fl-barbg{background:var(--surface-3);border-radius:999px;height:14px;overflow:hidden;}
+  .fl-bar{background:linear-gradient(90deg,var(--brand),var(--brand-2));height:100%;border-radius:999px;}
+  table.fl-tbl tr.fl-cero td{color:var(--muted);font-weight:400;}
+  table.fl-tbl tfoot tr.fl-total td{border-top:2px solid var(--line);font-weight:700;color:var(--ink);background:var(--surface-2);}
 </style>
 </head>
 <body>
@@ -112,7 +117,7 @@
       </div>
       <div class="card" style="margin-bottom:14px;">
         <h3 style="margin:0 0 6px;font-size:var(--fs-lg);">💵 Flujo de fondos · por semana</h3>
-        <p class="resumen" style="margin:0 0 8px;">Un cuadro por semana (lunes a domingo): el total de cada día, el total de la semana y el acumulado. Debajo, el detalle de los cheques de esa semana.</p>
+        <p class="resumen" style="margin:0 0 8px;">Una semana por vez (lunes a domingo, 7 días): lo que hay que pagar cada día y el total de la semana abajo. Movete entre semanas con ‹ ›.</p>
         <div id="chq-flujo"></div>
       </div>
       <div class="card">
@@ -470,45 +475,41 @@ function flujoPorFecha(arr){
   var acum=0; filas.forEach(function(f){ acum+=f.total; f.acum=acum; });
   return filas;
 }
-// --- Flujo de fondos por SEMANA (lunes a domingo) ---
-function lunesDe(iso){ var d=new Date(iso+'T00:00:00'); var dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return d; }
+// --- Flujo de fondos por SEMANA: siempre 7 días (lunes a domingo), con navegación ---
 function ddmm(d){ return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2); }
+function isoDe(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function lunesDeFecha(d){ var x=new Date(d); x.setHours(0,0,0,0); var dow=(x.getDay()+6)%7; x.setDate(x.getDate()-dow); return x; }
+var DIAS_ABR=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+var FLUJO_ARR=[], FLUJO_LUNES=null;
 function renderFlujoSemanal(arr){
-  var cont=document.getElementById('chq-flujo');
-  if(!arr.length){ cont.innerHTML='<p class="muted" style="margin:0;">Sin cheques para el filtro elegido.</p>'; return; }
-  // Agrupar por semana (clave = lunes ISO, o "zzz" para los sin fecha)
-  var byW={};
-  arr.forEach(function(c){
-    var key = c.fecha ? lunesDe(c.fecha).toISOString().slice(0,10) : 'zzz-sinfecha';
-    var o=byW[key]=byW[key]||{key:key, cheques:[], total:0};
-    o.cheques.push(c); o.total+=(c.monto||0);
-  });
-  var acum=0;
-  cont.innerHTML=Object.keys(byW).sort().map(function(k){
-    var w=byW[k]; acum+=w.total;
-    var titulo;
-    if(k==='zzz-sinfecha'){ titulo='Sin fecha de pago'; }
-    else { var L=new Date(k+'T00:00:00'), D=new Date(L); D.setDate(D.getDate()+6); titulo='Semana '+ddmm(L)+' al '+ddmm(D)+'/'+D.getFullYear(); }
-    // Totales por día dentro de la semana
-    var byD={}; w.cheques.forEach(function(c){ var d=c.fecha||'(sin fecha)'; var o=byD[d]=byD[d]||{n:0,t:0}; o.n++; o.t+=(c.monto||0); });
-    var dias=Object.keys(byD).sort().map(function(d){
-      return '<tr><td>'+(d==='(sin fecha)'?'(sin fecha)':fechaCorta(d))+'</td><td class="num">'+byD[d].n+'</td><td class="num">'+fmt$(byD[d].t)+'</td></tr>';
-    }).join('');
-    // Detalle de los cheques de la semana
-    var det=w.cheques.slice().sort(function(a,b){ return String(a.fecha||'').localeCompare(String(b.fecha||'')); }).map(function(c){
-      return '<div class="sem-det-row"><span>'+(c.fecha?fechaCorta(c.fecha):'(s/f)')+'</span>'+
-             '<span>'+(c.banco||'')+(c.numero?(' · N° '+c.numero):'')+'</span>'+
-             '<span>'+(c.proveedor||'')+(c.local?(' · '+c.local):'')+'</span>'+
-             '<span class="num">'+fmt$(c.monto)+'</span></div>';
-    }).join('');
-    return '<div class="sem-box">'+
-      '<div class="sem-head"><span>'+titulo+'</span>'+
-        '<span class="sem-tot">Total <b>'+fmt$(w.total)+'</b> · '+w.cheques.length+' cheque(s)'+
-        (k==='zzz-sinfecha'?'':(' · acum. '+fmt$(acum)))+'</span></div>'+
-      '<table class="data compact sem-tbl"><thead><tr><th>Día</th><th class="num">Cheques</th><th class="num">A pagar</th></tr></thead><tbody>'+dias+'</tbody></table>'+
-      '<div class="sem-det"><div class="sem-det-ttl">Cheques de la semana</div>'+det+'</div>'+
-    '</div>';
+  FLUJO_ARR=arr||[];
+  if(!FLUJO_LUNES) FLUJO_LUNES=lunesDeFecha(new Date());
+  pintarSemanaFlujo();
+}
+function moverSemana(delta){ if(!FLUJO_LUNES) FLUJO_LUNES=lunesDeFecha(new Date()); FLUJO_LUNES.setDate(FLUJO_LUNES.getDate()+7*delta); pintarSemanaFlujo(); }
+function semanaHoy(){ FLUJO_LUNES=lunesDeFecha(new Date()); pintarSemanaFlujo(); }
+function pintarSemanaFlujo(){
+  var cont=document.getElementById('chq-flujo'); if(!cont) return;
+  var L=new Date(FLUJO_LUNES), D=new Date(L); D.setDate(D.getDate()+6);
+  // Total por día (solo la semana visible) + cheques sin fecha (no entran en ninguna semana)
+  var byD={}, sinFecha=0, nSinFecha=0;
+  FLUJO_ARR.forEach(function(c){ if(!c.fecha){ sinFecha+=(c.monto||0); nSinFecha++; return; } var o=byD[c.fecha]=byD[c.fecha]||{n:0,t:0}; o.n++; o.t+=(c.monto||0); });
+  var maxT=0, totSem=0, totN=0, filas=[];
+  for(var i=0;i<7;i++){ var d=new Date(L); d.setDate(d.getDate()+i); var iso=isoDe(d); var o=byD[iso]||{n:0,t:0}; if(o.t>maxT)maxT=o.t; totSem+=o.t; totN+=o.n; filas.push({d:d,n:o.n,t:o.t}); }
+  var rows=filas.map(function(f,i){
+    var pct=(maxT>0 && f.t>0)?Math.max(4,Math.round(f.t/maxT*100)):0;
+    var bar='<div class="fl-barbg">'+(pct?'<div class="fl-bar" style="width:'+pct+'%;"></div>':'')+'</div>';
+    return '<tr'+(f.t<=0?' class="fl-cero"':'')+'><td>'+DIAS_ABR[i]+' '+ddmm(f.d)+'</td><td class="fl-barcell">'+bar+'</td><td class="num">'+fmt$(f.t)+'</td><td class="num">'+(f.n||0)+'</td></tr>';
   }).join('');
+  var nav='<div class="fl-nav"><button class="btn-sec" title="Semana anterior" onclick="moverSemana(-1)">‹</button>'+
+          '<span class="fl-sem">'+ddmm(L)+' al '+ddmm(D)+'/'+D.getFullYear()+'</span>'+
+          '<button class="btn-sec" title="Semana siguiente" onclick="moverSemana(1)">›</button>'+
+          '<button class="btn-sec fl-hoy" onclick="semanaHoy()">Hoy</button></div>';
+  var tabla='<table class="data fl-tbl"><thead><tr><th>Día</th><th></th><th class="num">A pagar</th><th class="num">Cheques</th></tr></thead>'+
+            '<tbody>'+rows+'</tbody>'+
+            '<tfoot><tr class="fl-total"><td>TOTAL</td><td></td><td class="num">'+fmt$(totSem)+'</td><td class="num">'+totN+'</td></tr></tfoot></table>';
+  var nota = nSinFecha ? '<p class="muted" style="margin:8px 0 0;font-size:var(--fs-sm);">+ '+nSinFecha+' cheque(s) sin fecha de pago · '+fmt$(sinFecha)+' (no entran en ninguna semana).</p>' : '';
+  cont.innerHTML=nav+tabla+nota;
 }
 function pintarCheques(){
   var arr=chequesFiltrados();
