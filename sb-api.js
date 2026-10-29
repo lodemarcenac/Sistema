@@ -1025,11 +1025,20 @@
     // cargado (entregas/tarjetas/liquidación), si no se deriva del local vía su grupo.
     // Se descartan los movimientos internos de un mismo grupo (misma bolsa).
     getCuentasInternas: async function(){
-      var r=await sb.from('cuentas_internas').select('local_origen,local_destino,grupo_origen,grupo_destino,fecha,tipo,concepto,monto').order('fecha',{ascending:false}).limit(500);
-      if(r.error) throw r.error;
+      // Toda la historia cargada (remitos recibidos, cobros de cta cte de otro grupo,
+      // tarjetas/virtual al grupo cobrador, pagos de proveedor cruzados y entregas).
+      // Se pagina para no perder movimientos viejos (Supabase corta ~1000 por request).
+      var rows=[], desde=0, pag=1000;
+      for(;;){
+        var r=await sb.from('cuentas_internas').select('local_origen,local_destino,grupo_origen,grupo_destino,fecha,tipo,concepto,monto').order('fecha',{ascending:false}).range(desde,desde+pag-1);
+        if(r.error) throw r.error;
+        var lote=r.data||[]; rows=rows.concat(lote);
+        if(lote.length<pag) break;
+        desde+=pag;
+      }
       var gm=await grupoMap();
       var rg=await sb.from('grupos').select('id,nombre'); var gname={}; (rg.data||[]).forEach(function(g){ gname[g.id]=g.nombre; });
-      var movs=(r.data||[]).map(function(x){
+      var movs=rows.map(function(x){
         var go = x.grupo_origen  || gm[x.local_origen]  || null;
         var gd = x.grupo_destino || gm[x.local_destino] || null;
         return { origenId:go, destinoId:gd, origen:(gname[go]||''), destino:(gname[gd]||''), fecha:x.fecha, tipo:x.tipo, concepto:x.concepto||'', monto:Number(x.monto)||0 };

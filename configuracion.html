@@ -214,10 +214,10 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-10-28.2';</script>
-<script src="sb-api.js?v=2026-10-28.2"></script>
-<script src="auth-guard.js?v=2026-10-28.2"></script>
-<script src="nav.js?v=2026-10-28.2"></script>
+<script>window.APP_BUILD='2026-10-29.1';</script>
+<script src="sb-api.js?v=2026-10-29.1"></script>
+<script src="auth-guard.js?v=2026-10-29.1"></script>
+<script src="nav.js?v=2026-10-29.1"></script>
 <script>
 var sb=window.sbClient;
 var FORMAS=[{nombre:'Efectivo',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Tarjeta',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Virtual',cta:false,facturar:false,cobro:true,pago:true},{nombre:'Cuenta Corriente',cta:true,facturar:false,cobro:true,pago:true}];
@@ -504,23 +504,32 @@ function renderGrupos(){
   if(!GRP.grupos.length){ wrap.innerHTML='<p class="muted">Todavía no hay grupos.</p>'; return; }
   // opciones para mover un local a este grupo (locales sin grupo + los de otros grupos)
   var todos=[]; GRP.grupos.forEach(function(g){ g.locales.forEach(function(l){ todos.push({id:l.id,nombre:l.nombre,grupo:g.id}); }); }); GRP.sinGrupo.forEach(function(l){ todos.push({id:l.id,nombre:l.nombre,grupo:null}); });
+  // Encabezado: quién cobra hoy lo no-efectivo.
+  var cob=GRP.grupos.filter(function(g){return g.cobrador;})[0];
+  var head='<p class="hint" style="margin-bottom:12px;">'+(cob
+      ? 'Grupo que <b>cobra</b> lo no-efectivo (tarjeta/QR/virtual): <b style="color:var(--good);">'+escAttr(cob.nombre)+'</b>.'
+      : 'Ningún grupo marcado como <b>cobrador</b> todavía. Marcá uno con 💳 para que ahí recaigan los cobros no-efectivo.')+'</p>';
   var html=GRP.grupos.map(function(g){
     var chips=g.locales.map(function(l){
       return '<span class="tag">'+escAttr(l.nombre)+'<button class="x-btn" title="Sacar del grupo" onclick="sacarLocal('+l.id+')">✕</button></span>';
-    }).join('') || '<span class="muted" style="font-size:.85em;">Sin locales</span>';
+    }).join('') || '<span class="muted" style="font-size:.85em;">Sin locales asignados</span>';
     var opts=todos.filter(function(l){ return l.grupo!==g.id; }).map(function(l){ return '<option value="'+l.id+'">'+escAttr(l.nombre)+(l.grupo==null?' (sin grupo)':'')+'</option>'; }).join('');
-    return '<div style="border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;background:var(--surface-2);">'+
+    var cobra=!!g.cobrador;
+    var card='border:1px solid '+(cobra?'var(--good)':'var(--line)')+';border-left:4px solid '+(cobra?'var(--good)':'var(--line)')+';border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;background:var(--surface-2);';
+    return '<div style="'+card+'">'+
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'+
         '<input type="text" value="'+escAttr(g.nombre)+'" onchange="renombrarGrupo('+g.id+',this.value)" style="max-width:220px;font-weight:600;">'+
-        '<label style="display:flex;align-items:center;gap:5px;font-size:var(--fs-sm);'+(g.cobrador?'color:var(--good);font-weight:700;':'color:var(--muted);')+'"><input type="radio" name="grp-cobrador" '+(g.cobrador?'checked':'')+' onchange="marcarCobrador('+g.id+')"> 💳 Cobrador no-efectivo</label>'+
+        '<span class="muted" style="font-size:var(--fs-sm);">'+g.locales.length+' local'+(g.locales.length===1?'':'es')+'</span>'+
+        (cobra?'<span class="tag" style="background:var(--good);color:#fff;border:none;font-weight:700;">💳 Cobra lo no-efectivo</span>':'')+
         '<button class="x-btn" title="Eliminar grupo" style="margin-left:auto;" onclick="delGrupo('+g.id+',\''+escAttr(g.nombre).replace(/'/g,"\\'")+'\')">✕</button>'+
       '</div>'+
-      '<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'+chips+'</div>'+
+      '<div style="margin-top:10px;"><div class="muted" style="font-size:var(--fs-sm);margin-bottom:4px;">Locales del grupo</div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'+chips+'</div></div>'+
       (opts? '<div style="margin-top:8px;"><select onchange="if(this.value){asignarLocal(this.value,'+g.id+');this.value=\'\';}"><option value="">+ Agregar local a este grupo…</option>'+opts+'</select></div>':'')+
+      '<label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:var(--fs-sm);'+(cobra?'color:var(--good);font-weight:700;':'color:var(--muted);')+'"><input type="radio" name="grp-cobrador" '+(cobra?'checked':'')+' onchange="marcarCobrador('+g.id+')"> Este grupo cobra lo no-efectivo (tarjeta/QR/virtual)</label>'+
     '</div>';
   }).join('');
   if(GRP.sinGrupo.length){ html+='<p class="hint" style="margin-top:6px;">Locales sin grupo: '+GRP.sinGrupo.map(function(l){return escAttr(l.nombre);}).join(', ')+'. Agregalos a un grupo con el selector de cada grupo.</p>'; }
-  wrap.innerHTML=html;
+  wrap.innerHTML=head+html;
 }
 async function addGrupo(){
   var el=document.getElementById('grp-nuevo'); var nombre=(el.value||'').trim(); if(!nombre){ toast('Poné un nombre','error'); return; }
