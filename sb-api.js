@@ -1128,6 +1128,21 @@
           }
         }catch(e){ /* si el cruce falla, el pago igual quedó registrado */ }
       }
+      // Pago DIRECTO con plata de otra sucursal: la deuda la cancela el local que se está
+      // viendo (p.sucursal), pero la plata la puso p.pagadoPor. Si son de GRUPOS distintos,
+      // el grupo de la deuda le queda debiendo al grupo que puso la plata.
+      if((p.tipo||'pago')==='pago' && p.pagadoPor && pay.sucursal_id && (Number(p.monto)||0)>0){
+        try{
+          var payerId=m[p.pagadoPor];
+          if(payerId && String(payerId)!==String(pay.sucursal_id)){
+            var gm2=await grupoMap();
+            var gDeuda=gm2[pay.sucursal_id], gPagador=gm2[payerId];
+            if(gDeuda && gPagador && String(gDeuda)!==String(gPagador)){
+              await sb.from('cuentas_internas').insert({ grupo_origen:gDeuda, grupo_destino:gPagador, tipo:'pago_proveedor_directo', concepto:('Pago directo — lo puso '+p.pagadoPor), monto:Number(p.monto)||0, ref:('deuda:'+deudaId) });
+            }
+          }
+        }catch(e){ /* si el cruce falla, el pago igual quedó registrado */ }
+      }
       // Cheques emitidos (forma de pago cheque): se guardan para el listado y quedan
       // vinculados al pago (deuda_id) para poder anularlos/revertirlos juntos.
       if((p.tipo||'pago')==='pago' && Array.isArray(p.cheques) && p.cheques.length){
@@ -1158,7 +1173,7 @@
       }
       var d=await sb.from('deuda_proveedores').delete().eq('id',p.id); if(d.error) throw d.error;
       // Revertir el cruce cross-group de este pago, si lo hubo (atado por ref=deuda:<id>).
-      try{ await sb.from('cuentas_internas').delete().eq('tipo','pago_proveedor_cruzado').eq('ref','deuda:'+p.id); }catch(e){}
+      try{ await sb.from('cuentas_internas').delete().in('tipo',['pago_proveedor_cruzado','pago_proveedor_directo']).eq('ref','deuda:'+p.id); }catch(e){}
       if((mov.tipo||'')==='pago' && mov.fondo==='reserva' && mov.sucursal_id && (Number(mov.monto)||0)>0){
         await sb.from('efectivo_reserva_mov').insert({ sucursal_id:mov.sucursal_id, tipo:'ingreso', monto:Number(mov.monto)||0, concepto:'Reversa pago a proveedor (borrado)' });
       }
@@ -1177,6 +1192,7 @@
         if(!g.error && g.data){
           var mov=g.data;
           var d=await sb.from('deuda_proveedores').delete().eq('id',mov.id); if(d.error) throw d.error;  // cascada: borra los cheques del pago
+          try{ await sb.from('cuentas_internas').delete().in('tipo',['pago_proveedor_cruzado','pago_proveedor_directo']).eq('ref','deuda:'+mov.id); }catch(e){}  // revertir cruce entre grupos si lo hubo
           if((mov.tipo||'')==='pago' && mov.fondo==='reserva' && mov.sucursal_id && (Number(mov.monto)||0)>0){
             await sb.from('efectivo_reserva_mov').insert({ sucursal_id:mov.sucursal_id, tipo:'ingreso', monto:Number(mov.monto)||0, concepto:'Reversa pago a proveedor (cheque anulado)' });
           }

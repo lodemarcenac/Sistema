@@ -86,7 +86,9 @@
           <div><label>Monto $</label><input id="pv-monto" type="text" inputmode="decimal" oninput="fmtMilesInput(this)"></div>
           <div><label>Forma</label><select id="pv-fp" onchange="onFormaPagoProv()"></select></div>
           <div id="pv-caja-wrap" hidden><label>Caja</label><select id="pv-caja"><option>Caja del día</option><option>Caja guardada</option></select></div>
-          <div><label>Tipo</label><select id="pv-tipo"><option value="pago">Pago</option><option value="cargo">Cargo manual</option></select></div>
+          <div><label>Tipo</label><select id="pv-tipo" onchange="updatePagadoVis()"><option value="pago">Pago</option><option value="cargo">Cargo manual</option></select></div>
+          <div id="pv-pagado-wrap" hidden><label>Pagó (sucursal)</label><select id="pv-pagado"></select></div>
+          <div id="pv-pagado-hint" hidden style="grid-column:1/-1;margin-top:-4px;"><span class="muted" style="font-size:var(--fs-sm);">Si otra sucursal puso la plata, elegila: la deuda la cancela este local, pero queda el saldo entre grupos (este local le debe al que pagó).</span></div>
           <div style="grid-column:1/-1;"><label>Observaciones (opcional)</label><input id="pv-obs" placeholder="Nota del pago…"></div>
           <button class="btn" onclick="movProv()">Registrar</button>
           <button class="btn-sec" onclick="cerrarPagoProv()">Cancelar</button>
@@ -143,7 +145,10 @@
           <button class="btn" onclick="registrarEntrega()">Registrar entrega</button>
         </div>
       </div>
-      <div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th><th>Origen (debe)</th><th>Destino (acreedor)</th><th>Concepto</th><th class="num">Monto</th></tr></thead><tbody id="inter-tbody"></tbody></table></div></div>
+      <div class="card p0">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;flex-wrap:wrap;"><h3 style="margin:0;">Movimientos</h3><div style="display:flex;align-items:center;gap:10px;"><span class="muted" id="inter-total"></span><button class="btn-sec" onclick="exportarInter()">📥 Exportar Excel</button></div></div>
+        <div class="tblwrap"><table class="data"><thead><tr><th>Fecha</th><th>Origen (debe)</th><th>Destino (acreedor)</th><th>Concepto</th><th class="num">Monto</th></tr></thead><tbody id="inter-tbody"></tbody></table></div>
+      </div>
     </div>
   </main>
 </div>
@@ -154,10 +159,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script>window.APP_BUILD='2026-10-29.1';</script>
-<script src="sb-api.js?v=2026-10-29.1"></script>
-<script src="auth-guard.js?v=2026-10-29.1"></script>
-<script src="nav.js?v=2026-10-29.1"></script>
+<script>window.APP_BUILD='2026-10-29.2';</script>
+<script src="sb-api.js?v=2026-10-29.2"></script>
+<script src="auth-guard.js?v=2026-10-29.2"></script>
+<script src="nav.js?v=2026-10-29.2"></script>
 <script src="pdf-export.js?v=2026-10-22.2"></script>
 <script>
 var sb=window.sbClient;
@@ -203,12 +208,31 @@ async function iniciar(){
 function aplicarVistaAdmin(){ var al=document.getElementById('pv-alcance'); if(al) al.hidden=!esAdminVista(); }
 document.addEventListener('perm-listo', function(){ aplicarVistaAdmin(); renderDeudas(); });
 function poblarSuc(){ var sel=document.getElementById('selSuc'); sel.innerHTML=SUCS.map(function(s){return '<option>'+s+'</option>';}).join(''); sucActual=localStorage.getItem('pvSucursalPort')||SUCS[0]||''; if(sucActual) sel.value=sucActual; }
+// Locales a los que el usuario logueado tiene acceso (admin = todos). Base del selector "Pagó".
+function misLocales(){
+  if(esAdminVista()) return SUCS.slice();
+  var ls=(window.PERM && window.PERM.locales)||[];
+  var set={}; SUCS.forEach(function(s){ set[s]=true; });
+  var out=ls.filter(function(s){ return set[s]; });
+  return out.length?out:SUCS.slice();   // si no hay asignados, no limitar
+}
+// Muestra el selector "Pagó (sucursal)" solo si es un PAGO y el usuario tiene más de un local.
+function updatePagadoVis(){
+  var tipo=(document.getElementById('pv-tipo')||{}).value;
+  var locs=misLocales();
+  var mostrar=(tipo==='pago' && locs.length>1);
+  var wrap=document.getElementById('pv-pagado-wrap'), hint=document.getElementById('pv-pagado-hint'), sel=document.getElementById('pv-pagado');
+  if(wrap) wrap.hidden=!mostrar; if(hint) hint.hidden=!mostrar;
+  if(mostrar && sel){ sel.innerHTML=locs.map(function(s){return '<option'+(s===sucActual?' selected':'')+'>'+s+'</option>';}).join(''); sel.value=sucActual; }
+}
 function cambiarSuc(){ sucActual=document.getElementById('selSuc').value; localStorage.setItem('pvSucursalPort',sucActual); cargarCuentasProv(); }
 async function cargarCuentasProv(){ cerrarPagoProv(); await renderDeudas(); }
 function switchTab(name){ document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t')===name); }); ['prov','inter','cheques'].forEach(function(t){ document.getElementById('t-'+t).hidden=(t!==name); }); if(name==='inter') cargarInter(); if(name==='prov') cargarCuentasProv(); if(name==='cheques') cargarCheques(); }
 var GNAME={};   // grupo_id -> nombre
+var INTERMOVS=[];   // movimientos entre grupos (para exportar)
 async function cargarInter(){
   var r=await window.sf('getCuentasInternas'); var movs=(r.ok?r.movimientos:[])||[];
+  INTERMOVS=movs;
   GNAME=(r.ok&&r.grupos)?r.grupos:{};
   poblarGruposEntrega();
   // neto por par: origen le debe a destino
@@ -219,6 +243,17 @@ async function cargarInter(){
   Object.keys(net).forEach(function(k){ var pa=k.split('>'); var a=pa[0], b=pa[1]; if(vistos[k]) return; var inv=b+'>'+a; var val=net[k]-(net[inv]||0); vistos[k]=true; vistos[inv]=true; if(Math.abs(val)>0.5){ if(val>0) filas.push({deudor:a, acreedor:b, monto:val}); else filas.push({deudor:b, acreedor:a, monto:-val}); } });
   document.getElementById('inter-net').innerHTML = filas.length ? filas.map(function(f){ return '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;"><span><b>'+(GNAME[f.deudor]||f.deudor)+'</b> le debe a <b>'+(GNAME[f.acreedor]||f.acreedor)+'</b>: <span style="color:var(--bad);font-weight:700;">'+fmt$(f.monto)+'</span></span><button class="btn-sec" onclick="saldarInter(\''+f.deudor+'\',\''+f.acreedor+'\','+f.monto+')">Saldar / registrar pago</button></div>'; }).join('') : '<div class="muted">No hay saldos pendientes entre grupos.</div>';
   document.getElementById('inter-tbody').innerHTML = movs.length ? movs.map(function(m){ var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; return '<tr><td>'+f+'</td><td>'+(m.origen||'')+'</td><td>'+(m.destino||'')+'</td><td>'+(m.concepto||'')+'</td><td class="num">'+fmt$(m.monto)+'</td></tr>'; }).join('') : '<tr><td colspan="5" class="muted">Sin movimientos.</td></tr>';
+  var tl=document.getElementById('inter-total'); if(tl) tl.textContent = movs.length ? (movs.length+' movimiento(s)') : '';
+}
+function exportarInter(){
+  if(!INTERMOVS.length){ toast('No hay movimientos para exportar','error'); return; }
+  if(typeof XLSX==='undefined'){ toast('No se pudo cargar el exportador','error'); return; }
+  var aoa=[['Fecha','Origen (debe)','Destino (acreedor)','Concepto','Monto']];
+  INTERMOVS.forEach(function(m){ var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; aoa.push([f, m.origen||'', m.destino||'', m.concepto||'', Number(m.monto)||0]); });
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Entre grupos');
+  var hoy=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, 'entre_grupos_'+hoy+'.xlsx');
 }
 function poblarGruposEntrega(){
   var ops='<option value="">—</option>'+Object.keys(GNAME).map(function(id){ return '<option value="'+id+'">'+GNAME[id]+'</option>'; }).join('');
@@ -394,6 +429,8 @@ function pagarProv(provId, prov){
   document.getElementById('pv-monto').value='';
   var po=document.getElementById('pv-obs'); if(po) po.value='';
   document.getElementById('pv-cheques-list').innerHTML='';
+  document.getElementById('pv-tipo').value='pago';
+  updatePagadoVis();
   onFormaPagoProv();
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
 }
@@ -447,7 +484,10 @@ async function movProv(){
   var monto=parseMiles(document.getElementById('pv-monto').value);
   if(!id){ toast('Elegí un proveedor (botón Pagar)','error'); return; } if(!(monto>0)){ toast('Poné un monto','error'); return; }
   var obs=(document.getElementById('pv-obs').value||'').trim();
-  var r=await window.sp('registrarPagoProveedor',{proveedorId:id, sucursal:sucActual, tipo:tipo, monto:monto, formaPago:efectivaForma('pv-fp','pv-caja'), descripcion:(tipo==='cargo'?'Cargo manual':'Pago a proveedor'), observaciones:obs, cheques:cheques});
+  // "Pagó (sucursal)": si otra sucursal puso la plata, impacta en el saldo entre grupos.
+  var pw=document.getElementById('pv-pagado-wrap'), pagadoPor=null;
+  if(tipo==='pago' && pw && !pw.hidden){ var pv=(document.getElementById('pv-pagado')||{}).value; if(pv && pv!==sucActual) pagadoPor=pv; }
+  var r=await window.sp('registrarPagoProveedor',{proveedorId:id, sucursal:sucActual, pagadoPor:pagadoPor, tipo:tipo, monto:monto, formaPago:efectivaForma('pv-fp','pv-caja'), descripcion:(tipo==='cargo'?'Cargo manual':'Pago a proveedor'), observaciones:obs, cheques:cheques});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   if(r.warn){ toast(r.warn,'error'); }
   document.getElementById('pv-monto').value=''; document.getElementById('pv-obs').value=''; document.getElementById('pv-cheques-list').innerHTML=''; toast('Registrado'); cerrarPagoProv(); renderDeudas();
