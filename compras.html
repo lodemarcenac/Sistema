@@ -85,6 +85,14 @@
           <div><label>Forma de pago</label><select id="c-fp" onchange="onFormaCompra()"></select></div>
           <div id="c-caja-wrap" hidden><label>Caja</label><select id="c-caja"><option>Caja del día</option><option>Caja guardada</option></select></div>
         </div>
+        <div id="c-cheques-wrap" hidden class="row-sub">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+            <b style="font-size:var(--fs-sm);">Cheques del pago</b>
+            <button class="btn-sec" type="button" onclick="addChequeRow('c-cheques-list')">+ Cheque</button>
+          </div>
+          <div id="c-cheques-list" style="margin-top:8px;"></div>
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:4px;">Banco y fecha de pago son <b>obligatorios</b>. <span id="c-cheques-sum"></span></div>
+        </div>
         <p class="hint muted" style="margin:4px 0 0;">Con <b>Cuenta corriente</b> queda como deuda del proveedor; con otra forma se registra como pagada.</p>
         <div style="margin-top:12px;"><button class="btn" onclick="crearCompraUI()">Empezar compra →</button></div>
       </div>
@@ -144,6 +152,14 @@
           <div id="g-caja-wrap" hidden><label>Caja</label><select id="g-caja"><option>Caja del día</option><option>Caja guardada</option></select></div>
           <div><label>Comprobante (opc)</label><input id="g-comp"></div>
         </div>
+        <div id="g-cheques-wrap" hidden class="row-sub">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+            <b style="font-size:var(--fs-sm);">Cheques del pago</b>
+            <button class="btn-sec" type="button" onclick="addChequeRow('g-cheques-list')">+ Cheque</button>
+          </div>
+          <div id="g-cheques-list" style="margin-top:8px;"></div>
+          <div class="muted" style="font-size:var(--fs-xs);margin-top:4px;">Banco y fecha de pago son <b>obligatorios</b>. <span id="g-cheques-sum"></span></div>
+        </div>
         <div style="margin-top:12px;"><button class="btn" onclick="guardarGastoUI()">Guardar gasto</button> <button class="btn-sec" id="g-cancel" hidden onclick="cancelarEdicionGasto()">Cancelar edición</button></div>
       </div>
       <div class="card p0">
@@ -197,10 +213,10 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-10-29.2';</script>
-<script src="sb-api.js?v=2026-10-29.2"></script>
-<script src="auth-guard.js?v=2026-10-29.2"></script>
-<script src="nav.js?v=2026-10-29.2"></script>
+<script>window.APP_BUILD='2026-11-04.1';</script>
+<script src="sb-api.js?v=2026-11-04.1"></script>
+<script src="auth-guard.js?v=2026-11-04.1"></script>
+<script src="nav.js?v=2026-11-04.1"></script>
 <script>
 var sb=window.sbClient;
 var PRODS={}, SUCS=[], PROVS=[], CG=[], FORMAS=['Efectivo','Tarjeta','Virtual','Cuenta Corriente'];
@@ -236,6 +252,7 @@ async function iniciar(){
   var rpr=await window.sf('getProveedores'); PROVS=(rpr.ok?rpr.proveedores:[])||[];
   var rcg=await window.sf('getCategoriasGasto'); CG=(rcg.ok?rcg.categorias:[])||[];
   var rc=await window.sf('getConfigGeneral'); if(rc.ok && rc.config && rc.config.formas_pago){ try{ var a=JSON.parse(rc.config.formas_pago); if(a.length) FORMAS=a.filter(function(f){return (f&&typeof f==='object')?(f.pago!==false):true;}).map(function(f){return f.nombre||f;}); }catch(e){} }
+  if(!FORMAS.some(function(f){ return /cheque/i.test(f); })) FORMAS.push('Cheque');
   if(rc.ok && rc.config && rc.config.reparto_default){ try{ REP_DEF=JSON.parse(rc.config.reparto_default)||{}; }catch(e){ REP_DEF={}; } }
   var rr=await window.sf('getReparto'); REPCAT={}; if(rr.ok){ (rr.reparto||[]).forEach(function(x){ var nom=SUCID[x.sucursalId]; if(!nom) return; REPCAT[x.categoriaId]=REPCAT[x.categoriaId]||{}; REPCAT[x.categoriaId][nom]=Number(x.porcentaje)||0; }); }
   poblarSuc(); poblarSelects(); await cargarProveedoresLocal();
@@ -300,7 +317,7 @@ document.addEventListener('click', function(e){ var p=document.getElementById('a
 // ---- NUEVA COMPRA (2 etapas: cabecera -> productos, con borrador que se guarda solo) ----
 var COMPRA_ID=null, COMPRA_TOTAL_FC=0;
 // Forma de pago de la compra: Cuenta corriente => todo a cuenta; otra => pagada (muestra sub-selector de caja si es efectivo).
-function onFormaCompra(){ toggleCaja('c-fp','c-caja-wrap'); }
+function onFormaCompra(){ toggleCaja('c-fp','c-caja-wrap'); toggleChequesUI('c-fp','c-cheques-wrap','c-cheques-list','c-cheques-sum'); }
 
 // Solo quien tenga el permiso "Editar costo en compras" (compras.editar_costo) puede cambiar el costo.
 // Si no lo tiene, el campo SE MUESTRA igual (precargado con el último costo guardado) pero de solo lectura.
@@ -321,8 +338,22 @@ async function crearCompraUI(){
   if(!(totalFC>0) && !confirm('El total de la factura es 0. ¿Continuar igual?')) return;
   var forma=efectivaForma('c-fp','c-caja');
   var pago=/cuenta\s*corriente/i.test(forma)?0:totalFC;   // cuenta corriente = queda a deber; otra forma = pagada
+  // Pago con cheque: se piden los mismos datos que en una orden de pago y luego alimentan "Cheques emitidos".
+  var cheques=null;
+  if(esFormaCheque('c-fp')){
+    var rc=readCheques('c-cheques-list');
+    if(rc.error){ toast(rc.error,'error'); return; }
+    if(!rc.cheques.length){ toast('Cargá al menos un cheque','error'); return; }
+    var sumChq=rc.cheques.reduce(function(a,c){ return a+(c.monto||0); },0);
+    if(Math.abs(sumChq-totalFC)>=0.5 && !confirm('La suma de los cheques ('+fmt$(sumChq)+') no coincide con el total de la factura ('+fmt$(totalFC)+'). ¿Continuar igual?')) return;
+    cheques=rc.cheques;
+  }
   var r=await window.sp('crearCompra',{compra:{ sucursal:sucActual, proveedor_id:provId, cuenta_id:null, comprobante:document.getElementById('c-comp').value.trim(), total:totalFC, pago_monto:pago, forma_pago:forma }});
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
+  if(cheques && r.compra_id){
+    var rq=await window.sp('guardarCheques',{ compraId:r.compra_id, proveedorId:Number(provId)||null, sucursal:sucActual, cheques:cheques, concepto:'Compra'+(comp?(' '+comp):'') });
+    if(rq && rq.warn) toast(rq.warn,'error');
+  }
   var pnom=(PROVS_LOCAL.find(function(p){return String(p.id)===String(provId);})||{}).nombre||'';
   var titulo=pnom+(document.getElementById('c-comp').value?(' · '+document.getElementById('c-comp').value.trim()):'');
   entrarEdicion(r.compra_id, totalFC, titulo);
@@ -380,7 +411,8 @@ async function descartarCompraUI(){
 function salirAEtapa1(){
   COMPRA_ID=null; COMPRA_TOTAL_FC=0;
   document.getElementById('c-prod').hidden=true; document.getElementById('c-cab').hidden=false;
-  document.getElementById('c-comp').value=''; document.getElementById('c-total-fc').value=''; document.getElementById('c-pago').value='';
+  document.getElementById('c-comp').value=''; document.getElementById('c-total-fc').value='';
+  var ccl=document.getElementById('c-cheques-list'); if(ccl) ccl.innerHTML=''; onFormaCompra();
   cargarBorradores(); cargarConfirmadas();
 }
 async function cargarBorradores(){
@@ -475,7 +507,46 @@ function toggleGasto(id){ var r=document.getElementById('gx-'+id); if(r) r.hidde
 function toggleCaja(fpId, wrapId){ var f=document.getElementById(fpId), w=document.getElementById(wrapId); if(f&&w) w.hidden=!/efectivo/i.test(f.value); }
 // Forma de pago del gasto: muestra/oculta el sub-selector de caja y, si es Cuenta corriente,
 // marca el proveedor como obligatorio (si no, queda opcional).
-function onFormaGasto(){ toggleCaja('g-fp','g-caja-wrap'); var cc=/cuenta\s*corriente/i.test((document.getElementById('g-fp')||{}).value||''); var l=document.getElementById('g-prov-lbl'); if(l) l.textContent=cc?'Proveedor (obligatorio)':'Proveedor (opc)'; }
+function onFormaGasto(){ toggleCaja('g-fp','g-caja-wrap'); toggleChequesUI('g-fp','g-cheques-wrap','g-cheques-list','g-cheques-sum'); var cc=/cuenta\s*corriente/i.test((document.getElementById('g-fp')||{}).value||''); var l=document.getElementById('g-prov-lbl'); if(l) l.textContent=cc?'Proveedor (obligatorio)':'Proveedor (opc)'; }
+
+// ---- CHEQUES (compras y gastos pagados con cheque) — mismos datos que en una orden de pago ----
+function esFormaCheque(fpId){ return /cheque/i.test((document.getElementById(fpId)||{}).value||''); }
+// Muestra/oculta el bloque de cheques según la forma de pago; agrega la 1ra fila si está vacío.
+function toggleChequesUI(fpId, wrapId, listId, sumId){
+  var chq=esFormaCheque(fpId); var w=document.getElementById(wrapId); if(w) w.hidden=!chq;
+  if(chq){ var list=document.getElementById(listId); if(list && !list.children.length) addChequeRow(listId); sumChequesHint(listId, sumId); }
+}
+function addChequeRow(listId){
+  var list=document.getElementById(listId); if(!list) return;
+  var sumId=listId.replace('-list','-sum');
+  var d=document.createElement('div'); d.className='chq-row';
+  d.innerHTML='<input class="chq-banco" placeholder="Banco *">'+
+    '<input class="chq-num" placeholder="N° cheque">'+
+    '<input class="chq-fecha" type="date" title="Fecha de pago">'+
+    '<input class="chq-monto" type="text" inputmode="decimal" placeholder="Monto *" oninput="fmtMilesInput(this);sumChequesHint(\''+listId+'\',\''+sumId+'\')">'+
+    '<button class="x-btn" type="button" title="Quitar" onclick="this.closest(\'.chq-row\').remove();sumChequesHint(\''+listId+'\',\''+sumId+'\');">✕</button>';
+  list.appendChild(d);
+}
+function sumChequesHint(listId, sumId){
+  var s=0; document.querySelectorAll('#'+listId+' .chq-monto').forEach(function(i){ s+=parseMiles(i.value); });
+  var el=document.getElementById(sumId); if(el) el.innerHTML='Suma de cheques: <b>'+fmt$(s)+'</b>';
+}
+// Lee las filas de cheques de un listado; valida banco/fecha/monto. Ignora filas vacías.
+function readCheques(listId){
+  var arr=[], err=null;
+  document.querySelectorAll('#'+listId+' .chq-row').forEach(function(r){
+    var banco=(r.querySelector('.chq-banco').value||'').trim();
+    var num=(r.querySelector('.chq-num').value||'').trim();
+    var fecha=r.querySelector('.chq-fecha').value||'';
+    var monto=parseMiles(r.querySelector('.chq-monto').value);
+    if(!banco && !fecha && !monto && !num) return; // fila vacía: ignorar
+    if(!banco) err='Falta el banco en un cheque';
+    else if(!fecha) err='Falta la fecha de pago en un cheque';
+    else if(!(monto>0)) err='Falta el monto en un cheque';
+    arr.push({banco:banco, numero:num, fecha:fecha, monto:monto});
+  });
+  return {cheques:arr, error:err};
+}
 function efectivaForma(fpId, cajaId){ var f=document.getElementById(fpId).value; if(/efectivo/i.test(f)){ var c=document.getElementById(cajaId); return c?c.value:f; } return f; }
 function onMontoGasto(){ if(document.getElementById('g-multi').checked) renderImput(); }
 // Devuelve el reparto a aplicar (por local): el de la categoría elegida si tiene; si no, el general por defecto.
@@ -539,6 +610,16 @@ async function guardarGastoUI(){
     toast('Gasto actualizado'); cancelarEdicionGasto(); cargarGastos(); return;
   }
 
+  // Pago con cheque: se piden los mismos datos que en una orden de pago y luego alimentan "Cheques emitidos".
+  var cheques=null;
+  if(esFormaCheque('g-fp')){
+    var rc=readCheques('g-cheques-list');
+    if(rc.error){ toast(rc.error,'error'); return; }
+    if(!rc.cheques.length){ toast('Cargá al menos un cheque','error'); return; }
+    var sumChq=rc.cheques.reduce(function(a,c){ return a+(c.monto||0); },0);
+    if(Math.abs(sumChq-montoTotal)>=0.5 && !confirm('La suma de los cheques ('+fmt$(sumChq)+') no coincide con el monto del gasto ('+fmt$(montoTotal)+'). ¿Continuar igual?')) return;
+    cheques=rc.cheques;
+  }
   var splits=[];
   if(document.getElementById('g-multi').checked){
     document.querySelectorAll('#g-imput .gi-loc:checked').forEach(function(c){ var l=c.value; var mi=document.querySelector('#g-imput .gi-monto[data-loc="'+l.replace(/"/g,'&quot;')+'"]'); var mo=mi?(Number(mi.value)||0):0; if(mo>0) splits.push({local:l, monto:mo}); });
@@ -547,12 +628,18 @@ async function guardarGastoUI(){
     var loc=document.getElementById('g-local-uno')?document.getElementById('g-local-uno').value:sucActual;
     splits.push({local:loc, monto:montoTotal});
   }
-  var sum=0;
+  var sum=0, primerGastoId=null;
   for(var i=0;i<splits.length;i++){
     sum+=splits[i].monto;
     var pay=Object.assign({}, base, { destinatario:splits[i].local, monto:splits[i].monto });
     var r=await window.sp('guardarGasto',pay);
     if(!r.ok){ toast('Error en '+splits[i].local+': '+r.error,'error'); return; }
+    if(primerGastoId==null && r.id) primerGastoId=r.id;
+  }
+  // Los cheques del gasto se asocian al primer gasto creado (en reparto multi-local).
+  if(cheques){
+    var rq=await window.sp('guardarCheques',{ gastoId:primerGastoId, proveedorId:(base.proveedorId?Number(base.proveedorId):null), sucursal:sucActual, cheques:cheques, concepto:'Gasto'+(desc?(': '+desc):'') });
+    if(rq && rq.warn) toast(rq.warn,'error');
   }
   if(/guard/i.test(forma)){ await window.sp('movReserva',{ sucursal:sucActual, tipo:'egreso', monto:sum, concepto:'Gasto'+(desc?(': '+desc):'') }); }
   // Gasto a cuenta corriente del proveedor -> genera deuda con ese proveedor
@@ -565,6 +652,7 @@ function limpiarFormGasto(){
   var fc=document.getElementById('g-fecha'); if(fc) fc.value=new Date().toLocaleDateString('en-CA');
   var cat=document.getElementById('g-cat'); if(cat) cat.value=''; onCatGasto();
   var prov=document.getElementById('g-prov'); if(prov) prov.value='';
+  var gcl=document.getElementById('g-cheques-list'); if(gcl) gcl.innerHTML='';
   var fp=document.getElementById('g-fp'); if(fp) fp.selectedIndex=0; onFormaGasto();
   var mu=document.getElementById('g-multi'); if(mu) mu.checked=false;
   var one=document.getElementById('g-local-uno'); if(one) one.value=sucActual;
@@ -581,6 +669,8 @@ function editarGasto(id){
   if(/caja|efectivo/i.test(fpv)){ var ef=(FORMAS.filter(function(f){return /efectivo/i.test(f);})[0]||'Efectivo'); document.getElementById('g-fp').value=ef; toggleCaja('g-fp','g-caja-wrap'); var gc=document.getElementById('g-caja'); if(gc) gc.value=(/guard/i.test(fpv)?'Caja guardada':'Caja del día'); }
   else { document.getElementById('g-fp').value=fpv; toggleCaja('g-fp','g-caja-wrap'); }
   document.getElementById('g-multi').checked=false; renderImput();
+  // La edición de un gasto no reedita sus cheques: se oculta el bloque para no confundir.
+  var gcl=document.getElementById('g-cheques-list'); if(gcl) gcl.innerHTML=''; var gcw=document.getElementById('g-cheques-wrap'); if(gcw) gcw.hidden=true;
   var nombre=SUCID[g.destinatarioId]||''; var one=document.getElementById('g-local-uno'); if(one && nombre) one.value=nombre;
   window.scrollTo({top:0,behavior:'smooth'});
 }

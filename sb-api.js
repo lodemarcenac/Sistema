@@ -1202,6 +1202,25 @@
       var u=await sb.from('cheques').update({estado:'anulado'}).eq('id',p.id); if(u.error) throw u.error;
       return {ok:true, soloCheque:true};
     },
+    // Guarda los cheques de una compra o un gasto (forma de pago cheque): mismos datos
+    // que en una orden de pago. Quedan en el listado de "Cheques emitidos" vinculados a
+    // la compra (compra_id) o al gasto (gasto_id) para limpiarse en cascada si se borran.
+    guardarCheques: async function(p){
+      if(!p || !Array.isArray(p.cheques) || !p.cheques.length) return {ok:true};
+      var m=await sucIdMap(); var sid=(p.sucursal?m[p.sucursal]:(p.sucursalId||null));
+      var chrows=p.cheques.map(function(c){ return { proveedor_id:(p.proveedorId||null), sucursal_id:sid, banco:((c.banco||'').toString().trim()||null), numero:((c.numero||'').toString().trim()||null), fecha_pago:(c.fecha||null), monto:Number(c.monto)||0, estado:'emitido', concepto:(p.concepto||null), compra_id:(p.compraId||null), gasto_id:(p.gastoId||null) }; });
+      var rc=await sb.from('cheques').insert(chrows);
+      if(rc.error){
+        if(/compra_id|gasto_id/i.test(rc.error.message||'')){  // columnas sin crear: guardar sin el vínculo
+          var chrows2=chrows.map(function(x){ var y=Object.assign({},x); delete y.compra_id; delete y.gasto_id; return y; });
+          var rc2=await sb.from('cheques').insert(chrows2);
+          if(rc2.error) return {ok:true, warn:'No se pudieron guardar los cheques: '+rc2.error.message};
+          return {ok:true, warn:'Cheques guardados sin vínculo — corré cheques_compras_gastos.sql para que se borren junto a la compra/gasto.'};
+        }
+        return {ok:true, warn:'No se pudieron guardar los cheques (¿falta correr cheques_schema.sql?): '+rc.error.message};
+      }
+      return {ok:true};
+    },
     guardarCuentaProveedor: async function(p){
       var m=await sucIdMap(); var payload={ proveedor_id:p.proveedorId, nombre:(p.nombre||null) }; var cid=p.id;
       if(cid){ var r=await sb.from('proveedor_cuentas').update(payload).eq('id',cid); if(r.error) throw r.error; }
