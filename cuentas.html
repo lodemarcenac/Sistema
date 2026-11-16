@@ -114,6 +114,7 @@
           <div><label>Desde</label><input id="chq-desde" type="date" onchange="cargarCheques()"></div>
           <div><label>Hasta</label><input id="chq-hasta" type="date" onchange="cargarCheques()"></div>
           <div><label>Alcance</label><select id="chq-alcance" onchange="cargarCheques()"><option value="local">Este local</option><option value="todos">Todos los locales</option></select></div>
+          <div><label>Ver</label><select id="chq-ver" onchange="pintarCheques()"><option value="pend">Pendientes</option><option value="deb">Debitados</option><option value="todos">Todos</option></select></div>
           <div><label>Buscar</label><input id="chq-buscar" placeholder="Banco, proveedor o N°…" oninput="pintarCheques()"></div>
         </div>
       </div>
@@ -159,10 +160,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script>window.APP_BUILD='2026-11-04.1';</script>
-<script src="sb-api.js?v=2026-11-04.1"></script>
-<script src="auth-guard.js?v=2026-11-04.1"></script>
-<script src="nav.js?v=2026-11-04.1"></script>
+<script>window.APP_BUILD='2026-11-15.1';</script>
+<script src="sb-api.js?v=2026-11-15.1"></script>
+<script src="auth-guard.js?v=2026-11-15.1"></script>
+<script src="nav.js?v=2026-11-15.1"></script>
 <script src="pdf-export.js?v=2026-10-22.2"></script>
 <script>
 var sb=window.sbClient;
@@ -500,13 +501,23 @@ async function cargarCheques(){
   if(alc!=='todos') p.sucursal=sucActual;
   var qs=Object.keys(p).filter(function(k){return p[k];}).map(function(k){return k+'='+encodeURIComponent(p[k]);}).join('&');
   var r=await window.sf('getCheques'+(qs?'&'+qs:'')); CHEQUES=(r.ok?r.cheques:[])||[];
-  if(r.sinTabla){ document.getElementById('chq-tbody').innerHTML='<tr><td colspan="8" class="muted">Falta correr <b>cheques_schema.sql</b> en Supabase para usar los cheques.</td></tr>'; document.getElementById('chq-flujo-tbody').innerHTML='<tr><td colspan="4" class="muted">—</td></tr>'; document.getElementById('chq-total').textContent=''; return; }
+  if(r.sinTabla){ document.getElementById('chq-tbody').innerHTML='<tr><td colspan="8" class="muted">Falta correr <b>cheques_schema.sql</b> en Supabase para usar los cheques.</td></tr>'; document.getElementById('chq-flujo').innerHTML=''; document.getElementById('chq-total').textContent=''; return; }
   pintarCheques();
 }
 function fechaCorta(iso){ return iso?new Date(iso+'T00:00:00').toLocaleDateString('es-AR'):''; }
+// Estados: emitido (pendiente de débito) | pagado (ya debitado por el banco) | anulado
+function chqAnulado(c){ return /anulad/i.test(c.estado||''); }
+function chqDebitado(c){ return /pagad|debitad/i.test(c.estado||''); }
+function chqPendiente(c){ return !chqAnulado(c) && !chqDebitado(c); }
+function chqEstadoTxt(c){ return chqAnulado(c)?'anulado':(chqDebitado(c)?'debitado':'pendiente'); }
 function chequesFiltrados(){
   var q=(document.getElementById('chq-buscar').value||'').trim().toLowerCase();
-  return CHEQUES.filter(function(c){ return !q || (c.banco+' '+c.proveedor+' '+c.numero).toLowerCase().indexOf(q)>=0; });
+  var ver=(document.getElementById('chq-ver')||{}).value||'pend';
+  return CHEQUES.filter(function(c){
+    if(ver==='pend' && !chqPendiente(c)) return false;
+    if(ver==='deb' && !chqDebitado(c)) return false;
+    return !q || (c.banco+' '+c.proveedor+' '+c.numero).toLowerCase().indexOf(q)>=0;
+  });
 }
 // Agrupa por fecha de pago -> {fecha, n, total} ordenado, con acumulado
 function flujoPorFecha(arr){
@@ -553,20 +564,34 @@ function pintarSemanaFlujo(){
 }
 function pintarCheques(){
   var arr=chequesFiltrados();
-  // Totales y flujo: solo cheques vigentes (los anulados no se van a pagar).
-  // Igual se listan abajo en el detalle, marcados como anulados.
-  var vig=arr.filter(function(c){ return !/anulad/i.test(c.estado||''); });
+  // Total y flujo: solo cheques PENDIENTES de débito (los debitados ya salieron del
+  // banco y los anulados no se van a pagar). Igual se listan abajo según el filtro "Ver".
+  var vig=arr.filter(chqPendiente);
   var total=vig.reduce(function(s,c){ return s+(c.monto||0); },0);
-  var nAnul=arr.length-vig.length;
-  document.getElementById('chq-total').innerHTML='Total: <b>'+fmt$(total)+'</b> · '+vig.length+' cheque(s)'+(nAnul?(' <span class="muted">(+'+nAnul+' anulado'+(nAnul!==1?'s':'')+')</span>'):'');
-  // flujo por semana (solo vigentes)
+  var deb=arr.filter(chqDebitado), totDeb=deb.reduce(function(s,c){ return s+(c.monto||0); },0);
+  var nAnul=arr.filter(chqAnulado).length;
+  document.getElementById('chq-total').innerHTML='Pendiente: <b>'+fmt$(total)+'</b> · '+vig.length+' cheque(s)'+
+    (deb.length?(' <span class="muted">· debitados '+fmt$(totDeb)+' ('+deb.length+')</span>'):'')+
+    (nAnul?(' <span class="muted">(+'+nAnul+' anulado'+(nAnul!==1?'s':'')+')</span>'):'');
+  // flujo por semana (solo pendientes)
   renderFlujoSemanal(vig);
   // detalle
   document.getElementById('chq-tbody').innerHTML = arr.length ? arr.map(function(c){
-    var anulado=/anulad/i.test(c.estado||'');
-    var acc=(c.id && !anulado)?('<button class="x-btn" title="Anular el cheque y revertir el pago" onclick="anularChequeUI('+c.id+',\''+String(c.numero||c.banco||'').replace(/\x27/g,"\\x27")+'\')">Anular</button>'):'';
-    return '<tr'+(anulado?' class="inactivo"':'')+'><td>'+fechaCorta(c.fecha)+'</td><td>'+(c.banco||'')+'</td><td>'+(c.numero||'')+'</td><td>'+(c.proveedor||'')+'</td><td>'+(c.local||'')+'</td><td>'+(c.estado||'')+'</td><td class="num">'+fmt$(c.monto)+'</td><td style="white-space:nowrap;text-align:right;">'+acc+'</td></tr>';
+    var anulado=chqAnulado(c), debitado=chqDebitado(c);
+    var ref=String(c.numero||c.banco||'').replace(/\x27/g,"\\x27");
+    var acc='';
+    if(c.id && debitado) acc='<button class="x-btn" title="Volver el cheque a pendiente" onclick="debitarChequeUI('+c.id+',false)">Deshacer</button>';
+    else if(c.id && !anulado) acc='<button class="btn-sec" title="El banco ya debitó este cheque: deja de contar como pendiente" onclick="debitarChequeUI('+c.id+',true)">✓ Debitado</button> '+
+      '<button class="x-btn" title="Anular el cheque y revertir el pago" onclick="anularChequeUI('+c.id+',\''+ref+'\')">Anular</button>';
+    return '<tr'+((anulado||debitado)?' class="inactivo"':'')+'><td>'+fechaCorta(c.fecha)+'</td><td>'+(c.banco||'')+'</td><td>'+(c.numero||'')+'</td><td>'+(c.proveedor||'')+'</td><td>'+(c.local||'')+'</td><td>'+chqEstadoTxt(c)+'</td><td class="num">'+fmt$(c.monto)+'</td><td style="white-space:nowrap;text-align:right;">'+acc+'</td></tr>';
   }).join('') : '<tr><td colspan="8" class="muted">No hay cheques para el filtro elegido.</td></tr>';
+}
+async function debitarChequeUI(id, debitado){
+  var r=await window.sp('marcarChequeDebitado',{ id:id, debitado:debitado });
+  if(!r.ok){ toast(r.error||'No se pudo actualizar el cheque','error'); return; }
+  CHEQUES.forEach(function(c){ if(c.id===id) c.estado=r.estado; });
+  toast(debitado?'Cheque marcado como debitado':'Cheque vuelto a pendiente');
+  pintarCheques();
 }
 async function anularChequeUI(id, ref){
   if(!confirm('¿Anular el cheque '+(ref?('"'+ref+'" '):'')+'? Se revierte el pago asociado (vuelve a quedar la deuda) y, si el pago tenía otros cheques, también se anulan.')) return;
@@ -582,10 +607,10 @@ function exportarCheques(){
   // Hoja 1: detalle
   var det=[['Fecha pago','Banco','N° cheque','Proveedor','Local','Estado','Monto']];
   arr.slice().sort(function(a,b){ return String(a.fecha||'').localeCompare(String(b.fecha||'')); }).forEach(function(c){
-    det.push([fechaCorta(c.fecha), c.banco||'', c.numero||'', c.proveedor||'', c.local||'', c.estado||'', Math.round(c.monto||0)]);
+    det.push([fechaCorta(c.fecha), c.banco||'', c.numero||'', c.proveedor||'', c.local||'', chqEstadoTxt(c), Math.round(c.monto||0)]);
   });
-  // Hoja 2: flujo por fecha (solo cheques vigentes, sin anulados)
-  var fl=flujoPorFecha(arr.filter(function(c){ return !/anulad/i.test(c.estado||''); })); var flu=[['Fecha de pago','Cheques','A pagar ese día','Acumulado']];
+  // Hoja 2: flujo por fecha (solo cheques pendientes de débito)
+  var fl=flujoPorFecha(arr.filter(chqPendiente)); var flu=[['Fecha de pago','Cheques','A pagar ese día','Acumulado']];
   fl.forEach(function(f){ flu.push([f.fecha==='(sin fecha)'?'(sin fecha)':fechaCorta(f.fecha), f.n, Math.round(f.total), Math.round(f.acum)]); });
   var wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(flu), 'Flujo por fecha');

@@ -1202,6 +1202,18 @@
       var u=await sb.from('cheques').update({estado:'anulado'}).eq('id',p.id); if(u.error) throw u.error;
       return {ok:true, soloCheque:true};
     },
+    // Marca un cheque como debitado (el banco ya lo pagó → estado 'pagado') o lo vuelve
+    // a pendiente ('emitido'). No toca el pago ni la deuda: solo deja de contar como
+    // cheque a cubrir en el flujo de fondos.
+    marcarChequeDebitado: async function(p){
+      if(!p||!p.id) throw new Error('Falta el id del cheque');
+      var c=await sb.from('cheques').select('id,estado').eq('id',p.id).maybeSingle();
+      if(c.error) throw c.error; if(!c.data) return {ok:false, error:'No se encontró el cheque'};
+      if(/anulad/i.test(c.data.estado||'')) return {ok:false, error:'El cheque está anulado'};
+      var nuevo=(p.debitado===false)?'emitido':'pagado';
+      var u=await sb.from('cheques').update({estado:nuevo}).eq('id',p.id); if(u.error) throw u.error;
+      return {ok:true, estado:nuevo};
+    },
     // Guarda los cheques de una compra o un gasto (forma de pago cheque): mismos datos
     // que en una orden de pago. Quedan en el listado de "Cheques emitidos" vinculados a
     // la compra (compra_id) o al gasto (gasto_id) para limpiarse en cascada si se borran.
