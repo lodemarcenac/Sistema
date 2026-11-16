@@ -242,7 +242,7 @@
       var id=params&&params.id; if(!id) return {ok:true, movimientos:[], saldo:0};
       var r=await sb.from('cuenta_corriente').select('*').eq('cliente_id',id).order('fecha'); if(r.error) throw r.error;
       var idToName={}; try{ var sn=await sb.from('sucursales').select('id,nombre'); (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; }); }catch(e){}
-      var saldo=0; var movs=(r.data||[]).map(function(m){ var v=Number(m.monto)||0; if(/pago/i.test(m.tipo)) saldo-=v; else saldo+=v; return { fecha:m.fecha, tipo:m.tipo, monto:v, concepto:m.concepto||'', comprobante:m.comprobante||'', formaPago:m.forma_pago||'', sucursalId:m.sucursal_id||null, sucursal:(m.sucursal_id?idToName[m.sucursal_id]||'':''), ref:m.ref||'', observaciones:(m.observaciones||''), saldo:saldo }; });
+      var saldo=0; var movs=(r.data||[]).map(function(m){ var v=Number(m.monto)||0; if(/pago/i.test(m.tipo)) saldo-=v; else saldo+=v; return { id:m.id, fecha:m.fecha, tipo:m.tipo, monto:v, concepto:m.concepto||'', comprobante:m.comprobante||'', formaPago:m.forma_pago||'', sucursalId:m.sucursal_id||null, sucursal:(m.sucursal_id?idToName[m.sucursal_id]||'':''), ref:m.ref||'', observaciones:(m.observaciones||''), saldo:saldo }; });
       return {ok:true, movimientos:movs, saldo:saldo};
     },
     // Detalle de una venta a partir de su comprobante (SIGLA-AAAAMMDD-NNNN).
@@ -663,6 +663,25 @@
   //   "Caja guardada"/"...guardado" -> reserva ; "Caja del día" -> caja ; otras (tarjeta/virtual) -> null
   function fondoDeForma(f){ var s=String(f||'').toLowerCase(); if(s.indexOf('guard')>=0) return 'reserva'; if(s.indexOf('caja del')>=0) return 'caja'; return null; }
 
+  // Pago manual de cta cte de cliente (tipo pago, sin comprobante de venta). Devuelve la fila o {error}.
+  async function _pagoCCManual(id){
+    if(!id) return {error:'Falta el id del pago'};
+    var g=await sb.from('cuenta_corriente').select('*').eq('id',id).maybeSingle();
+    if(g.error) throw g.error; if(!g.data) return {error:'No se encontró el pago'};
+    if(!/pago/i.test(g.data.tipo||'') || g.data.comprobante) return {error:'Este movimiento viene de una venta: se modifica anulando la venta.'};
+    return g.data;
+  }
+  // Cruce entre locales (cuentas_internas 'cobro_cta_cte') que generó ese pago, si lo hubo.
+  // No tiene vínculo directo: se ubica por cliente + local que cobró + monto, el más cercano en fecha.
+  async function _cruceDePagoCC(mov){
+    if(!mov.sucursal_id) return null;
+    var r=await sb.from('cuentas_internas').select('id,fecha,monto').eq('tipo','cobro_cta_cte').eq('ref','cliente:'+mov.cliente_id).eq('local_origen',mov.sucursal_id);
+    if(r.error || !(r.data||[]).length) return null;
+    var t0=new Date(mov.fecha).getTime(), best=null, bestD=Infinity;
+    r.data.forEach(function(x){ if(Math.abs((Number(x.monto)||0)-(Number(mov.monto)||0))>0.005) return; var d=Math.abs(new Date(x.fecha).getTime()-t0); if(d<bestD){ bestD=d; best=x; } });
+    return (best && bestD<=5*60*1000) ? best : null;   // se insertan juntos: mismo momento
+  }
+
   var writers = {
     // --- PRODUCTOS ---
     setCostoProducto: async function(p){
@@ -1019,6 +1038,31 @@
           await sb.from('cuentas_internas').insert({ local_origen:recibeId, local_destino:adminId, tipo:'cobro_cta_cte', concepto:'Cobró cta cte de cliente de otro local', monto:Number(p.monto)||0, ref:('cliente:'+p.clienteId) });
         }
       }
+      return {ok:true};
+    },
+    // Elimina un pago MANUAL de cuenta corriente de cliente (no los movimientos que
+    // vienen de una venta o de su anulación: esos se revierten anulando la venta).
+    // Revierte también el cruce entre locales (cobro_cta_cte) si el pago lo generó.
+    eliminarPagoCC: async function(p){
+      var mov=await _pagoCCManual(p&&p.id); if(mov.error) return {ok:false, error:mov.error};
+      var ci=await _cruceDePagoCC(mov);
+      var d=await sb.from('cuenta_corriente').delete().eq('id',mov.id).select('id'); if(d.error) throw d.error;
+      if(!(d.data||[]).length) return {ok:false, error:'No se pudo eliminar el pago (sin permiso sobre la cuenta corriente).'};
+      if(ci){ try{ await sb.from('cuentas_internas').delete().eq('id',ci.id); }catch(e){} }
+      return {ok:true};
+    },
+    // Modifica monto / forma de pago / observaciones de un pago manual de cta cte.
+    // El local que cobró no se cambia (para eso: eliminar y volver a cargar).
+    editarPagoCC: async function(p){
+      var mov=await _pagoCCManual(p&&p.id); if(mov.error) return {ok:false, error:mov.error};
+      var monto=Number(p.monto)||0; if(!(monto>0)) return {ok:false, error:'Poné un monto'};
+      var ci=await _cruceDePagoCC(mov);
+      var upd={ monto:monto, forma_pago:(p.formaPago||mov.forma_pago||null), observaciones:((p.observaciones||'').toString().trim()||null) };
+      var u=await sb.from('cuenta_corriente').update(upd).eq('id',mov.id).select('id');
+      if(u.error && /observ/i.test(u.error.message||'')){ delete upd.observaciones; u=await sb.from('cuenta_corriente').update(upd).eq('id',mov.id).select('id'); }
+      if(u.error) throw u.error;
+      if(!(u.data||[]).length) return {ok:false, error:'No se pudo modificar el pago (sin permiso sobre la cuenta corriente).'};
+      if(ci && Math.abs((Number(ci.monto)||0)-monto)>0.005){ try{ await sb.from('cuentas_internas').update({monto:monto}).eq('id',ci.id); }catch(e){} }
       return {ok:true};
     },
     // Saldo ENTRE GRUPOS. Cada movimiento se resuelve a grupo: grupo_* si está

@@ -122,10 +122,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script>window.APP_BUILD='2026-11-15.1';</script>
-<script src="sb-api.js?v=2026-11-15.1"></script>
-<script src="auth-guard.js?v=2026-11-15.1"></script>
-<script src="nav.js?v=2026-11-15.1"></script>
+<script>window.APP_BUILD='2026-11-16.1';</script>
+<script src="sb-api.js?v=2026-11-16.1"></script>
+<script src="auth-guard.js?v=2026-11-16.1"></script>
+<script src="nav.js?v=2026-11-16.1"></script>
 <script src="pdf-export.js?v=2026-10-22.2"></script>
 <script>
 var sb=window.sbClient;
@@ -251,11 +251,18 @@ async function verClienteCC(id,nom){
     var f=m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; var esPago=/pago/i.test(m.tipo);
     var esVenta=(!esPago && !!m.comprobante);   // cargo con comprobante = venta a cta cte
     var esPagoObs=(esPago && m.observaciones);  // pago con observaciones = se puede ver el detalle
+    var esPagoManual=(esPago && !m.comprobante && m.id && puedePagoCC());  // pago cargado a mano: se puede modificar / eliminar
     var acc=esVenta?('<button class="mini-btn" onclick="toggleVentaCC('+i+')">Ver detalle</button>')
            :(esPagoObs?('<button class="mini-btn" onclick="togglePagoObs('+i+')">Ver detalle</button>'):'');
+    if(esPagoManual) acc+=' <button class="mini-btn" onclick="toggleEditPagoCC('+i+')">Modificar</button> <button class="mini-btn" style="color:var(--bad);" onclick="eliminarPagoCCx('+i+')">Eliminar</button>';
     return '<tr'+(esVenta?' style="cursor:pointer;" onclick="toggleVentaCC('+i+')"':'')+'><td>'+f+'</td><td>'+(m.concepto||'')+'</td><td>'+(m.comprobante||'')+'</td><td class="num cargo">'+(esPago?'':fmt$(m.monto))+'</td><td class="num pago">'+(esPago?fmt$(m.monto):'')+'</td><td class="num">'+fmt$(m.saldo)+'</td><td style="white-space:nowrap;" onclick="event.stopPropagation()">'+acc+'</td></tr>'+
       (esVenta?('<tr id="ccx-det-'+i+'" hidden><td colspan="7" style="background:var(--bg-soft,#f6f8fb);padding:0;"><div id="ccx-det-box-'+i+'" style="padding:12px 14px;"></div></td></tr>'):'')+
-      (esPagoObs?('<tr id="ccx-obs-'+i+'" hidden><td colspan="7" style="background:var(--surface-2);padding:10px 14px;"><b>Observaciones:</b> '+esc(m.observaciones)+'</td></tr>'):'');
+      (esPagoObs?('<tr id="ccx-obs-'+i+'" hidden><td colspan="7" style="background:var(--surface-2);padding:10px 14px;"><b>Observaciones:</b> '+esc(m.observaciones)+'</td></tr>'):'')+
+      (esPagoManual?('<tr id="ccx-edit-'+i+'" hidden><td colspan="7" style="background:var(--surface-2);padding:10px 14px;"><div class="abm-nueva" style="border-top:none;padding-top:0;margin:0;">'+
+        '<div><label>Monto $</label><input id="ccx-edit-monto-'+i+'" type="text" inputmode="decimal" oninput="fmtMilesInput(this)"></div>'+
+        '<div><label>Forma</label><select id="ccx-edit-fp-'+i+'"></select></div>'+
+        '<div style="grid-column:1/-1;"><label>Observaciones (opcional)</label><input id="ccx-edit-obs-'+i+'"></div>'+
+        '<button class="btn-alta" onclick="guardarEditPagoCC('+i+')">Guardar cambios</button></div></td></tr>'):'');
   }).join('')) || '<tr><td colspan="7" class="muted">Sin movimientos.</td></tr>';
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
 }
@@ -369,6 +376,33 @@ async function pagarCCx(){
   var r=await window.sp('registrarPagoCC',{ clienteId:ccxSel, sucursal:sucPago, monto:monto, formaPago:document.getElementById('ccx-fp').value, concepto:'Pago cta cte', observaciones:obs });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   document.getElementById('ccx-monto').value=''; document.getElementById('ccx-obs').value=''; toast('Pago registrado'); verClienteCC(ccxSel,ccxNom); renderCtaCte();
+}
+// ---- Modificar / eliminar un pago manual de cta cte ----
+function toggleEditPagoCC(i){
+  var row=document.getElementById('ccx-edit-'+i); if(!row) return;
+  if(!row.hidden){ row.hidden=true; return; }
+  var m=ccxMovsVista[i]||{};
+  document.getElementById('ccx-edit-monto-'+i).value=Number(m.monto||0).toLocaleString('es-AR',{maximumFractionDigits:2});
+  var sel=document.getElementById('ccx-edit-fp-'+i); sel.innerHTML=document.getElementById('ccx-fp').innerHTML;
+  if(m.formaPago){ if(!Array.prototype.some.call(sel.options,function(o){ return o.value===m.formaPago; })){ var o=document.createElement('option'); o.textContent=m.formaPago; sel.appendChild(o); } sel.value=m.formaPago; }
+  document.getElementById('ccx-edit-obs-'+i).value=m.observaciones||'';
+  row.hidden=false;
+}
+async function guardarEditPagoCC(i){
+  if(!puedePagoCC()){ toast('No tenés permiso para modificar pagos','error'); return; }
+  var m=ccxMovsVista[i]||{}; if(!m.id){ toast('No se pudo identificar el pago','error'); return; }
+  var monto=parseMiles(document.getElementById('ccx-edit-monto-'+i).value); if(!(monto>0)){ toast('Poné un monto','error'); return; }
+  var r=await window.sp('editarPagoCC',{ id:m.id, monto:monto, formaPago:document.getElementById('ccx-edit-fp-'+i).value, observaciones:(document.getElementById('ccx-edit-obs-'+i).value||'').trim() });
+  if(!r.ok){ toast('Error: '+(r.error||'?'),'error'); return; }
+  toast('Pago modificado'); verClienteCC(ccxSel,ccxNom); renderCtaCte();
+}
+async function eliminarPagoCCx(i){
+  if(!puedePagoCC()){ toast('No tenés permiso para eliminar pagos','error'); return; }
+  var m=ccxMovsVista[i]||{}; if(!m.id){ toast('No se pudo identificar el pago','error'); return; }
+  if(!confirm('¿Eliminar el pago de '+fmt$(m.monto)+' del '+fechaCortaCC(m)+'? El saldo del cliente se recalcula y el cobro sale de la caja.')) return;
+  var r=await window.sp('eliminarPagoCC',{ id:m.id });
+  if(!r.ok){ toast('Error: '+(r.error||'?'),'error'); return; }
+  toast('Pago eliminado'); verClienteCC(ccxSel,ccxNom); renderCtaCte();
 }
 function togglePagoObs(i){ var r=document.getElementById('ccx-obs-'+i); if(r) r.hidden=!r.hidden; }
 function fechaCortaCC(m){ return m.fecha?new Date(m.fecha).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):''; }
