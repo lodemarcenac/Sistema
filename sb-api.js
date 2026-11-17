@@ -1025,10 +1025,21 @@
     registrarPagoCC: async function(p){
       var m=await sucIdMap();
       var recibeId=(p.sucursal?m[p.sucursal]:null);
-      var pay={ cliente_id:p.clienteId, sucursal_id:recibeId, tipo:(p.tipo||'pago'), monto:Number(p.monto)||0, forma_pago:(p.formaPago||null), concepto:(p.concepto||(p.tipo==='cargo'?'Cargo':'Pago')), observaciones:(p.observaciones||null) };
-      var r=await sb.from('cuenta_corriente').insert(pay);
-      if(r.error && /observ/i.test(r.error.message||'')){ delete pay.observaciones; r=await sb.from('cuenta_corriente').insert(pay); }  // columna sin crear: guardar sin observaciones
+      // Fondo del efectivo: 'caja' (caja del día) o 'reserva' (caja guardada).
+      // Solo tiene sentido en efectivo; en tarjeta/virtual se ignora.
+      var esEfectivo=/efectivo/i.test(String(p.formaPago||''));
+      var fondo=(esEfectivo && String(p.fondo||'')==='reserva')?'reserva':'caja';
+      var pay={ cliente_id:p.clienteId, sucursal_id:recibeId, tipo:(p.tipo||'pago'), monto:Number(p.monto)||0, forma_pago:(p.formaPago||null), concepto:(p.concepto||(p.tipo==='cargo'?'Cargo':'Pago')), observaciones:(p.observaciones||null), fondo:fondo };
+      var r=await sb.from('cuenta_corriente').insert(pay).select('id').single();
+      if(r.error && /fondo/i.test(r.error.message||'')){ delete pay.fondo; fondo='caja'; r=await sb.from('cuenta_corriente').insert(pay).select('id').single(); }  // columna sin crear: guardar sin fondo
+      if(r.error && /observ/i.test(r.error.message||'')){ delete pay.observaciones; r=await sb.from('cuenta_corriente').insert(pay).select('id').single(); }  // columna sin crear: guardar sin observaciones
       if(r.error) throw r.error;
+      var movId=(r.data&&r.data.id)||null;
+      // Caja guardada: el efectivo cobrado entra al fondo persistente del local
+      // (no suma a la caja del día; eso lo excluye caja_resumen por fondo='reserva').
+      if(fondo==='reserva' && recibeId && (p.tipo||'pago')!=='cargo' && (Number(p.monto)||0)>0){
+        try{ await sb.from('efectivo_reserva_mov').insert({ sucursal_id:recibeId, tipo:'ingreso', monto:Number(p.monto)||0, concepto:'Cobro cta cte'+(p.concepto&&p.concepto!=='Pago cta cte'?(' — '+p.concepto):''), ref:(movId?('ctacte:'+movId):null) }); }catch(e){}
+      }
       // Cuenta financiera entre locales: si el pago lo recibió un local != administrador del cliente,
       // el local que cobró le debe esa plata al local administrador (dueño de la cuenta).
       if(recibeId && (p.tipo||'pago')!=='cargo' && (Number(p.monto)||0)>0){
@@ -1049,6 +1060,10 @@
       var d=await sb.from('cuenta_corriente').delete().eq('id',mov.id).select('id'); if(d.error) throw d.error;
       if(!(d.data||[]).length) return {ok:false, error:'No se pudo eliminar el pago (sin permiso sobre la cuenta corriente).'};
       if(ci){ try{ await sb.from('cuentas_internas').delete().eq('id',ci.id); }catch(e){} }
+      // Si el cobro había entrado a la Caja guardada (reserva), se repone (egreso).
+      if(mov.fondo==='reserva' && mov.sucursal_id && (Number(mov.monto)||0)>0){
+        try{ await sb.from('efectivo_reserva_mov').insert({ sucursal_id:mov.sucursal_id, tipo:'egreso', monto:Number(mov.monto)||0, concepto:'Reversa cobro cta cte (borrado)', ref:('ctacte:'+mov.id) }); }catch(e){}
+      }
       return {ok:true};
     },
     // Modifica monto / forma de pago / observaciones de un pago manual de cta cte.
@@ -1063,6 +1078,11 @@
       if(u.error) throw u.error;
       if(!(u.data||[]).length) return {ok:false, error:'No se pudo modificar el pago (sin permiso sobre la cuenta corriente).'};
       if(ci && Math.abs((Number(ci.monto)||0)-monto)>0.005){ try{ await sb.from('cuentas_internas').update({monto:monto}).eq('id',ci.id); }catch(e){} }
+      // Si el cobro vive en la Caja guardada (reserva), se ajusta por la diferencia de monto.
+      if(mov.fondo==='reserva' && mov.sucursal_id){
+        var delta=+(monto-(Number(mov.monto)||0)).toFixed(2);
+        if(Math.abs(delta)>0.005){ try{ await sb.from('efectivo_reserva_mov').insert({ sucursal_id:mov.sucursal_id, tipo:(delta>0?'ingreso':'egreso'), monto:Math.abs(delta), concepto:'Ajuste cobro cta cte (modificado)', ref:('ctacte:'+mov.id) }); }catch(e){} }
+      }
       return {ok:true};
     },
     // Saldo ENTRE GRUPOS. Cada movimiento se resuelve a grupo: grupo_* si está

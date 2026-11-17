@@ -90,7 +90,8 @@
         </div>
         <div class="abm-nueva" style="border-top:none;padding-top:8px;" id="ccx-pago">
           <div><label>Registrar pago $</label><input id="ccx-monto" type="text" inputmode="decimal" oninput="fmtMilesInput(this)"></div>
-          <div><label>Forma</label><select id="ccx-fp"></select></div>
+          <div><label>Forma</label><select id="ccx-fp" onchange="ccxToggleFondo()"></select></div>
+          <div id="ccx-fondo-wrap"><label>Caja (efectivo)</label><select id="ccx-fondo"><option value="caja">Caja del día</option><option value="reserva">Caja guardada</option></select></div>
           <div><label>Local (caja)</label><select id="ccx-suc"></select></div>
           <div style="grid-column:1/-1;"><label>Observaciones (opcional)</label><input id="ccx-obs" placeholder="Nota del pago…"></div>
           <button class="btn-alta" onclick="pagarCCx()">Registrar pago</button>
@@ -122,10 +123,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script>window.APP_BUILD='2026-11-16.1';</script>
-<script src="sb-api.js?v=2026-11-16.1"></script>
-<script src="auth-guard.js?v=2026-11-16.1"></script>
-<script src="nav.js?v=2026-11-16.1"></script>
+<script>window.APP_BUILD='2026-11-17.1';</script>
+<script src="sb-api.js?v=2026-11-17.1"></script>
+<script src="auth-guard.js?v=2026-11-17.1"></script>
+<script src="nav.js?v=2026-11-17.1"></script>
 <script src="pdf-export.js?v=2026-10-22.2"></script>
 <script>
 var sb=window.sbClient;
@@ -193,6 +194,7 @@ async function iniciar(){
   var rc=await window.sf('getClientes'); if(rc.ok) CLIENTES=rc.clientes||[];
   var rcfg=await window.sf('getConfigGeneral'); if(rcfg.ok && rcfg.config && rcfg.config.formas_pago){ try{ var af=JSON.parse(rcfg.config.formas_pago); if(af.length) FORMAS=af.map(function(f){return f.nombre||f;}); }catch(e){} }
   document.getElementById('ccx-fp').innerHTML=FORMAS.map(function(f){return '<option>'+f+'</option>';}).join('');
+  ccxToggleFondo();
   // Local donde entra el cobro (define en qué caja suma el efectivo). Por defecto, el
   // local del usuario; si es admin (sin locales), el último local activo o el primero.
   var sucDef=(window.PERM&&window.PERM.locales&&window.PERM.locales[0])||localStorage.getItem('pvSucursalPort')||SUCS[0]||'';
@@ -227,8 +229,16 @@ async function renderCtaCte(){
   document.getElementById('ccx-total').innerHTML='Deuda total: <b style="color:var(--bad);">'+fmt$(tot)+'</b>';
   document.getElementById('ccx-tbody').innerHTML = SALDOSCLI.length ? SALDOSCLI.map(function(c){
     var etq=c.saldo>0.5?('<span style="color:var(--bad);font-weight:700;">'+fmt$(c.saldo)+'</span>'):(c.saldo<-0.5?('<span style="color:var(--good);font-weight:700;">'+fmt$(-c.saldo)+' a favor</span>'):'<span class="muted">$0</span>');
-    return '<tr><td>'+c.nombre+'</td><td class="num">'+etq+'</td><td><button class="mini-btn" onclick="verClienteCC('+c.clienteId+',\''+String(c.nombre).replace(/\x27/g,"\\x27")+'\')">Ver</button></td></tr>';
+    var nomEsc=String(c.nombre).replace(/\x27/g,"\\x27");
+    var btnCobrar=puedePagoCC()?(' <button class="mini-btn" onclick="cobrarClienteCC('+c.clienteId+',\''+nomEsc+'\')">Cobrar</button>'):'';
+    return '<tr><td>'+c.nombre+'</td><td class="num">'+etq+'</td><td style="white-space:nowrap;"><button class="mini-btn" onclick="verClienteCC('+c.clienteId+',\''+nomEsc+'\')">Ver</button>'+btnCobrar+'</td></tr>';
   }).join('') : '<tr><td colspan="3" class="muted">Sin clientes con movimientos.</td></tr>';
+}
+// Abre la cuenta del cliente y deja el cursor listo para registrar el cobro.
+async function cobrarClienteCC(id,nom){
+  await verClienteCC(id,nom);
+  var el=document.getElementById('ccx-monto');
+  if(el){ var pago=document.getElementById('ccx-pago'); if(pago) pago.scrollIntoView({behavior:'smooth',block:'center'}); setTimeout(function(){ el.focus(); },300); }
 }
 function ccxBuscar(){
   var v=(document.getElementById('ccx-buscar').value||'').trim().toLowerCase(); var box=document.getElementById('ccx-sug');
@@ -365,6 +375,14 @@ function imprimirTicketCC(){
   var d=ifr.contentWindow.document; d.open(); d.write(docHtml); d.close();
   setTimeout(function(){ try{ ifr.contentWindow.focus(); ifr.contentWindow.print(); }catch(e){ console.warn(e); } }, 250);
 }
+// Muestra el selector de caja (del día / guardada) solo cuando el cobro es en efectivo.
+function ccxToggleFondo(){
+  var fp=document.getElementById('ccx-fp'), wrap=document.getElementById('ccx-fondo-wrap');
+  if(!fp||!wrap) return;
+  var esEf=/efectivo/i.test(fp.value||'');
+  wrap.style.display=esEf?'':'none';
+  if(!esEf){ var sf=document.getElementById('ccx-fondo'); if(sf) sf.value='caja'; }
+}
 async function pagarCCx(){
   if(!puedePagoCC()){ toast('No tenés permiso para registrar pagos','error'); return; }
   if(!ccxSel){ toast('Elegí un cliente','error'); return; }
@@ -373,7 +391,9 @@ async function pagarCCx(){
   if(!sucPago){ toast('Elegí el local donde entra el cobro','error'); return; }
   if(sucPago){ try{ localStorage.setItem('pvSucursalPort',sucPago); }catch(e){} }
   var obs=(document.getElementById('ccx-obs').value||'').trim();
-  var r=await window.sp('registrarPagoCC',{ clienteId:ccxSel, sucursal:sucPago, monto:monto, formaPago:document.getElementById('ccx-fp').value, concepto:'Pago cta cte', observaciones:obs });
+  var formaPago=document.getElementById('ccx-fp').value;
+  var fondo=(/efectivo/i.test(formaPago)?(document.getElementById('ccx-fondo').value||'caja'):'caja');
+  var r=await window.sp('registrarPagoCC',{ clienteId:ccxSel, sucursal:sucPago, monto:monto, formaPago:formaPago, fondo:fondo, concepto:'Pago cta cte', observaciones:obs });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   document.getElementById('ccx-monto').value=''; document.getElementById('ccx-obs').value=''; toast('Pago registrado'); verClienteCC(ccxSel,ccxNom); renderCtaCte();
 }
