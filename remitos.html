@@ -98,6 +98,10 @@
         <select id="h-estado" onchange="renderHist()" style="padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"><option value="">Todos los estados</option><option value="pendiente">🚚 En tránsito</option><option value="recibido parcial">Parcial</option><option value="recibido">Recibido</option><option value="rechazado">Rechazado</option><option value="anulado">Anulado</option></select>
         <select id="h-origen" onchange="renderHist()" style="padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></select>
         <select id="h-destino" onchange="renderHist()" style="padding:8px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></select>
+        <div><label style="display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;">Desde</label><input type="date" id="h-desde" onchange="renderHist()" style="padding:7px 9px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></div>
+        <div><label style="display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;">Hasta</label><input type="date" id="h-hasta" onchange="renderHist()" style="padding:7px 9px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></div>
+        <button class="btn-sec" onclick="limpiarFechasHist()" title="Quitar el filtro de fechas">✕ Fechas</button>
+        <button class="btn-sec" onclick="exportarHistExcel()" title="Exportar el listado filtrado a Excel">📥 Excel</button>
       </div>
       <div class="resumen muted" id="h-resumen" style="margin-bottom:8px;"></div>
       <div class="card p0"><div class="tblwrap"><table class="data"><thead><tr><th>Número</th><th>Origen</th><th>Destino</th><th>Estado</th><th>Emisión</th><th>Recepción</th><th class="num">Total</th><th></th></tr></thead><tbody id="hist-tbody"></tbody></table></div></div>
@@ -152,13 +156,14 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-11-17.1';</script>
-<script src="sb-api.js?v=2026-11-17.1"></script>
-<script src="auth-guard.js?v=2026-11-17.1"></script>
-<script src="nav.js?v=2026-11-17.1"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>window.APP_BUILD='2026-11-18.1';</script>
+<script src="sb-api.js?v=2026-11-18.1"></script>
+<script src="auth-guard.js?v=2026-11-18.1"></script>
+<script src="nav.js?v=2026-11-18.1"></script>
 <script>
 var sb=window.sbClient;
-var PRODS={}, SUCS=[], SUCID={}, sucActual='', REMITOS=[], BALANZAS={}, carritoRem=[], PLUS={};
+var PRODS={}, SUCS=[], SUCID={}, sucActual='', REMITOS=[], BALANZAS={}, carritoRem=[], PLUS={}, HIST_VISTA=[];
 var balCfg={ prefijo:'20', dato:'peso', codlen:5, datolen:5 };
 function fmt$(n){ return '$'+Math.round(Number(n)||0).toLocaleString('es-AR'); }
 function toast(m,t){ var c=document.getElementById('toast-c'); var e=document.createElement('div'); e.className='toast'+(t?' '+t:''); e.textContent=m; c.appendChild(e); setTimeout(function(){e.remove();},2600); }
@@ -414,20 +419,27 @@ function renderPend(){
       (!puedeRecibir&&!esOrigen?'<span class="muted" style="font-size:.72rem;"> (recibe '+(SUCID[r.destinoId]||'')+')</span>':'')+'</td></tr>';
   }).join('') || '<tr><td colspan="6" class="muted">No hay remitos pendientes.</td></tr>';
 }
+// Día calendario (hora Argentina) de un ISO, en formato yyyy-mm-dd (comparable con los <input type=date>).
+function remDiaAR(iso){ return iso?new Date(iso).toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'}):''; }
+function limpiarFechasHist(){ document.getElementById('h-desde').value=''; document.getElementById('h-hasta').value=''; renderHist(); }
 function renderHist(){
   var q=(document.getElementById('h-q').value||'').trim().toLowerCase();
   var fe=document.getElementById('h-estado').value, fo=document.getElementById('h-origen').value, fd=document.getElementById('h-destino').value;
+  var fdesde=document.getElementById('h-desde').value, fhasta=document.getElementById('h-hasta').value;
   var arr=REMITOS.filter(function(r){
     if(!remVerTodos && !delLocalRem(r)) return false;
     if(q &&(r.numero+' '+(r.concepto||'')).toLowerCase().indexOf(q)<0) return false;
     if(fe && r.estado!==fe) return false;
     if(fo && (SUCID[r.origenId]||'')!==fo) return false;
     if(fd && (SUCID[r.destinoId]||'')!==fd) return false;
+    if(fdesde || fhasta){ var dia=remDiaAR(r.emision); if(!dia) return false; if(fdesde && dia<fdesde) return false; if(fhasta && dia>fhasta) return false; }
     return true;
   });
+  HIST_VISTA=arr;
   var enTransito=arr.filter(function(r){return r.estado==='pendiente';});
   var valTransito=enTransito.reduce(function(s,r){return s+r.total;},0);
-  document.getElementById('h-resumen').textContent=arr.length+' remito'+(arr.length!==1?'s':'')+' · 🚚 '+enTransito.length+' en tránsito ('+fmt$(valTransito)+')';
+  var totTodos=arr.reduce(function(s,r){return s+(Number(r.total)||0);},0);
+  document.getElementById('h-resumen').textContent=arr.length+' remito'+(arr.length!==1?'s':'')+' · total '+fmt$(totTodos)+' · 🚚 '+enTransito.length+' en tránsito ('+fmt$(valTransito)+')';
   document.getElementById('hist-tbody').innerHTML=arr.map(function(r){
     var fe=r.emision?new Date(r.emision).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'';
     var fr=r.recepcion?new Date(r.recepcion).toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'}):'—';
@@ -435,6 +447,27 @@ function renderHist(){
     return '<tr><td>'+r.numero+'</td><td>'+(SUCID[r.origenId]||'')+'</td><td>'+(SUCID[r.destinoId]||'')+'</td><td>'+est+'</td><td>'+fe+'</td><td>'+fr+'</td><td class="num">'+fmt$(r.total)+'</td>'+
       '<td><button class="mini-btn" onclick="verDet('+r.id+',\''+r.numero+'\')">Ver</button></td></tr>';
   }).join('') || '<tr><td colspan="8" class="muted">Sin remitos.</td></tr>';
+}
+// Exporta a Excel exactamente el listado del Historial tal como quedó filtrado
+// (alcance, búsqueda, estado, origen, destino y rango de fechas).
+function estadoTxtRem(e){ return e==='recibido parcial'?'Recibido parcial':e?(e.charAt(0).toUpperCase()+e.slice(1)):''; }
+function exportarHistExcel(){
+  if(!window.XLSX){ toast('No se pudo cargar el exportador de Excel','error'); return; }
+  var arr=HIST_VISTA||[];
+  if(!arr.length){ toast('No hay remitos para exportar con esos filtros','error'); return; }
+  var aoa=[['Número','Origen','Destino','Estado','Emisión','Recepción','Concepto','Total']];
+  arr.forEach(function(r){
+    aoa.push([ r.numero||'', SUCID[r.origenId]||'', SUCID[r.destinoId]||'', estadoTxtRem(r.estado),
+      r.emision?fmtFechaCorta(r.emision):'', r.recepcion?fmtFechaCorta(r.recepcion):'', r.concepto||'', Number(r.total)||0 ]);
+  });
+  var tot=arr.reduce(function(s,r){return s+(Number(r.total)||0);},0);
+  aoa.push(['','','','','','','Total ('+arr.length+')', tot]);
+  var ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:14},{wch:16},{wch:16},{wch:16},{wch:20},{wch:20},{wch:24},{wch:14}];
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Remitos');
+  var fd=document.getElementById('h-desde').value, fh=document.getElementById('h-hasta').value;
+  var suf=(fd||fh)?('_'+(fd||'inicio')+'_a_'+(fh||'hoy')):('_'+new Date().toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'}));
+  XLSX.writeFile(wb, 'remitos'+suf+'.xlsx');
 }
 async function verDet(id,num){
   var r=await window.sf('getRemitoDetalle&id='+id); if(!r.ok){ toast('Error: '+r.error,'error'); return; }
