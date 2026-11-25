@@ -211,6 +211,7 @@
       <div><label class="mini">Hasta</label><input type="date" id="h-hasta" onchange="cargarHistorial()"></div>
       <div style="flex:1;min-width:160px;"><label class="mini">Buscar (comprobante / cliente / pago)</label><input type="text" id="h-q" placeholder="filtrar…" oninput="cargarHistorial()"></div>
       <button class="btn-sec" onclick="limpiarHist()">Limpiar</button>
+      <button class="btn-sec" onclick="exportarHistorial()" style="margin-left:auto;">⬇ Excel</button>
     </div>
     <div class="muted" id="h-info" style="margin-bottom:6px;">Últimas 10 ventas</div>
     <div class="tblwrap" style="max-height:52vh;overflow:auto;"><table class="cart-t"><thead><tr><th>Comprobante</th><th>Fecha</th><th>Cliente</th><th class="num">Total</th><th>Pago</th><th></th></tr></thead><tbody id="h-tbody"></tbody></table></div>
@@ -231,10 +232,11 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-11-18.1';</script>
-<script src="sb-api.js?v=2026-11-18.1"></script>
-<script src="auth-guard.js?v=2026-11-18.1"></script>
-<script src="nav.js?v=2026-11-18.1"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>window.APP_BUILD='2026-11-25.1';</script>
+<script src="sb-api.js?v=2026-11-25.1"></script>
+<script src="auth-guard.js?v=2026-11-25.1"></script>
+<script src="nav.js?v=2026-11-25.1"></script>
 <script>
 var sb = window.sbClient;
 var PRODS={}, LISTAS=[], LDEF={}, baseName='Minorista';
@@ -245,6 +247,7 @@ var COMBOS_CERR=[];             // combos a precio cerrado vigentes
 var PROMO_FORMA_OK={};          // cod -> true si su promo por forma de pago quedó habilitada
 var cajaOK=false;               // solo se puede vender con caja del día abierta
 var carrito=[];      // {cod,nombre,tipo,categoria,marca,peso,cantidad,descPct}
+var HISTVENTAS=[];   // ventas cargadas en el historial (para exportar a Excel)
 var clienteActual={ realId:null, id:null, nombre:'', lista:'Minorista', esCF:true };
 var sucActual='';
 // Formas de pago (editables desde Configuración). cta=true crea deuda y requiere cliente.
@@ -810,7 +813,31 @@ async function cargarHistorial(){
   document.getElementById('h-tbody').innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted)">Cargando…</td></tr>';
   var r=await window.sf(qs);
   if(!r.ok){ document.getElementById('h-tbody').innerHTML='<tr><td colspan="6" style="color:var(--bad)">Error: '+r.error+'</td></tr>'; return; }
-  renderHistList(r.ventas||[]);
+  HISTVENTAS=r.ventas||[];
+  renderHistList(HISTVENTAS);
+}
+function exportarHistorial(){
+  if(typeof XLSX==='undefined'){ toast('No se pudo cargar el exportador','error'); return; }
+  if(!HISTVENTAS.length){ toast('No hay ventas para exportar','error'); return; }
+  var desde=document.getElementById('h-desde').value, hasta=document.getElementById('h-hasta').value;
+  var aoa=[['Comprobante','Fecha','Hora','Cliente','Total','Forma de pago','Estado','Local']];
+  var totVal=0;
+  HISTVENTAS.forEach(function(v){
+    var anul=(v.estado==='anulada');
+    var dt=new Date(v.fecha);
+    var fecha=dt.toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',year:'numeric'});
+    var hora=dt.toLocaleTimeString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',hour:'2-digit',minute:'2-digit'});
+    if(!anul) totVal+=Number(v.total)||0;
+    aoa.push([ v.comprobante||'', fecha, hora, v.cliente||'', Math.round((Number(v.total)||0)*100)/100,
+               v.formaPago||'', (anul?'ANULADA':'OK'), v.sucursal||sucActual ]);
+  });
+  aoa.push([]);
+  aoa.push(['','','','TOTAL (sin anuladas)', Math.round(totVal*100)/100,'','','']);
+  var ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:20},{wch:11},{wch:7},{wch:24},{wch:12},{wch:18},{wch:10},{wch:14}];
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Ventas');
+  var suf=(desde||hasta)?((desde||'inicio')+'_'+(hasta||'hoy')):new Date().toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'});
+  XLSX.writeFile(wb, 'Ventas_'+String(sucActual).replace(/[^\w]+/g,'-')+'_'+suf+'.xlsx');
 }
 function renderHistList(vs){
   var tb=document.getElementById('h-tbody');
