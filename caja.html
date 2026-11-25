@@ -118,10 +118,10 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-11-25.1';</script>
-<script src="sb-api.js?v=2026-11-25.1"></script>
-<script src="auth-guard.js?v=2026-11-25.1"></script>
-<script src="nav.js?v=2026-11-25.1"></script>
+<script>window.APP_BUILD='2026-11-25.2';</script>
+<script src="sb-api.js?v=2026-11-25.2"></script>
+<script src="auth-guard.js?v=2026-11-25.2"></script>
+<script src="nav.js?v=2026-11-25.2"></script>
 <script>
 var sb=window.sbClient;
 var SUCS=[], sucActual='', cajaActual=null;
@@ -198,12 +198,12 @@ function pintarDif(el, dif, hayDato){
 function calcCierre(){
   var espEf=cajaActual?(cajaActual.esperado||0):0;
   var espPos=cajaActual?(cajaActual.posnet||0):0;
-  // Si Clover trajo el automático, el cierre se compara contra ESE (lo real de la terminal);
-  // si no hay terminal, se compara contra lo que esperaban las ventas del sistema.
-  var tieneAuto=!!(cajaActual && cajaActual.cloverAuto!=null);
-  var benchPos=tieneAuto?cajaActual.cloverAuto:espPos;
+  // "Clover del sistema" = lo que el vendedor marcó como tarjeta/QR en las ventas (ya excluye
+  // las anuladas). Así, al anular una venta de tarjeta, el total baja solo y coincide con lo
+  // informado de la terminal. El automático de Clover queda como dato de referencia aparte.
+  var benchPos=espPos;
   var lbl=document.getElementById('ci-posnet-dif-lbl');
-  if(lbl) lbl.textContent=tieneAuto?'Clover — informado vs automático':'Clover — informado vs ventas del sistema';
+  if(lbl) lbl.textContent='Clover — informado vs ventas del sistema';
   var chicaStr=document.getElementById('ci-queda').value, guardStr=document.getElementById('ci-reserva').value, posStr=document.getElementById('ci-posnet').value;
   var chica=Number(chicaStr)||0, guardada=Number(guardStr)||0;
   var cajaTotal=+(chica+guardada).toFixed(2);
@@ -228,7 +228,7 @@ async function cerrarCajaUI(){
   if(!confirm('¿Cerrar la caja del local? (es la caja COMPARTIDA; si hay otra PC vendiendo, queda sin caja abierta)\n\nCaja chica (mañana): '+fmt$(chica)+'\nCaja guardada (a retirar): '+fmt$(guardada)+'\nCaja total: '+fmt$(cajaTotal))) return;
   var posInfStr=document.getElementById('ci-posnet').value;
   var r=await window.sp('cerrarCaja',{ id:cajaActual.id, contado:cajaTotal, queda:chica, reserva:guardada,
-    cloverSistema:(cajaActual.cloverAuto!=null?cajaActual.cloverAuto:null),
+    cloverSistema:(cajaActual.posnet!=null?cajaActual.posnet:null),
     cloverInformado:(posInfStr!==''?Number(posInfStr):null) });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   toast('Caja cerrada — diferencia '+fmt$(r.diferencia)); cargarTodo();
