@@ -50,8 +50,7 @@
     </div>
   </header>
   <main>
-    <div class="grid2">
-      <!-- CAJA DEL DÍA -->
+      <!-- CAJA DEL DÍA (cierre) -->
       <div class="card">
         <h3>Caja del día</h3>
         <div id="caja-cerrada" hidden>
@@ -71,7 +70,7 @@
           <div class="tot-row"><span>− Pagos a proveedor efectivo (caja)</span><span id="ca-pagos">$0</span></div>
           <div class="tot-row big"><span>Efectivo esperado</span><span id="ca-esperado">$0</span></div>
           <div class="tot-row big"><span>Esperado de cobro con Clover (tarjeta / QR)</span><span id="ca-posnet">$0</span></div>
-          <div class="tot-row"><span>Clover según sistema (automático de la terminal)</span><span id="ca-clover-auto" class="muted">—</span></div>
+          <div class="tot-row"><span>Clover API (automático de la terminal)</span><span id="ca-clover-auto" class="muted">—</span></div>
 
           <hr style="border:none;border-top:1px solid var(--line);margin:12px 0;">
           <div class="muted" style="font-weight:600;margin-bottom:4px;">A completar para el cierre</div>
@@ -94,8 +93,8 @@
         </div>
       </div>
 
-      <!-- RESERVA -->
-      <div class="card">
+      <!-- EFECTIVO GUARDADO (reserva) -->
+      <div class="card" style="margin-top:16px;">
         <h3>Efectivo guardado (reserva)</h3>
         <p class="muted" style="font-size:.82rem;margin-bottom:8px;">Fondo persistente del local. Acá se depositan los cierres y de acá salen los pagos que marcás como "reserva".</p>
         <div class="tot-row"><span>Saldo actual</span><span class="saldo" id="rv-saldo">$0</span></div>
@@ -106,11 +105,10 @@
         <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn-sec" onclick="movReservaUI('ingreso')">+ Sumar monto</button><button class="btn-sec" onclick="movReservaUI('egreso')">− Restar monto</button><button class="btn-sec" onclick="retirarTodoUI()" style="margin-left:auto;color:var(--bad);border-color:#f0c9c9;">Retirar todo → $0</button></div>
         <div class="tblwrap" style="margin-top:12px;max-height:220px;overflow:auto;"><table class="data"><thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Ingreso</th><th class="num">Egreso</th></tr></thead><tbody id="rv-tbody"></tbody></table></div>
       </div>
-    </div>
 
     <div class="card" style="margin-top:16px;">
       <h3>Historial de cajas</h3>
-      <div class="tblwrap"><table class="data"><thead><tr><th>Local</th><th>Cajero</th><th>Apertura</th><th>Cierre</th><th class="num">Apertura $</th><th class="num">Esperado</th><th class="num">Contado</th><th class="num">Diferencia</th><th class="num">A reserva</th><th class="num">Clover sistema</th><th class="num">Clover informado</th><th class="num">Clover dif.</th><th></th></tr></thead><tbody id="hist-tbody"></tbody></table></div>
+      <div class="tblwrap"><table class="data"><thead><tr><th>Local</th><th>Cajero</th><th>Apertura</th><th>Cierre</th><th class="num">Apertura $</th><th class="num">Esperado</th><th class="num">Contado</th><th class="num">Diferencia</th><th class="num">A reserva</th><th class="num">Clover sistema</th><th class="num">Clover informado</th><th class="num">Clover dif.</th><th class="num">Clover API</th><th></th></tr></thead><tbody id="hist-tbody"></tbody></table></div>
     </div>
   </main>
 </div>
@@ -118,10 +116,10 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-11-25.2';</script>
-<script src="sb-api.js?v=2026-11-25.2"></script>
-<script src="auth-guard.js?v=2026-11-25.2"></script>
-<script src="nav.js?v=2026-11-25.2"></script>
+<script>window.APP_BUILD='2026-11-26.3';</script>
+<script src="sb-api.js?v=2026-11-26.3"></script>
+<script src="auth-guard.js?v=2026-11-26.3"></script>
+<script src="nav.js?v=2026-11-26.3"></script>
 <script>
 var sb=window.sbClient;
 var SUCS=[], sucActual='', cajaActual=null;
@@ -162,9 +160,13 @@ async function cargarCaja(){
   document.getElementById('ca-pagos').textContent='−'+fmt$(d.pagos_prov_ef);
   document.getElementById('ca-esperado').textContent=fmt$(d.esperado);
   cajaActual.esperado=Number(d.esperado)||0;
-  // Esperado de cobro con Clover (tarjeta + QR) según lo registrado en las ventas
+  // Esperado de cobro con Clover (tarjeta + QR) según lo registrado en el sistema:
+  // ventas cobradas con tarjeta/QR + cobros de cuenta corriente con tarjeta/QR (un
+  // cliente que paga su cuenta con tarjeta también pasa por Clover). Sin anuladas.
   var porMedio=d.por_medio||[]; var posnet=0;
   porMedio.forEach(function(x){ if(esPosnet(x.metodo)) posnet+=Number(x.monto)||0; });
+  var cobrosMedio=d.cobros_por_medio||[];
+  cobrosMedio.forEach(function(x){ if(esPosnet(x.metodo)) posnet+=Number(x.monto)||0; });
   cajaActual.posnet=+posnet.toFixed(2);
   document.getElementById('ca-posnet').textContent=fmt$(cajaActual.posnet);
   // Clover automático (API de la terminal) para la ventana del turno — asíncrono.
@@ -229,7 +231,8 @@ async function cerrarCajaUI(){
   var posInfStr=document.getElementById('ci-posnet').value;
   var r=await window.sp('cerrarCaja',{ id:cajaActual.id, contado:cajaTotal, queda:chica, reserva:guardada,
     cloverSistema:(cajaActual.posnet!=null?cajaActual.posnet:null),
-    cloverInformado:(posInfStr!==''?Number(posInfStr):null) });
+    cloverInformado:(posInfStr!==''?Number(posInfStr):null),
+    cloverApi:(cajaActual.cloverAuto!=null?cajaActual.cloverAuto:null) });
   if(!r.ok){ toast('Error: '+r.error,'error'); return; }
   toast('Caja cerrada — diferencia '+fmt$(r.diferencia)); cargarTodo();
 }
@@ -264,18 +267,19 @@ async function cargarHist(){
   document.getElementById('hist-tbody').innerHTML=(r.ok?r.cajas:[]).map(function(c){
     var fa=c.abiertaAt?new Date(c.abiertaAt).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
     var fc=c.cerradaAt?new Date(c.cerradaAt).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):(c.cerrada?'':'ABIERTA');
-    var difcls=Math.abs(c.diferencia)<0.5?'':'style="color:var(--bad);font-weight:700;"';
+    var difcls=(c.diferencia>0.5?'style="color:var(--good);font-weight:700;"':(c.diferencia<-0.5?'style="color:var(--bad);font-weight:700;"':''));
     var cSis=(c.cloverSistema!=null?fmt$(c.cloverSistema):'—');
     var cInf=(c.cloverInformado!=null?fmt$(c.cloverInformado):'—');
+    var cApi=(c.cloverApi!=null?fmt$(c.cloverApi):'—');
     var cDif='—', cDifcls='';
-    if(c.cloverSistema!=null && c.cloverInformado!=null){ var dd=+(c.cloverInformado-c.cloverSistema).toFixed(2); cDif=(dd>=0?'+':'')+fmt$(dd); cDifcls=Math.abs(dd)<0.5?'':'style="color:var(--bad);font-weight:700;"'; }
+    if(c.cloverSistema!=null && c.cloverInformado!=null){ var dd=+(c.cloverInformado-c.cloverSistema).toFixed(2); cDif=(dd>=0?'+':'')+fmt$(dd); cDifcls=(dd>0.5?'style="color:var(--good);font-weight:700;"':(dd<-0.5?'style="color:var(--bad);font-weight:700;"':'')); }
     var adm='';
     if(window.PERM && window.PERM.esAdmin){
       adm=(c.cerrada?'<button class="mini-btn" onclick="reabrirCajaUI('+c.id+')">Reabrir</button>':'')+
           '<button class="mini-btn" style="color:var(--bad);border-color:#f0c9c9;" onclick="eliminarCajaUI('+c.id+')">Eliminar</button>';
     }
-    return '<tr><td>'+c.local+'</td><td>'+(c.cajero||'')+'</td><td>'+fa+'</td><td>'+fc+'</td><td class="num">'+fmt$(c.apertura)+'</td><td class="num">'+(c.cerrada?fmt$(c.esperado):'—')+'</td><td class="num">'+(c.cerrada?fmt$(c.contado):'—')+'</td><td class="num" '+difcls+'>'+(c.cerrada?((c.diferencia>=0?'+':'')+fmt$(c.diferencia)):'—')+'</td><td class="num">'+(c.cerrada?fmt$(c.aReserva):'—')+'</td><td class="num">'+cSis+'</td><td class="num">'+cInf+'</td><td class="num" '+cDifcls+'>'+cDif+'</td><td style="white-space:nowrap;">'+adm+'</td></tr>';
-  }).join('') || '<tr><td colspan="13" class="muted">Sin cajas.</td></tr>';
+    return '<tr><td>'+c.local+'</td><td>'+(c.cajero||'')+'</td><td>'+fa+'</td><td>'+fc+'</td><td class="num">'+fmt$(c.apertura)+'</td><td class="num">'+(c.cerrada?fmt$(c.esperado):'—')+'</td><td class="num">'+(c.cerrada?fmt$(c.contado):'—')+'</td><td class="num" '+difcls+'>'+(c.cerrada?((c.diferencia>=0?'+':'')+fmt$(c.diferencia)):'—')+'</td><td class="num">'+(c.cerrada?fmt$(c.aReserva):'—')+'</td><td class="num">'+cSis+'</td><td class="num">'+cInf+'</td><td class="num" '+cDifcls+'>'+cDif+'</td><td class="num">'+cApi+'</td><td style="white-space:nowrap;">'+adm+'</td></tr>';
+  }).join('') || '<tr><td colspan="14" class="muted">Sin cajas.</td></tr>';
 }
 async function reabrirCajaUI(id){
   if(!confirm('¿Reabrir este cierre? La caja vuelve a quedar ABIERTA y se revierte el depósito a la reserva. Después podés re-cerrarla con los números corregidos.')) return;

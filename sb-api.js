@@ -431,7 +431,7 @@
     },
     getCajas: async function(params){
       params=params||{};
-      var m=await sucIdMap(); var q=sb.from('cajas').select('id,sucursal_id,cajero,apertura,abierta_at,cerrada,cerrada_at,esperado,cierre_efectivo,diferencia,a_reserva,queda_caja,clover_sistema,clover_informado').order('abierta_at',{ascending:false});
+      var m=await sucIdMap(); var q=sb.from('cajas').select('id,sucursal_id,cajero,apertura,abierta_at,cerrada,cerrada_at,esperado,cierre_efectivo,diferencia,a_reserva,queda_caja,clover_sistema,clover_informado,clover_api').order('abierta_at',{ascending:false});
       if(params.sucursal){ var sid=m[params.sucursal]; if(sid) q=q.eq('sucursal_id',sid); }
       if(params.desde) q=q.gte('abierta_at', desdeAR(params.desde));
       if(params.hasta) q=q.lte('abierta_at', hastaAR(params.hasta));
@@ -439,7 +439,7 @@
       q=q.limit(params.desde||params.hasta?5000:100);
       var r=await q; if(r.error) throw r.error;
       var sn=await sb.from('sucursales').select('id,nombre'); var idToName={}; (sn.data||[]).forEach(function(s){ idToName[s.id]=s.nombre; });
-      return {ok:true, cajas:(r.data||[]).map(function(c){ return { id:c.id, local:idToName[c.sucursal_id]||'', cajero:c.cajero||'', apertura:Number(c.apertura)||0, abiertaAt:c.abierta_at, cerrada:c.cerrada, cerradaAt:c.cerrada_at, esperado:Number(c.esperado)||0, contado:Number(c.cierre_efectivo)||0, diferencia:Number(c.diferencia)||0, aReserva:Number(c.a_reserva)||0, quedaCaja:Number(c.queda_caja)||0, cloverSistema:(c.clover_sistema==null?null:Number(c.clover_sistema)), cloverInformado:(c.clover_informado==null?null:Number(c.clover_informado)) }; })};
+      return {ok:true, cajas:(r.data||[]).map(function(c){ return { id:c.id, local:idToName[c.sucursal_id]||'', cajero:c.cajero||'', apertura:Number(c.apertura)||0, abiertaAt:c.abierta_at, cerrada:c.cerrada, cerradaAt:c.cerrada_at, esperado:Number(c.esperado)||0, contado:Number(c.cierre_efectivo)||0, diferencia:Number(c.diferencia)||0, aReserva:Number(c.a_reserva)||0, quedaCaja:Number(c.queda_caja)||0, cloverSistema:(c.clover_sistema==null?null:Number(c.clover_sistema)), cloverInformado:(c.clover_informado==null?null:Number(c.clover_informado)), cloverApi:(c.clover_api==null?null:Number(c.clover_api)) }; })};
     },
     getReserva: async function(params){
       var m=await sucIdMap(); var sid=params&&params.sucursal?m[params.sucursal]:null; if(!sid) return {ok:true, saldo:0, movimientos:[]};
@@ -1357,7 +1357,8 @@
     cerrarCaja: async function(p){
       var r=await sb.rpc('cerrar_caja',{ p_caja_id:p.id, p_contado:Number(p.contado)||0, p_queda:Number(p.queda)||0, p_reserva:Number(p.reserva)||0,
         p_clover_sistema:(p.cloverSistema==null||p.cloverSistema===''?null:Number(p.cloverSistema)),
-        p_clover_informado:(p.cloverInformado==null||p.cloverInformado===''?null:Number(p.cloverInformado)) });
+        p_clover_informado:(p.cloverInformado==null||p.cloverInformado===''?null:Number(p.cloverInformado)),
+        p_clover_api:(p.cloverApi==null||p.cloverApi===''?null:Number(p.cloverApi)) });
       if(r.error) throw r.error;
       // Cruce diario al grupo cobrador (Clover neto + Virtual). No rompe el cierre si falla.
       try{ await generarCruceCloverVirtual(p.id); }catch(e){}
