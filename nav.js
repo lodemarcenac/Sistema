@@ -27,6 +27,14 @@
   // navegador baja el HTML fresco; con una sola navegación la pantalla ya queda
   // en la versión actual (evita que el banner "Actualizar" reaparezca al navegar).
   var vq=(typeof window!=='undefined' && window.APP_BUILD) ? ('?v='+encodeURIComponent(window.APP_BUILD)) : '';
+
+  // --- Botón "Instalar app": guardamos el evento del navegador y mostramos/ocultamos ---
+  var deferredPrompt=null;
+  function esStandalone(){ try{ return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone===true; }catch(e){ return false; } }
+  function refreshInstall(){ var b=document.getElementById('sn-install'); if(!b) return; var isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent||''); b.style.display=((deferredPrompt || isIOS) && !esStandalone())?'flex':'none'; }
+  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); deferredPrompt=e; refreshInstall(); });
+  window.addEventListener('appinstalled', function(){ deferredPrompt=null; refreshInstall(); });
+
   function build(){
     if(document.getElementById('sidenav')) return;
     var aside=document.createElement('aside'); aside.id='sidenav';
@@ -46,6 +54,18 @@
     burger.addEventListener('click', function(){ aside.classList.contains('open')?cerrar():abrir(); });
     backdrop.addEventListener('click', cerrar);
     aside.addEventListener('click', function(ev){ if(ev.target.closest('.sn-item')) cerrar(); });  // al elegir, cierra el cajón
+
+    // Botón "Instalar app" dentro del menú (visible solo si se puede instalar o en iPhone)
+    var inst=document.createElement('button'); inst.id='sn-install'; inst.type='button'; inst.className='sn-item';
+    inst.style.cssText='display:none;width:100%;background:none;border:none;font:inherit;text-align:left;color:#9ee6b8;cursor:pointer;';
+    inst.innerHTML='<span class="sn-ico">📲</span><span class="sn-lbl">Instalar app</span>';
+    aside.appendChild(inst);
+    inst.addEventListener('click', function(){
+      if(deferredPrompt){ var dp=deferredPrompt; deferredPrompt=null; dp.prompt(); if(dp.userChoice){ dp.userChoice.catch(function(){}); } refreshInstall(); cerrar(); return; }
+      alert('Para instalar la app:\n\n• iPhone (Safari): tocá Compartir y después "Agregar a inicio".\n• Android (Chrome): menú ⋮ y después "Instalar app".');
+      cerrar();
+    });
+    refreshInstall();
   }
 
   // --- PWA: manifest + íconos + service worker (para instalar en el celular) ---
