@@ -167,6 +167,7 @@
           <div><label style="display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;">Desde</label><input id="g-desde" type="date" onchange="renderGastos()" style="padding:7px 9px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></div>
           <div><label style="display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;">Hasta</label><input id="g-hasta" type="date" onchange="renderGastos()" style="padding:7px 9px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></div>
           <div style="flex:1;min-width:180px;"><label style="display:block;font-size:var(--fs-xs);color:var(--muted);font-weight:600;margin-bottom:3px;">Buscar</label><input id="g-buscar" placeholder="Detalle, categoría, proveedor…" oninput="renderGastos()" style="width:100%;padding:7px 9px;border:1px solid var(--border-inp);border-radius:var(--radius-sm);font-family:inherit;"></div>
+          <button class="btn-sec" onclick="exportarGastos()" title="Descargar a Excel los gastos de TODOS los locales (según el filtro de fechas/búsqueda)">⬇ Excel (todos los locales)</button>
         </div>
         <div class="tblwrap"><table class="data compact"><thead><tr><th></th><th>Fecha</th><th>Categoría</th><th>Detalle</th><th>Local</th><th>Proveedor</th><th class="num">Monto</th><th>Pago</th><th></th></tr></thead><tbody id="g-tbody"></tbody></table></div>
       </div>
@@ -213,10 +214,11 @@
 <div class="toast-c" id="toast-c"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.APP_BUILD='2026-11-27.1';</script>
-<script src="sb-api.js?v=2026-11-27.1"></script>
-<script src="auth-guard.js?v=2026-11-27.1"></script>
-<script src="nav.js?v=2026-11-27.1"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>window.APP_BUILD='2026-11-27.3';</script>
+<script src="sb-api.js?v=2026-11-27.3"></script>
+<script src="auth-guard.js?v=2026-11-27.3"></script>
+<script src="nav.js?v=2026-11-27.3"></script>
 <script>
 var sb=window.sbClient;
 var PRODS={}, SUCS=[], PROVS=[], CG=[], FORMAS=['Efectivo','Tarjeta','Virtual','Cuenta Corriente'];
@@ -473,7 +475,7 @@ async function anularConfirmada(id){
 }
 
 // ---- GASTOS ----
-async function cargarGastos(){ var r=await window.sf('getGastos&limit=300&sucursal='+encodeURIComponent(sucActual)); GASTOS=(r.ok?r.gastos:[])||[]; renderGastos(); }
+async function cargarGastos(){ var r=await window.sf('getGastos&limit=5000&sucursal='+encodeURIComponent(sucActual)); GASTOS=(r.ok?r.gastos:[])||[]; renderGastos(); }
 // Día calendario en hora argentina: arISO -> 'AAAA-MM-DD' (para filtrar/ordenar),
 // arDisp -> 'DD/MM/AAAA' (para mostrar). Coinciden entre sí y con el día elegido.
 function arISO(s){ return s?new Date(s).toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'}):''; }
@@ -502,6 +504,36 @@ function renderGastos(){
   }).join('') || '<tr><td colspan="9" class="muted">Sin gastos en el período.</td></tr>';
 }
 function toggleGasto(id){ var r=document.getElementById('gx-'+id); if(r) r.hidden=!r.hidden; }
+// Exporta a Excel TODOS los locales (no solo el seleccionado), según el filtro de
+// fechas/búsqueda, mostrando el local que lo cargó y el local al que impactó.
+async function exportarGastos(){
+  if(typeof XLSX==='undefined'){ toast('No se pudo cargar el exportador (sin internet). Probá de nuevo.','error'); return; }
+  var desde=document.getElementById('g-desde').value, hasta=document.getElementById('g-hasta').value;
+  var q=(document.getElementById('g-buscar').value||'').trim().toLowerCase();
+  toast('Generando Excel de todos los locales…');
+  var r=await window.sf('getGastos&limit=100000');   // sin sucursal => todos los locales
+  var datos=(r&&r.ok?r.gastos:[])||[];
+  var arr=datos.filter(function(g){
+    if(q && (g.descripcion+' '+g.categoria+' '+g.proveedor).toLowerCase().indexOf(q)<0) return false;
+    var f=arISO(g.fecha);
+    if(desde && f<desde) return false;
+    if(hasta && f>hasta) return false;
+    return true;
+  }).sort(function(a,b){ var fa=String(a.fecha||''), fb=String(b.fecha||''); return fa<fb?1:(fa>fb?-1:0); });
+  if(!arr.length){ toast('No hay gastos para exportar en ese filtro','error'); return; }
+  var aoa=[['Fecha','Categoría','Grupo','Detalle','Proveedor','Monto','Forma de pago','Comprobante','Local que lo cargó','Local al que impactó','Cargado por']];
+  var total=0;
+  arr.forEach(function(g){
+    var m=Number(g.monto)||0; total+=m;
+    aoa.push([ arDisp(g.fecha), g.categoria||'', g.grupo||'', g.descripcion||'', g.proveedor||'', m, g.formaPago||'', g.comprobante||'', (SUCID[g.sucursalId]||''), (SUCID[g.destinatarioId]||''), g.cargadoPor||'' ]);
+  });
+  aoa.push([]); aoa.push(['','','','','TOTAL', total, '', '', '', '', '']);
+  var ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:11},{wch:20},{wch:18},{wch:30},{wch:20},{wch:13},{wch:16},{wch:14},{wch:18},{wch:18},{wch:18}];
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Gastos');
+  var rango=(desde||hasta)?('_'+(desde||'ini')+'_a_'+(hasta||'hoy')):'';
+  XLSX.writeFile(wb, 'Gastos_todos_los_locales'+rango+'.xlsx');
+}
 
 // ---- Forma de pago (Efectivo -> Caja del día / guardada) e imputación a locales ----
 function toggleCaja(fpId, wrapId){ var f=document.getElementById(fpId), w=document.getElementById(wrapId); if(f&&w) w.hidden=!/efectivo/i.test(f.value); }
