@@ -140,7 +140,7 @@
         <div class="abm-nueva">
           <div style="grid-column:1/-1;"><label>Detalle del gasto</label><input id="g-desc" placeholder="Ej: Luz, alquiler, flete…"></div>
           <div><label>Fecha</label><input id="g-fecha" type="date"></div>
-          <div style="grid-column:span 2;min-width:220px;"><label>Categoría</label><select id="g-cat" onchange="onCatGasto()"></select><span id="g-cat-grupo" class="muted" style="display:block;font-size:var(--fs-xs);margin-top:3px;min-height:1em;"></span></div>
+          <div style="grid-column:span 2;min-width:220px;"><label>Categoría (obligatoria)</label><select id="g-cat" onchange="onCatGasto()"></select><span id="g-cat-grupo" class="muted" style="display:block;font-size:var(--fs-xs);margin-top:3px;min-height:1em;"></span></div>
           <div style="grid-column:1/-1;"><label id="g-prov-lbl">Proveedor (opc)</label><div style="display:flex;gap:6px;"><select id="g-prov" style="flex:1;min-width:0;"></select><button class="btn" type="button" onclick="nuevoProvRapido()" title="Cargar un proveedor nuevo" style="flex:0 0 auto;padding:7px 12px;font-weight:800;font-size:1.05rem;line-height:1;">＋</button></div></div>
           <div><label>Monto $</label><input id="g-monto" type="text" inputmode="decimal" oninput="fmtMilesInput(this);onMontoGasto()"></div>
           <div style="grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:10px;">
@@ -215,10 +215,10 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>window.APP_BUILD='2026-11-27.3';</script>
-<script src="sb-api.js?v=2026-11-27.3"></script>
-<script src="auth-guard.js?v=2026-11-27.3"></script>
-<script src="nav.js?v=2026-11-27.3"></script>
+<script>window.APP_BUILD='2026-11-27.4';</script>
+<script src="sb-api.js?v=2026-11-27.4"></script>
+<script src="auth-guard.js?v=2026-11-27.4"></script>
+<script src="nav.js?v=2026-11-27.4"></script>
 <script>
 var sb=window.sbClient;
 var PRODS={}, SUCS=[], PROVS=[], CG=[], FORMAS=['Efectivo','Tarjeta','Virtual','Cuenta Corriente'];
@@ -631,6 +631,7 @@ async function guardarGastoUI(){
   if(!(montoTotal>0)){ toast('Poné un monto','error'); return; }
   var forma=efectivaForma('g-fp','g-caja'), desc=document.getElementById('g-desc').value.trim();
   if(!desc){ toast('Poné el detalle del gasto','error'); document.getElementById('g-desc').focus(); return; }
+  if(!(document.getElementById('g-cat').value||'').trim()){ toast('Elegí la categoría del gasto','error'); document.getElementById('g-cat').focus(); return; }
   if(/cuenta\s*corriente/i.test(forma) && !(document.getElementById('g-prov').value||'').trim()){ toast('Con Cuenta corriente tenés que elegir un proveedor','error'); document.getElementById('g-prov').focus(); return; }
   var base={ fecha:document.getElementById('g-fecha').value, sucursal:sucActual, categoriaId:(document.getElementById('g-cat').value||null), proveedorId:(document.getElementById('g-prov').value||null), formaPago:forma, comprobante:document.getElementById('g-comp').value.trim(), descripcion:desc };
 
