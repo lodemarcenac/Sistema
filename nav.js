@@ -16,8 +16,8 @@
     ['compras.html','🧾','Compras y Gastos','compras'],
     ['remitos.html','🔄','Remitos internos','remitos'],
     ['cuentas.html','📒','Deudas a Pagar','cuentas'],
-    ['conciliacion.html','💳','Conciliación Clover','conciliacion'],
-    ['auditoria.html','🔎','Auditoría','auditoria'],
+    ['conciliacion.html','💳','Conciliación Clover','conciliacion',true],
+    ['auditoria.html','🔎','Auditoría','auditoria',true],
     ['configuracion.html','⚙️','Configuración','configuracion'],
     ['usuarios.html','👤','Usuarios y roles','usuarios']
   ];
@@ -40,7 +40,8 @@
     var aside=document.createElement('aside'); aside.id='sidenav';
     aside.innerHTML='<div class="sn-logo" title="Carnicería">🥩</div>'+ITEMS.map(function(it){
       var on=(it[0].toLowerCase()===here)?' on':'';
-      return '<a href="'+it[0]+vq+'" class="sn-item'+on+'" data-perm="'+it[3]+'"><span class="sn-ico">'+it[1]+'</span><span class="sn-lbl">'+it[2]+'</span></a>';
+      var nomob=it[4]?' sn-nomob':'';   // ocultar en el celular (se muestra solo en PC)
+      return '<a href="'+it[0]+vq+'" class="sn-item'+on+nomob+'" data-perm="'+it[3]+'"><span class="sn-ico">'+it[1]+'</span><span class="sn-lbl">'+it[2]+'</span></a>';
     }).join('');
     document.body.appendChild(aside);
 

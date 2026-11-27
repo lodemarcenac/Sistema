@@ -99,6 +99,13 @@
     .col-main .card.p0{ display:block; }
     .col-main .cart{ overflow:visible; }
   }
+  /* --- Celular: Ventas es SOLO consulta (ver historial). No se vende desde el cel. --- */
+  #mob-hist{ display:none; }
+  body.solo-hist #mob-hist{ display:block; margin-top:8px; }
+  body.solo-hist .cli-bar,
+  body.solo-hist .grid,
+  body.solo-hist .pay-bar,
+  body.solo-hist #caja-banner{ display:none!important; }
 </style>
 </head>
 <body>
@@ -142,6 +149,12 @@
         <span class="muted" id="cli-info">Lista: Minorista</span>
         <span class="cli-saldo" id="cli-saldo" hidden></span>
       </div>
+    </div>
+    <div id="mob-hist" class="card" style="text-align:center;padding:30px 18px;">
+      <div style="font-size:44px;line-height:1;">📱</div>
+      <h2 style="margin:8px 0 4px;">Ventas — solo consulta</h2>
+      <p class="muted" style="margin:0 auto 18px;max-width:320px;">Desde el celular no se vende; podés ver y buscar el historial de ventas.</p>
+      <button class="btn" onclick="abrirHistorial()" style="font-size:var(--fs-lg);padding:13px 24px;">☰ Ver historial de ventas</button>
     </div>
     <div class="grid">
       <div class="col-main">
@@ -233,10 +246,14 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>window.APP_BUILD='2026-11-26.7';</script>
-<script src="sb-api.js?v=2026-11-26.7"></script>
-<script src="auth-guard.js?v=2026-11-26.7"></script>
-<script src="nav.js?v=2026-11-26.7"></script>
+<script>window.APP_BUILD='2026-11-27.1';</script>
+<script src="sb-api.js?v=2026-11-27.1"></script>
+<script src="auth-guard.js?v=2026-11-27.1"></script>
+<script src="nav.js?v=2026-11-27.1"></script>
+<script>
+// Celular: Ventas queda en modo "solo consulta" (ver historial). No se puede vender desde el cel.
+(function(){ try{ if(window.matchMedia('(max-width:760px),(hover:none) and (pointer:coarse)').matches){ (document.body||document.documentElement).classList.add('solo-hist'); } }catch(e){} })();
+</script>
 <script>
 var sb = window.sbClient;
 var PRODS={}, LISTAS=[], LDEF={}, baseName='Minorista';

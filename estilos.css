@@ -59,6 +59,7 @@ header nav{ display:none!important; }
   #sidenav{ left:-300px; box-shadow:none; transition:left .22s ease; }
   #sidenav.open{ left:0; box-shadow:6px 0 28px rgba(0,0,0,.4); }
   #sidenav .sn-lbl{ opacity:1; }                       /* etiquetas siempre visibles en el cajón */
+  #sidenav .sn-item.sn-nomob{ display:none!important; } /* módulos que no se justifican en el celular */
   #navburger{ display:flex; }
   #navbackdrop.show{ display:block; }
   header, header.app{ padding-left:60px!important; }   /* deja lugar a la hamburguesa */

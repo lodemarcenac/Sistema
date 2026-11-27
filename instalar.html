@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Instalar app — Carnicería</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0e2a5c">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Carnicería">
+<style>
+  *{box-sizing:border-box;}
+  body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+        background:linear-gradient(160deg,#0e2a5c,#143b7a); color:#fff; min-height:100vh;
+        display:flex; align-items:center; justify-content:center; padding:24px; }
+  .card{ background:#fff; color:#17233b; width:100%; max-width:420px; border-radius:20px;
+         padding:26px 22px 28px; box-shadow:0 18px 50px rgba(0,0,0,.35); text-align:center; }
+  .logo{ width:88px; height:88px; border-radius:22px; margin:0 auto 12px; display:block; }
+  h1{ font-size:1.4rem; margin:0 0 4px; }
+  .sub{ color:#5a6782; font-size:.95rem; margin:0 0 20px; }
+  .btn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%;
+        background:#1f8a4c; color:#fff; border:none; border-radius:14px; padding:16px;
+        font-size:1.1rem; font-weight:700; cursor:pointer; text-decoration:none; }
+  .btn:active{ transform:translateY(1px); }
+  .steps{ text-align:left; margin:18px 0 0; padding:0; list-style:none; }
+  .steps li{ display:flex; gap:10px; align-items:flex-start; padding:10px 0; border-top:1px solid #eef1f6; font-size:.98rem; }
+  .steps li .n{ flex:0 0 26px; height:26px; border-radius:50%; background:#0e2a5c; color:#fff;
+               display:flex; align-items:center; justify-content:center; font-weight:700; font-size:.85rem; }
+  .steps li b{ color:#0e2a5c; }
+  .hint{ font-size:.85rem; color:#8891a3; margin-top:16px; }
+  .ok{ background:#e8f6ee; color:#1f8a4c; border-radius:12px; padding:14px; font-weight:700; margin-top:8px; }
+  .open{ display:inline-block; margin-top:14px; color:#0e2a5c; font-weight:700; text-decoration:none; }
+  .hidden{ display:none!important; }
+  .ico{ font-size:1.2rem; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <img src="icon-192.png" alt="" class="logo" onerror="this.style.display='none'">
+    <h1>Instalá la app</h1>
+    <p class="sub">Sistema de la Carnicería en tu celular</p>
+
+    <!-- Android / Chrome: botón directo cuando el navegador lo permite -->
+    <button id="btn-install" class="btn hidden"><span class="ico">📲</span> Instalar ahora</button>
+
+    <!-- Mensaje cuando ya está instalada / se instaló -->
+    <div id="done" class="ok hidden">✅ ¡Listo! Ya está instalada en tu teléfono.</div>
+
+    <!-- Pasos iPhone (Safari) -->
+    <ol id="steps-ios" class="steps hidden">
+      <li><span class="n">1</span><div>Abrí esta página en <b>Safari</b> (el navegador de Apple).</div></li>
+      <li><span class="n">2</span><div>Tocá el botón <b>Compartir</b> <span class="ico">􀈂</span> (el cuadrado con la flecha hacia arriba).</div></li>
+      <li><span class="n">3</span><div>Elegí <b>«Agregar a inicio»</b> y después <b>Agregar</b>.</div></li>
+    </ol>
+
+    <!-- Pasos Android genéricos (por si el botón no aparece) -->
+    <ol id="steps-android" class="steps hidden">
+      <li><span class="n">1</span><div>Abrí esta página en <b>Chrome</b>.</div></li>
+      <li><span class="n">2</span><div>Tocá el menú <b>⋮</b> (arriba a la derecha).</div></li>
+      <li><span class="n">3</span><div>Elegí <b>«Instalar app»</b> (o «Agregar a pantalla de inicio»).</div></li>
+    </ol>
+
+    <a id="open-app" class="open hidden" href="index.html">Abrir el sistema →</a>
+    <p class="hint">Ocupa muy poco y se actualiza sola cada vez que la abrís con internet.</p>
+  </div>
+
+<script>
+  var deferred = null;
+  var ua = navigator.userAgent || '';
+  var isIOS = /iphone|ipad|ipod/i.test(ua);
+  var isAndroid = /android/i.test(ua);
+  function standalone(){ try{ return (matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone===true; }catch(e){ return false; } }
+
+  function el(id){ return document.getElementById(id); }
+  function show(id){ el(id).classList.remove('hidden'); }
+  function hide(id){ el(id).classList.add('hidden'); }
+
+  function pintar(){
+    hide('btn-install'); hide('steps-ios'); hide('steps-android'); hide('done'); hide('open-app');
+    if(standalone()){ show('done'); show('open-app'); return; }
+    if(deferred){ show('btn-install'); return; }      // Android/Chrome: botón directo
+    if(isIOS){ show('steps-ios'); return; }            // iPhone: pasos de Safari
+    show('steps-android');                             // resto: pasos de Chrome
+  }
+
+  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); deferred = e; pintar(); });
+  window.addEventListener('appinstalled', function(){ deferred = null; pintar(); });
+
+  el('btn-install').addEventListener('click', function(){
+    if(!deferred){ pintar(); return; }
+    var d = deferred; deferred = null;
+    d.prompt();
+    if(d.userChoice){ d.userChoice.then(function(){ pintar(); }).catch(function(){ pintar(); }); }
+  });
+
+  // Service worker: necesario para que el navegador ofrezca instalar y para que ande offline.
+  if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(function(){}); }
+
+  pintar();
+</script>
+</body>
+</html>
