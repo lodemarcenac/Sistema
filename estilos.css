@@ -46,7 +46,24 @@ body{ background:var(--bg); color:var(--ink); font-family:var(--font); font-size
 /* el sidebar reemplaza al menú de arriba */
 header nav{ display:none!important; }
 #login{ padding-left:0; }
-@media(max-width:600px){ body{ padding-left:44px; } #sidenav{ width:44px; } }
+/* Hamburguesa + fondo del cajón (ocultos en PC; sólo aparecen en pantalla chica) */
+#navburger{ display:none; position:fixed; top:8px; left:8px; z-index:95; width:42px; height:42px; align-items:center; justify-content:center; border:none; border-radius:9px; background:rgba(255,255,255,.16); color:#fff; font-size:21px; line-height:1; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+#navburger:active{ background:rgba(255,255,255,.3); }
+#navbackdrop{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:89; }
+/* Mobile: pantalla chica O cualquier dispositivo táctil (así el celular APAISADO
+   —más ancho que 760px— también usa la hamburguesa y no el menú de PC). */
+@media (max-width:760px), (hover:none) and (pointer:coarse){
+  body{ padding-left:0; }
+  /* el menú lateral pasa a ser un CAJÓN deslizable desde la izquierda */
+  #sidenav, #sidenav:hover{ width:264px; max-width:84vw; }
+  #sidenav{ left:-300px; box-shadow:none; transition:left .22s ease; }
+  #sidenav.open{ left:0; box-shadow:6px 0 28px rgba(0,0,0,.4); }
+  #sidenav .sn-lbl{ opacity:1; }                       /* etiquetas siempre visibles en el cajón */
+  #navburger{ display:flex; }
+  #navbackdrop.show{ display:block; }
+  header, header.app{ padding-left:60px!important; }   /* deja lugar a la hamburguesa */
+  #login{ padding-left:0; }
+}
 h1,h2,h3,h4{ line-height:1.2; font-weight:700; }
 a{ color:var(--brand); }
 [hidden]{ display:none!important; }

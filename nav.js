@@ -35,6 +35,38 @@
       return '<a href="'+it[0]+vq+'" class="sn-item'+on+'" data-perm="'+it[3]+'"><span class="sn-ico">'+it[1]+'</span><span class="sn-lbl">'+it[2]+'</span></a>';
     }).join('');
     document.body.appendChild(aside);
+
+    // --- Menú mobile: hamburguesa + cajón (solo actúa en pantalla chica, vía CSS) ---
+    var burger=document.createElement('button'); burger.id='navburger'; burger.type='button';
+    burger.setAttribute('aria-label','Menú'); burger.innerHTML='☰';
+    var backdrop=document.createElement('div'); backdrop.id='navbackdrop';
+    document.body.appendChild(burger); document.body.appendChild(backdrop);
+    function abrir(){ aside.classList.add('open'); backdrop.classList.add('show'); }
+    function cerrar(){ aside.classList.remove('open'); backdrop.classList.remove('show'); }
+    burger.addEventListener('click', function(){ aside.classList.contains('open')?cerrar():abrir(); });
+    backdrop.addEventListener('click', cerrar);
+    aside.addEventListener('click', function(ev){ if(ev.target.closest('.sn-item')) cerrar(); });  // al elegir, cierra el cajón
   }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', build); else build();
+
+  // --- PWA: manifest + íconos + service worker (para instalar en el celular) ---
+  function setupPWA(){
+    try{
+      var head=document.head||document.getElementsByTagName('head')[0]; if(!head) return;
+      function meta(name,content){ var m=document.createElement('meta'); m.name=name; m.content=content; head.appendChild(m); }
+      function link(rel,href,extra){ var l=document.createElement('link'); l.rel=rel; l.href=href; if(extra) Object.keys(extra).forEach(function(k){ l.setAttribute(k,extra[k]); }); head.appendChild(l); }
+      if(!document.querySelector('link[rel="manifest"]')) link('manifest','manifest.json');
+      if(!document.querySelector('meta[name="theme-color"]')) meta('theme-color','#0e2a5c');
+      if(!document.querySelector('link[rel="apple-touch-icon"]')) link('apple-touch-icon','apple-touch-icon.png');
+      meta('apple-mobile-web-app-capable','yes');
+      meta('mobile-web-app-capable','yes');
+      meta('apple-mobile-web-app-status-bar-style','black-translucent');
+      meta('apple-mobile-web-app-title','Carnicería');
+    }catch(e){}
+    if('serviceWorker' in navigator){
+      window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
+    }
+  }
+
+  function init(){ build(); setupPWA(); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
